@@ -134,6 +134,45 @@ class RmsProfileSection(Section):
     values_db: list[float]
 
 
+class BandLevels(ContractModel):
+    """One frequency band's level over time, plus the band's own floor."""
+
+    low_hz: float = Field(ge=0)
+    high_hz: float = Field(gt=0)
+    floor_db: float
+    """A low percentile of ``values_db`` — what this band reads where nothing is
+    happening in it, which is not the same figure for every band."""
+    values_db: list[float]
+
+
+class BandProfileSection(Section):
+    """Windowed RMS per frequency band — which bands carry the energy, over time.
+
+    Broadband level cannot tell a band-limited entrance from surface noise,
+    because both can sit at the same dBFS: the surface's energy piles into one
+    band — on a played LP usually the lowest, since RIAA playback boosts the bass
+    of a groove noise that was already there — and that band sets the broadband
+    figure, so a filtered intro 30 dB up in 400-3000 Hz moves it by a fraction of
+    a dB. Per band it is unmissable. ``spectral`` measures the same axis but
+    averages the whole file, and ``rms_profile`` measures over time but sums the
+    bands, so neither can be read frame by band.
+
+    Read a **step in one band while its neighbours hold still**, not the tilt of
+    the spectrum: continuous groove noise is weighted low and impulsive abrasion
+    is broadband, so the tilt says what kind of surface it is, not whether the
+    stretch is programme.
+
+    Frames follow ``rms_profile``'s convention: frame ``i`` covers
+    ``[i*hop, i*hop + window)`` in samples from 0, so with equal hops the two
+    sections index alike. A band whose lower edge is at or above Nyquist is
+    omitted; the requested edges stay in ``meta.params`` either way.
+    """
+
+    window_seconds: float = Field(gt=0)
+    hop_seconds: float = Field(gt=0)
+    bands: list[BandLevels]
+
+
 class SurfaceNoiseSection(Section):
     noise_floor_db: float
     stability_db: float = Field(ge=0)
@@ -371,6 +410,7 @@ class AnalysisDocument(VersionedDocument):
 
     recording_info: RecordingInfoSection | None = None
     rms_profile: RmsProfileSection | None = None
+    band_profile: BandProfileSection | None = None
     surface_noise: SurfaceNoiseSection | None = None
     silence: SilenceSection | None = None
     boundaries: BoundariesSection | None = None

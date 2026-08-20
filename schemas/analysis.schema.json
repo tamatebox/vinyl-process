@@ -80,6 +80,74 @@
       "title": "BandEnergy",
       "type": "object"
     },
+    "BandLevels": {
+      "additionalProperties": false,
+      "description": "One frequency band's level over time, plus the band's own floor.",
+      "properties": {
+        "floor_db": {
+          "title": "Floor Db",
+          "type": "number"
+        },
+        "high_hz": {
+          "exclusiveMinimum": 0,
+          "title": "High Hz",
+          "type": "number"
+        },
+        "low_hz": {
+          "minimum": 0,
+          "title": "Low Hz",
+          "type": "number"
+        },
+        "values_db": {
+          "items": {
+            "type": "number"
+          },
+          "title": "Values Db",
+          "type": "array"
+        }
+      },
+      "required": [
+        "low_hz",
+        "high_hz",
+        "floor_db",
+        "values_db"
+      ],
+      "title": "BandLevels",
+      "type": "object"
+    },
+    "BandProfileSection": {
+      "additionalProperties": false,
+      "description": "Windowed RMS per frequency band \u2014 which bands carry the energy, over time.\n\nBroadband level cannot tell a band-limited entrance from surface noise,\nbecause both can sit at the same dBFS: the surface's energy piles into one\nband \u2014 on a played LP usually the lowest, since RIAA playback boosts the bass\nof a groove noise that was already there \u2014 and that band sets the broadband\nfigure, so a filtered intro 30 dB up in 400-3000 Hz moves it by a fraction of\na dB. Per band it is unmissable. ``spectral`` measures the same axis but\naverages the whole file, and ``rms_profile`` measures over time but sums the\nbands, so neither can be read frame by band.\n\nRead a **step in one band while its neighbours hold still**, not the tilt of\nthe spectrum: continuous groove noise is weighted low and impulsive abrasion\nis broadband, so the tilt says what kind of surface it is, not whether the\nstretch is programme.\n\nFrames follow ``rms_profile``'s convention: frame ``i`` covers\n``[i*hop, i*hop + window)`` in samples from 0, so with equal hops the two\nsections index alike. A band whose lower edge is at or above Nyquist is\nomitted; the requested edges stay in ``meta.params`` either way.",
+      "properties": {
+        "bands": {
+          "items": {
+            "$ref": "#/$defs/BandLevels"
+          },
+          "title": "Bands",
+          "type": "array"
+        },
+        "hop_seconds": {
+          "exclusiveMinimum": 0,
+          "title": "Hop Seconds",
+          "type": "number"
+        },
+        "meta": {
+          "$ref": "#/$defs/SectionMeta"
+        },
+        "window_seconds": {
+          "exclusiveMinimum": 0,
+          "title": "Window Seconds",
+          "type": "number"
+        }
+      },
+      "required": [
+        "window_seconds",
+        "hop_seconds",
+        "bands"
+      ],
+      "title": "BandProfileSection",
+      "type": "object"
+    },
     "BoundariesSection": {
       "additionalProperties": false,
       "description": "Candidates plus the playable region.\n\n``lead_out_start_sample`` is where the trailing silence begins \u2014 for a\nfull-side recording this is the run-out groove.",
@@ -1063,6 +1131,17 @@
       "title": "Analyzers",
       "type": "array"
     },
+    "band_profile": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/BandProfileSection"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
     "boundaries": {
       "anyOf": [
         {
@@ -1174,7 +1253,7 @@
       "default": null
     },
     "schema_version": {
-      "default": "3.1",
+      "default": "3.2",
       "title": "Schema Version",
       "type": "string"
     },

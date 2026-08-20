@@ -10,6 +10,7 @@ anything outside its context.
 |---|---|---|
 | `recording_info` | — | container subtype and bit depth, DC offset, per-channel peak/RMS, channel balance, stereo correlation |
 | `rms_profile` | — | windowed RMS envelope in dBFS |
+| `band_profile` | — | windowed RMS per frequency band, and each band's own floor — which part of the spectrum carries the energy, over time |
 | `surface_noise` | `rms_profile` | noise-floor level and how stable it is |
 | `silence` | `rms_profile`, `surface_noise` | quiet regions relative to the measured floor, and where the music around each one actually stopped and started (`music_end_sample`, `music_start_sample`) |
 | `boundaries` | `rms_profile`, `silence` | candidate cut points (silence, RMS valleys, spectral change) plus the playable region |

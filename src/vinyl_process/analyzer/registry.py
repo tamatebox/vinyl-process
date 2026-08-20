@@ -54,6 +54,7 @@ def _ensure_builtins() -> None:
     # Imported for their registration side effects; lazy so that importing the
     # registry itself stays cheap and cycle-free.
     from vinyl_process.analyzer import (  # noqa: F401
+        bands,
         boundaries,
         clicks,
         levels,

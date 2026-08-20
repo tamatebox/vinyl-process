@@ -33,7 +33,7 @@ happened.
 
 ```jsonc
 {
-  "schema_version": "3.1",
+  "schema_version": "3.2",
   "document_type": "analysis",
   "generated_by": "vinyl-process 0.1.0",
   "source": { "path": "side-a.wav", "sha256": "…", "sample_rate": 44100,
@@ -52,6 +52,12 @@ happened.
 
   "rms_profile":   { "window_seconds": 0.2, "hop_seconds": 0.1,
                      "values_db": [-68.1, -67.9, …] },
+  "band_profile":  { "window_seconds": 0.2, "hop_seconds": 0.2,
+                     // the same envelope split by frequency, so a band-limited
+                     // entrance can be told from surface noise at the same dBFS
+                     "bands": [ { "low_hz": 400.0, "high_hz": 1000.0,
+                                  "floor_db": -82.4,   // this band's own floor
+                                  "values_db": [-82.5, -58.8, …] } ] },
   "surface_noise": { "noise_floor_db": -68.0, "stability_db": 0.4 },
   "silence":       { "threshold_db": -60.0,
                      "regions": [ { "start_sample": 0,
@@ -147,6 +153,29 @@ Every section carries `meta` (omitted above except once for brevity):
           "confidence": 0.75 }
 ```
 
+`band_profile` answers what broadband level cannot: whether a quiet stretch is a
+band-limited entrance or the record's own surface. The surface's energy piles into
+one band — on a played LP usually the lowest, because RIAA playback boosts the
+bass of a groove noise that is already there — and that band sets the broadband
+figure, so a filtered intro 30 dB up in 400-3000 Hz moves `rms_profile` by a
+fraction of a dB while standing out per band.
+
+**Read a step in one band while its neighbours hold still, not the tilt of the
+spectrum.** The tilt tells you which kind of surface you are looking at, not
+whether the stretch is programme: continuous groove noise comes out weighted
+towards the low end (measured on one 12", a clean run-out fell monotonically from
+-71 dBFS in 40-150 Hz to -93 dBFS in 3-8 kHz), while impulsive abrasion is
+broadband and lifts the top band (a scuffed lead-in on the same side read
+-72 dBFS there, 20 dB above the run-out).
+
+Compare a band against its own `floor_db`, never against another band's, and read
+`floor_db` as a percentile of the whole file rather than as the level of silence —
+on a side that is mostly music it is a music level. Frames follow `rms_profile`'s
+convention, so with equal hops the two sections index alike; the bands of one
+frame sum to that frame's total level, so a band can be compared against the whole
+it belongs to. `spectral` measures the same axis but averages the whole file, and
+`rms_profile` sums the bands — this is the section with both axes.
+
 `clicks.silence_rate_per_minute` and `clicks.programme_rate_per_minute` are the
 pair that decides whether declicking helps: a worn pressing crackles in the
 inter-track gaps too, while a detector over-triggering on the material only fires
@@ -204,7 +233,7 @@ block: which skill decided, why, how confident it was, and what it consulted.
 
 ```jsonc
 {
-  "schema_version": "3.1",
+  "schema_version": "3.2",
   "document_type": "processing_plan",
   "created_by": "plan-album",
   "source": { …same shape as analysis.source; sha256 is verified before running… },
@@ -296,7 +325,7 @@ Written next to the exported album. This is the receipt.
 
 ```jsonc
 {
-  "schema_version": "3.1",
+  "schema_version": "3.2",
   "document_type": "manifest",
   "generated_by": "vinyl-process 0.1.0",
   "run_key": "…",                    // digest over (source digest, plan digest)
