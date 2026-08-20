@@ -31,6 +31,14 @@
   are groove noise at the record's own noise floor. Never quote a convention from
   memory — recalled figures have been unfounded, and one circulating as a platform
   spec was not in that platform's document at all.
+- **A number in a skill needs a citation or a warning label.** No `plan-*` skill
+  may state a threshold, target, amount or duration without either a source in its
+  `## Outside references` section or an explicit mark that it is uncalibrated.
+  Every skill must carry that section, with at least one URL in it, and
+  `tests/contracts/test_skills.py` fails the build otherwise. A specific record's
+  measurements are not a calibration: compress them to the magnitude of the failure
+  mode and leave the pressing, the track and the exact dB in that album's
+  `processing_plan.json`.
 - Positions in contracts are integer sample indices, never seconds.
 
 ## Working here

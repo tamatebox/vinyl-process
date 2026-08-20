@@ -15,3 +15,5 @@ edited after acceptance — a reversal is a new record that supersedes the old o
 | [0007](0007-a-level-target-needs-a-true-peak-ceiling.md) | A level target needs a true-peak ceiling |
 | [0008](0008-album-gated-rms-is-a-separate-mode.md) | Gated RMS is a new mode, not a fix to `album_rms` |
 | [0009](0009-the-rip-chain-is-configuration-the-comment-is-a-plan-value.md) | The rip chain is configuration; the comment is a plan value |
+| [0010](0010-the-click-statistic-is-local.md) | The click detector's statistic is local |
+| [0011](0011-a-job-directory-holds-no-scripts.md) | A job directory holds no scripts |

@@ -78,3 +78,30 @@ def test_stage_skills_document_the_fields_they_own() -> None:
             continue
         body = (SKILLS_DIR / skill.name / "SKILL.md").read_text(encoding="utf-8")
         assert skill.owns in body, f"{skill.name} never mentions the {skill.owns!r} section"
+
+
+OUTSIDE_REFERENCES_HEADING = "## Outside references"
+URL_PATTERN = re.compile(r"https?://\S+")
+
+
+@pytest.mark.parametrize("skill", SKILLS, ids=lambda skill: skill.name)
+def test_every_skill_cites_outside_practice(skill) -> None:
+    """A skill's domain claims must be checkable, so each one carries citations.
+
+    Every ``plan-*`` skill states numbers — how much repair, how loud, what
+    order, what a noise print may contain. Those are matters of LP-transfer
+    practice, not of this codebase, and a skill that asserts them without a
+    source is uncalibrated judgement written with the authority of a rule. The
+    orchestrator is held to the same bar: it decides the pipeline order and the
+    review-copy hierarchy, which are practice too.
+    """
+    body = (SKILLS_DIR / skill.name / "SKILL.md").read_text(encoding="utf-8")
+    assert OUTSIDE_REFERENCES_HEADING in body, (
+        f"{skill.relative_path} has no {OUTSIDE_REFERENCES_HEADING!r} section — "
+        "its domain numbers are uncalibrated"
+    )
+    section = body.split(OUTSIDE_REFERENCES_HEADING, 1)[1].split("\n## ", 1)[0]
+    assert URL_PATTERN.search(section), (
+        f"{skill.relative_path} has an {OUTSIDE_REFERENCES_HEADING!r} section "
+        "with no citable URL in it"
+    )

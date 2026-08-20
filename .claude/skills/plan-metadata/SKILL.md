@@ -9,6 +9,78 @@ Identify the exact release and record its tags in the plan. The executor applies
 tags after all audio processing and never touches the network — whatever you
 conclude must be *in* the plan.
 
+## Outside references
+
+Where a rule below is a matter of tagging or cataloguing convention rather than of
+this codebase, it is cited. Anything here without a citation is an in-house
+judgement and should be treated as uncalibrated until someone finds a source for
+it.
+
+**What the fields mean.** The tags this section fills are ID3v2.4 frames (and their
+Vorbis-comment equivalents), and
+[the frame specification](https://id3.org/id3v2.4.0-frames) settles four
+questions this skill used to answer from taste:
+
+- `total_tracks` — TRCK "MAY be extended with a '/' character and a numeric string
+  containing the total number of tracks/elements on the original recording.
+  E.g. **'4/9'**". "The original recording" is the album, which is why a one-side
+  plan must set `total_tracks` to the album's count rather than let it default to
+  what this plan cuts.
+- `disc_number` / `total_discs` — TPOS "is used **if** the source described in the
+  'TALB' frame is divided into several mediums, e.g. a double CD". A single record
+  is not divided into several mediums, so there is no part to describe and `null`
+  is the correct value, not `1/1`. It also confirms the disc/side distinction: the
+  medium is the record, and a side is not a medium.
+- `genre` and `styles` — TCON: "since the category list would be impossible to
+  maintain with accurate and up to date categories, **define your own**". So a
+  release's own genre words are legitimate content for the frame; there is no
+  controlled vocabulary to conform to.
+- `comment` — COMM "is intended for any kind of full text information that does not
+  fit in any other frame", and "**newline characters are allowed**". The multi-line
+  rip chain in step 5 is within spec rather than a liberty.
+
+**One release, not the album.** MusicBrainz's
+[release group](https://musicbrainz.org/doc/Release_Group) documentation draws the
+line this procedure's step 1 turns on: "a **release** is something you can buy,
+such as a CD or a digital download, while a **release group** embraces the overall
+concept of an album." The record in the room is a release. That is also the
+mechanism behind `prefer_original_release_year`: the group carries the album's
+first date, the release carries this pressing's, and they are different facts
+rather than a better and a worse answer.
+
+**Various Artists.** MusicBrainz reserves the special artist for exactly the case
+in step 3: "[Used only for compilation-type releases or release groups containing
+tracks by multiple different artists](https://musicbrainz.org/doc/Various_Artists)",
+and "this artist shouldn't generally be used for recordings, tracks or works" — so
+it belongs in `album_artist` and never in a track's own `artist`, which is what the
+tagger's fallback chain would otherwise make of a blank.
+
+**Which title, when the release prints two.** MusicBrainz's
+[release style guide](https://musicbrainz.org/doc/Style/Release): "If several
+versions of a title are provided, such as when release title differs between cover
+and spine, or the track titles differ between the back cover and a booklet
+tracklist, it's generally better to **follow the more detailed one**." A sleeve
+that disagrees with itself is normal; this is the tie-break. The same page rejects
+placeholder medium titles — "'CD n' or 'Disc n' should not be entered as a medium
+title, since they are not actual titles" — which is the same instinct as leaving
+`disc_number` `null` on a single.
+
+**The vinyl position form.** `"A1"`, `"B3"` is what Discogs' own API returns in a
+vinyl release's `tracklist[].position`, which is the evidence this skill actually
+uses, via `scripts/discogs_release.py`. The database guideline that mandates the
+form lives on `support.discogs.com`, which answers a plain fetch with **403** and
+is therefore **unread** here — cite the API response, not a guideline nobody in
+this repository has seen. ID3v2.4 has no frame for a vinyl position, so the tagger
+writes it as a user-defined `TXXX` under the description `VINYL_POSITION`
+([tagger.py](../../../src/vinyl_process/metadata/tagger.py)). Nothing standard
+reads that, which is why striking the field costs a person less than striking
+`catalog_number` — check the filename template first either way.
+
+**Uncalibrated numbers in this skill**: the **±5 s** tolerance for matching a
+release by per-track duration. In-house, and generous — a pressing can legitimately
+differ from a printed duration by more than that, which is why step 1 treats a
+mismatch as a fact to resolve rather than as a rejection.
+
 ## Inputs
 
 - User-provided identity: artist/album, or a Discogs/MusicBrainz release ID or
@@ -62,10 +134,10 @@ conclude must be *in* the plan.
 
    **A resolved field is not a wanted field.** A Discogs release will fill more of
    this section than most people want written into their library, and the tag set
-   is theirs to choose: on the album this note comes from, four of the fields that
-   resolved cleanly — genre, styles, label and the vinyl position — were struck at
-   the checkpoint, and one of them (`label`) had two candidate values that would
-   have cost a round trip to settle for a tag nobody wanted. So resolve everything,
+   is theirs to choose: on one album **four** cleanly resolved fields — genre,
+   styles, label and the vinyl position — were struck at the checkpoint, and one of
+   them had two candidate values that would have cost a round trip to settle for a
+   tag nobody wanted. So resolve everything,
    then **show the tag set and let them prune it**, rather than presenting a filled
    section as settled. A field left `null` is simply not written: no `TPUB`, no
    `TCON`, no `VINYL_POSITION`. Check first whether anything else reads the field —
@@ -84,13 +156,18 @@ conclude must be *in* the plan.
      outcome, at the cost of that track's vinyl position. Invent a title only if the
      label prints one.
    - **A compilation** wants `album_artist: "Various Artists"`, `artist: null`, and a
-     per-track `artist` on every entry. The tagger falls back track → `artist` →
-     `album_artist`, so an album-level `artist` would quietly become the performer
-     of any track whose own artist you could not fill.
-4. `disc_number` and `total_discs`: the **disc**, not the side. Both sides of one
-   record are the same disc — the side is already in `tracks[].position` — so a
-   double album is discs 1 and 2 across four plans. Leave both `null` on a single
-   record rather than writing `1/1`, which is a fact nobody asked for.
+     per-track `artist` on every entry — the credit is for the release, and "shouldn't
+     generally be used for recordings, tracks or works" (*Outside references*). The
+     tagger falls back track → `artist` → `album_artist`, so an album-level `artist`
+     would quietly become the performer of any track whose own artist you could not
+     fill, and `"Various Artists"` left in the track's own field would be the same
+     mistake spelled differently.
+4. `disc_number` and `total_discs`: the **disc**, not the side. TPOS describes a
+   source "divided into several mediums" (*Outside references*), and the medium is
+   the record — both sides of one are the same disc, and the side is already in
+   `tracks[].position` — so a double album is discs 1 and 2 across four plans.
+   Leave both `null` on a single record: with nothing divided there is no part to
+   number, and `1/1` asserts a set that does not exist.
 5. `comment`: compose it from the `[rip]` configuration section and write the
    finished string into the plan. That section holds the chain the record was
    played and digitised through — turntable, tonearm, headshell, cartridge,
@@ -171,7 +248,9 @@ Never present titles taken from memory as if they were looked up.
   `"enabled": false` (which means "do not write tags", not "forget the names").
 - `year`: `preferences.prefer_original_release_year` decides, and it is `true` by
   default — so the original release year unless the user has asked for the year of
-  the pressing they own.
+  the pressing they own. These are two different facts rather than a right and a
+  wrong one (the release group's date against the release's, *Outside references*),
+  so say which you wrote.
 - Use the tracklist's original-language titles unless
   `preferences.title_style` is `transliterate`.
 - Never fill titles from memory for an obscure release. Verify against a source,
@@ -180,16 +259,16 @@ Never present titles taken from memory as if they were looked up.
   renders take their filenames from this section, so a tracklist used before the
   release was settled is sitting in the directory the person has been listening to.
   When the pressing resolves, diff the titles against what `review/` actually
-  holds and say what moved — on the album this rule comes from, `07 - 墮落.flac`
-  had been played and plotted under a title the sleeve does not carry. Re-render
+  holds and say what moved: a track has been played and plotted under a title the
+  sleeve does not carry. Re-render
   only if `review/` is still being used to decide something; if `album/` is next,
   name the stale files instead, because a plot or a manifest that refers to them
   by the old name is about to be replaced anyway.
 - **A discography site is not the pressing.** It gives you the album, and the tags
-  follow the record in the room. On the release this rule was written from, a
-  Wikipedia tracklist had 墮落 where the sleeve prints 墜落 — one character, a
-  different word — and a duration 6 s out. Nine of ten titles were right, which is
-  what makes this failure quiet: nothing looks wrong until the release id arrives.
+  follow the record in the room. A non-authoritative tracklist has differed from
+  the sleeve by **one character** — a different word, not a typo — with a duration
+  6 s out, on a list that was otherwise **nine of ten right**. That ratio is what
+  makes the failure quiet: nothing looks wrong until the release id arrives.
   Where you have had to work from one anyway, mark every title provisional in the
   message that shows them, and re-check all of them once the pressing is settled
   rather than only the ones you doubted.

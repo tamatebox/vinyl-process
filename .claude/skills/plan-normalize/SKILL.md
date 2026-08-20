@@ -15,6 +15,72 @@ except the peak modes: `album_peak` and `track_peak` aim the *sample* peak at
 `target_db`, so their target already bounds the peaks. A level target does not, and
 `lint` says so (`rms-without-peak-ceiling`, on `album_rms` and `album_gated_rms`).
 
+## Outside references
+
+Where a number below is a matter of LP-transfer practice rather than of this
+codebase, it is cited. Anything here without a citation is an in-house judgement
+and should be treated as uncalibrated until someone finds a source for it.
+
+**How loud.** Audacity's
+[Sample workflow for LP digitization](https://manual.audacityteam.org/man/sample_workflow_for_lp_digitization.html)
+step 16: "Use Effect > Normalize...setting 'Normalize maximum amplitude to' to
+around **-2 dB** or similar". That is a *peak* target, and "or similar" is the
+entire tolerance the source offers — so the defensible band is roughly −1 to
+−3 dBFS and this project's −1.0 default sits at its loud edge. The claim that
+−1.0 is "what every streaming platform asks for" used to stand here uncited and
+has been **removed** rather than softened: a remembered platform spec is the exact
+thing this project has already been wrong about. Where the user names a delivery
+target, take theirs and cite them.
+
+**Normalize last.** Sound Forge Pro's
+[vinyl-restoration guide](https://soundforgepro.com/sound-forge-pro-for-vinyl-restoration/)
+puts it at the end of the chain — "Normalize last, if a derivative needs a defined
+peak or loudness" — and keeps the two jobs apart: "Peak normalization does not
+repair dynamics; loudness normalization changes gain to meet a delivery target."
+The executor's order already does this. The citation is why it is not negotiable,
+and why a level decision may not be smuggled into an earlier review render.
+
+**One gain, and over what.** A constant gain is what makes a peak mode safe at
+all: "Because the same amount of gain is applied across the entire recording, the
+signal-to-noise ratio and relative dynamics are unchanged"
+([audio normalization](https://en.wikipedia.org/wiki/Audio_normalization)). The
+scope of "entire" is the decision, and
+[VinylStudio](http://www.alpinesoft.co.uk/vinylstudio/helpfile/filter_settings.htm)
+offers the same three this contract does: "normalise each side separately (**the
+default**), or adjust **all sides by the same amount**", or "normalise **each
+track** separately". Per-track exists in the field, so `track_peak` is not
+unheard-of — it is simply the one that discards the mastered relationships. One
+plan is one side here, which lands on VinylStudio's *default* rather than on its
+all-sides option; that is a known limitation, not a preference, which is why the
+checkpoint asks for both sides' post-split peaks.
+
+**Exclude the needle drop and the run-out.** VinylStudio's *smart normalisation*
+"ignores audio in the gaps between tracks (as well as before the start of the
+first track and after the end of the last)", and its help says why: it "can be
+used to prevent the sound of the needle drop and lift from affecting the results".
+That is the outside warrant for the two things this skill is most insistent about
+— quote the level of the **split** render, not `peaks.peak_db`, and prefer
+`album_gated_rms` to `album_rms`. This pipeline arrives there by a different
+route, since the split has already discarded the drop and the gap middles before
+the executor measures, but the requirement is the same one.
+
+**The other school, which this pipeline cannot join.**
+[ReplayGain](https://en.wikipedia.org/wiki/ReplayGain) leaves the samples alone
+and writes the figure as a tag — its utilities "usually add metadata to the audio
+files without altering the original audio data" — and its album mode "calculates
+shared peak and gain values across an entire album, preserving the intended volume
+differences between tracks", which is `album_peak`'s goal reached without touching
+the audio. There is no ReplayGain field in the `metadata` contract and no stage
+that would write one, so it is not available here. If someone asks for it, say
+that rather than approximating it with a gain.
+
+**Uncalibrated numbers in this skill**, named so nobody mistakes them for
+practice: the **0.5 dB** proximity at which the stage is not worth running, the
+**0.3 dB** `true_peak_db − peak_db` gap that triggers a ceiling on a peak mode,
+the **−2.0** ceiling suggested for a user who transcodes to lossy, and the "keep
+at least **1 dB**" floor under *Rules*. All in-house. Only the target band is
+cited.
+
 ## Inputs
 
 From `analysis.json`:
@@ -49,8 +115,9 @@ Three of these can be missing, and each changes what you may claim:
 ## Decision guide
 
 1. **Default**: `mode: "album_peak"`, `target_db: -1.0`. One gain for the whole
-   side preserves the relative dynamics between its tracks — that is the entire
-   point of album-wide normalization.
+   side leaves "the signal-to-noise ratio and relative dynamics unchanged" — that
+   is the entire point of album-wide normalization, and the one property a
+   per-track gain gives up.
 2. `album_gated_rms` when the user wants loudness matching across a collection.
    Take `target_db` from their stated reference (e.g. −18 dB), not from a guess,
    and **always set `peak_ceiling_db`** — a level target says nothing about where
@@ -62,8 +129,10 @@ Three of these can be missing, and each changes what you may claim:
    mode that does what "match the loudness" means; say in
    `decision.rationale` why you did not use it.
 4. `track_peak` is discouraged: it flattens the level relationships the record
-   was mastered with. Use it only for compilations assembled from genuinely
-   mismatched sources, and say so in `decision.rationale`.
+   was mastered with. It is a documented option in the field rather than a mistake
+   (VinylStudio offers "normalise each track separately"), so the argument against
+   it is the one above and not novelty — use it only for compilations assembled
+   from genuinely mismatched sources, and say so in `decision.rationale`.
 5. **Skip** (`"enabled": false`, or `mode: "none"`) when the gain would not be
    worth applying: on a peak mode that is `peak_db` already within 0.5 dB of the
    target, and on an RMS mode `gated_rms_db` (or `rms_db`, if that is `null`) within
@@ -77,9 +146,11 @@ Three of these can be missing, and each changes what you may claim:
 `preferences.normalize_peak_ceiling_db` as the starting value and depart from it
 only for a reason you can name.
 
-- **−1.0 is the right answer almost always**, which is why it is the default. It is
-  what every streaming platform asks for and it is the headroom a later AAC/Opus
-  transcode needs; the encoder can add inter-sample peaks that were not in the FLAC.
+- **−1.0 is the default, and is inside the cited band** (−1 to −3 dBFS, from
+  Audacity step 16) at its loud edge. What is *not* cited is any platform spec —
+  see *Outside references*. The reason to keep a dB in hand is mechanical rather
+  than editorial: a later AAC/Opus transcode reconstructs the waveform and can put
+  inter-sample peaks where the FLAC had none. Say that, not a platform name.
 - Set it on **every** RMS mode, even if the preference says `null`: an uncapped
   level target is the one combination that can drive the export into a clip. Set it
   on `album_peak` too whenever `true_peak_db - peak_db` is more than about 0.3 dB,
@@ -150,11 +221,11 @@ Present:
   only if there is one worth explaining. They describe the whole recording,
   including the lead-in, and on a record the loudest sample of the file is
   routinely the stylus drop — which the split throws away. This section used to ask
-  for `target - peak_db` as a "lower bound" and to lead with it: on the pressing
-  that exposed it the bound read +2.40 dB against an actual +8.03 dB, and the whole
-  5.6 dB gap was a needle drop that never reaches the album. A number that wrong,
-  presented first, is what the person anchors on. The correction is not a caveat
-  underneath it — it is not showing it first.
+  for `target - peak_db` as a "lower bound" and to lead with it: measured once, that
+  bound understated the real gain by **5.6 dB**, the whole gap being a needle drop
+  that never reaches the album. A number that wrong, presented first, is what the
+  person anchors on. The correction is not a caveat underneath it — it is not
+  showing it first.
 
   Where the review render does not exist yet, say that the figure is a bound from
   the whole file and that the real gain will be larger by however loud the stylus
@@ -181,9 +252,9 @@ vinyl-process execute plan-side-a.json --audio <recording> \
 ```
 
 Plot it — `python scripts/plot_review.py review/level` — and lead with the
-per-track images, not the stacked side one: on the album this was written from the
-stacked view could not show where a tail sat in dB or whether a fade stepped, and
-both mattered. The figure answers the second question below outright, and half of
+per-track images, not the stacked side one: a stacked view cannot show where a tail
+sits in dB or whether a fade stepped, and both have mattered. The figure answers
+the second question below outright, and half of
 the first: peaks per track show whether anything squashed, and a `track_peak` plan
 is visible as every panel reaching the same height. Keep the side figure for
 checking that the two sides landed level with each other. See

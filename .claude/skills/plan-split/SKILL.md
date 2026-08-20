@@ -69,6 +69,13 @@ WAV and ALAC are [gapless](https://en.wikipedia.org/wiki/Gapless_playback) by
 design, with no encoder delay to compensate, so a leading margin here buys
 nothing mechanical and is purely a listening choice.
 
+**Uncalibrated numbers in this skill**, named so nobody mistakes them for
+practice. The **0.3–0.5 s tail** after `music_end_sample`; the **de-click edge
+fade** (20 ms in, 50–80 ms out — a discontinuity fix, not an LP fade); the
+**~5 s** at which a duration disagreement is worth reporting; and the **±5 %**
+drift tolerance in step 3. Each is in-house judgement. Where one of them decides a
+boundary, say so in `decision.rationale` rather than quoting it as a rule.
+
 ## Inputs
 
 From `analysis.json`:
@@ -101,13 +108,13 @@ From `analysis.json`:
   cut placed there loses the entrance. The former is a lower bound and safe.
   It is a lower bound *on the broadband level*, though, which is not the same as
   the start of the music: where a track opens with a filtered element and the bass
-  arrives seconds later, `music_start_sample` marks the **bass**. On one 12" both
-  sides did exactly that and it cut 3.8 s off one intro and 7.3 s off the other.
-  Check it against `band_profile` before using it as the start of a track.
+  arrives seconds later, `music_start_sample` marks the **bass**. Both sides of one
+  12" did exactly that, and the marker landed **4 to 7 s** into the intro. Check it
+  against `band_profile` before using it as the start of a track.
   **`music_end_sample`, not `start_sample`, is
   where the preceding track stopped**: `start_sample` is a fixed-threshold
-  crossing, which on a fading track fires mid-fade (4 s early on one track of a
-  tested pressing, 22 s on another).
+  crossing, which on a fading track fires mid-fade — measured from a few seconds
+  early to **over 20 s** early on tracks of one pressing.
 - `rms_profile` — the envelope, when you need to look at a specific stretch
 - `source.sample_rate`, `source.num_samples`
 
@@ -123,9 +130,9 @@ ways to answer it both fail.
 That is what `lead_out_start_sample` gets wrong.
 
 **Brightness fails, and fails convincingly.** A scuffed lead-in groove is
-*bright* — on one tested side it ran 25 dB above the run-out in the 3-8 kHz band,
-above the music as well; on another it was 20 dB above. Brightness reads as
-programme and it is not: abrasion is impulsive and impulses are broadband. So a
+*bright* — measured on two sides at **20-25 dB above the run-out** in the 3-8 kHz
+band, above the music as well. Brightness reads as programme and it is not:
+abrasion is impulsive and impulses are broadband. So a
 whole-file `spectral` figure settles nothing, and neither does "is this stretch
 bright".
 
@@ -146,10 +153,10 @@ monotonically from -71 dBFS in 40-150 Hz to -93 dBFS in 3-8 kHz. So an intro
 sitting 20-30 dB above the surface in 400-3000 Hz moves `rms_profile` by a
 fraction of a dB, which is why `silence` misses it. Per band, in one 0.2 s frame:
 
-- the entrance is a **step in a band with its neighbours unmoved** — on that
-  record, 400-1000 Hz up 18.5 dB and 1000-3000 Hz up 14.4 dB while 40-150 Hz and
-  150-400 Hz did not budge. Crackle cannot make that shape: it is broadband, so it
-  lifts several bands at once.
+- the entrance is a **step in a band with its neighbours unmoved** — measured
+  once as the 400-1000 and 1000-3000 Hz bands up 14-19 dB in a single frame while
+  the two bands below them did not budge. Crackle cannot make that shape: it is
+  broadband, so it lifts several bands at once.
 - compare a band against **its own `floor_db`**, never another band's, and treat
   `floor_db` as a percentile of the whole file rather than as the level of
   silence — on a side that is mostly music it *is* a music level, so read steps
@@ -211,10 +218,11 @@ track.
    and the length of its gap outrank its distance from the expected position.
    Nearest neighbour fails late in a side: the expected positions drift by the
    length of every gap not yet accounted for, always towards the run-out, and ±5 %
-   of a 20-minute side is ±60 s — wide enough to bracket several unrelated gaps. On
-   a tested pressing the last expected boundary had four candidates at confidence
-   1.00 inside the tolerance, and the nearest of them was 28 s into the run-out
-   groove. Where no candidate is near an expected boundary, interpolate from the
+   of a 20-minute side is ±60 s — wide enough to bracket several unrelated gaps.
+   Measured once: a side's last expected boundary had **four** candidates at
+   confidence 1.00 inside the tolerance, and the nearest of them lay **half a
+   minute into the run-out groove**. Where no candidate is near an expected
+   boundary, interpolate from the
    durations and say so in the `decision.rationale`.
 4. Resolve count mismatches explicitly:
    - **more candidates than tracks** — drop the weakest. Quiet passages inside a
@@ -225,16 +233,24 @@ track.
 5. **Place each cut from `music_end_sample`, never from `start_sample`.** A
    reasonable shape for a side of separate tracks:
    - `end_sample` = the gap's `music_end_sample` + a tail of 0.3–0.5 s;
-   - `start_sample` = the entrance − a margin of about 50 ms, where "the
-     entrance" is the gap's `music_start_sample` unless `band_profile` shows a
-     band-limited element starting earlier (see *Surface or programme?*), in
-     which case it is the first frame of that. Not a fixed pre-roll off
-     `end_sample`: the margin a track actually needs varies, and across one album
-     it ran from 0.07 s to 0.42 s, so one figure either clips an entrance or ships
-     bare surface ahead of it. 50 ms is the floor, not the target — asked to
-     judge, one person called 50 ms "stingy" across a whole record and 0.5 s was
-     adopted for all three tracks. It is a listening decision like any other, so
-     put it to them rather than defending the smallest number that works;
+   - `start_sample` = the entrance − a margin, where "the entrance" is the gap's
+     `music_start_sample` unless `band_profile` shows a band-limited element
+     starting earlier (see *Surface or programme?*), in which case it is the first
+     frame of that. **Take the margin from the documented practice: 0.5 s**, which
+     is where Audacity step 14 places the label relative to the start of the next
+     track (see *Outside references*). Read it as the target rather than as a
+     ceiling; the reference assumes that margin is silent and here it is groove
+     noise, so it is the **fade's** job (under *Rules*) to bring that noise in,
+     not the margin's job to be short.
+
+     Two things that replaces. It is **not** a fixed pre-roll off `end_sample` —
+     the distance from one track's end to the next entrance varies across a single
+     album by several hundred milliseconds, so one offset either clips an entrance
+     or ships bare surface. And the ~50 ms this used to ask for is the *floor*:
+     enough to keep a de-click edge fade off the music, and nothing more. Asked to
+     judge it, a listener called 50 ms "stingy" across a whole record, which is
+     what the citation predicts. Going below 0.5 s is a listening decision to put
+     to the person, not a default to take quietly;
    - the dead middle of the gap is simply not exported (the contract allows a gap
      between tracks), and the tail is clamped so it never reaches the next
      track's pre-roll.
@@ -245,8 +261,11 @@ track.
    silence region that opens after it began, exactly like every other track — the
    walk in step 3 lands on that same region, and a nearer candidate deeper in the
    run-out is not a competitor for it. Do **not** interpolate that end from the
-   label's duration — the instruction here used to say so, and it appended 11 s of
-   run-out groove noise to a side whose printed duration was that much too long.
+   label's duration — the instruction here used to say so, and it shipped a side
+   with **11 s of run-out groove noise** appended, because the printed duration
+   was that much too long
+   ([adr/0011](../../../docs/adr/0011-a-job-directory-holds-no-scripts.md) records
+   how that reached the album unchallenged).
    Confirm the cut against `periodicity` past it, not against `rms_profile` — a
    flat plateau at the surface level can be the track itself (a dub side ran 22 s
    of outro through one, with the beat still going, after the level threshold had
@@ -263,10 +282,10 @@ track.
 
    The label is a cross-check in one direction only. Report a disagreement over
    ~5 s as a fact about the pressing, not as a reason to move the cut — and do not
-   read an *agreement* as confirmation either. On a side whose printed duration was
-   12:21, starting the track at the needle drop instead of at the music gave
-   12:19.5, and that near-perfect match was the best argument for a boundary 20 s
-   wrong. Durations are sums; two errors inside one buy a coincidence cheaply.
+   read an *agreement* as confirmation either. A printed duration has been matched
+   **to within 1.5 s** by a boundary **20 s wrong**: the cut started at the needle
+   drop instead of at the music, and the two errors cancelled. Durations are sums;
+   two errors inside one buy a coincidence cheaply.
 6. Emit the section.
 
 ## Output
@@ -390,10 +409,10 @@ boundaries are weak: the ones you flagged above. Turn each into one line naming 
 file, the copy to play it from, roughly where in it to listen, and the doubt it
 settles:
 
-> - `review/split-loud/05 - 不安.flac`, the last 5 seconds — the cut sits 1.8 s
+> - `review/split-loud/05 - <title>.flac`, the last 5 seconds — the cut sits 1.8 s
 >   past where the level says the music stopped, so there may be audible run-out
 >   noise before the fade. Is there?
-> - `review/split/03 - 想像.flac`, the first 2 seconds — this entrance was the
+> - `review/split/03 - <title>.flac`, the first 2 seconds — this entrance was the
 >   quietest on the side and the margin ahead of it is the shortest. Is anything
 >   missing from the start?
 
@@ -414,42 +433,42 @@ still play first.
 - Start the first track from the **opening** silence region's `music_start_sample`
   — the region whose `start_sample` is 0 — less the same margin every other track
   gets, and **not** from `lead_in_end_sample`. That
-  marker is where the lead-in groove stops, and the needle drop lands *after* it:
-  on both sides of a tested pressing the loudest sample of the whole side was the
-  drop itself, at −3.4 dBFS between `lead_in_end_sample` and the first gap, against
-  −9 dBFS for the loudest music. Starting at the marker puts that pop inside track
-  1 and then hands it to `album_peak`, which costs 5.6 dB of gain across the whole
-  album. Likewise the last track ends at its own `music_end_sample` (step 5), not
+  marker is where the lead-in groove stops, and the needle drop lands *after* it.
+  On both sides of a tested pressing the loudest sample of the whole side was the
+  drop, some **5-6 dB above the loudest music**. Starting at the marker puts that
+  pop inside track 1 and then hands it to `album_peak`, which cost **5.6 dB of
+  gain** across that whole album. Likewise the last track ends at its own
+  `music_end_sample` (step 5), not
   at `lead_out_start_sample`. Cut *inside* a silence.
 
   **Two ways the "opening region" is not the one you want**, both met on one 12":
 
-  - *The file opens with digital silence.* Side Y's first region ran 0-1.5 s at
-    −88.5 dBFS — the recorder running before the needle landed — and its
-    `music_start_sample` marked where the **lead-in crackle** began, 1.3 s in.
-    Taking it would have opened the track with 12.5 s of crackle.
-    `lead_in_end_sample` sat at the same false edge. Use the region that actually
-    precedes the music, which is the next one along, and confirm with
-    `band_profile` that what follows it is the music.
+  - *The file opens with digital silence.* Where the recorder ran before the
+    needle landed, the first region is that digital silence — near −90 dBFS — and
+    its `music_start_sample` marks where the **lead-in crackle** begins, not the
+    music. Taking it opened a track with **over 10 s of crackle** on the side this
+    was met on, and `lead_in_end_sample` sat at the same false edge. Use the
+    region that actually precedes the music, which is the next one along, and
+    confirm with `band_profile` that what follows it is the music.
   - *There is no region at 0 and `lead_in_end_sample` is `null`.* This rule used
-    to conclude "the side begins in music: start at sample 0". On side X of that
-    same record it does not: the file opens with the needle drop, a −28 dBFS
-    thump, and then 30 s of lead-in groove, and the drop's pop at 8.98 s was the
-    loudest sample of the whole side (−3.17 dBFS against −7.45 for the loudest
-    music). Starting at 0 would have shipped all of it. So check `band_profile`
-    before concluding a side begins in music — every band flat across 20 s, with
-    a step of 30 dB in one frame at the end of it, is a lead-in and not an
-    entrance — and start from the last silence region before that step.
+    to conclude "the side begins in music: start at sample 0". That does not
+    follow: a file can open with the needle drop itself and then **tens of seconds
+    of lead-in groove**, with the drop's own pop the loudest sample of the whole
+    side. Starting at 0 ships all of it. So check `band_profile` before concluding
+    a side begins in music — every band flat across 20 s, then a step of ~30 dB
+    in one frame at the end of it, is a lead-in and not an entrance — and start
+    from the last silence region before that step.
 
   What has *not* changed: do not reach past the gap that follows track 1 and start
   there, which would open the album at track 2's entrance.
 - **Whatever margin you keep is bare surface, and that is where the clicks are.**
   Nothing masks them there, and the opening grooves are the most handled part of a
-  record: on one album the first half-second of a track carried up to 45 times the
-  click density of the track itself. Keep the margin because a clipped entrance
-  cannot be recovered, but do not expect trimming it to fix a click a listener
-  complains about — measured on that album, the audible one was 23 dB louder than
-  anything in the margin and sat *after* the music had started. Reaching for a
+  record: measured on one album, the first half-second of a track carried up to
+  **45 times** the click density of the track itself. Keep the margin because a
+  clipped entrance cannot be recovered, but do not expect trimming it to fix a
+  click a listener complains about — the audible one on that album was **23 dB
+  louder** than anything in the margin and sat *after* the music had started.
+  Reaching for a
   longer fade-in instead is worse: it shapes the signal to hide the symptom.
 - Titles do not belong here — they live in the `metadata` section. The plan must
   not carry the same string twice.
@@ -464,7 +483,11 @@ still play first.
   it on. That is what LP practice fades for, and it asks for far longer: a fade-in
   of "a fraction of a second" and a fade-out "typically a few seconds", applied
   when "there is a lot of background noise" (see *Outside references*). 250 ms in
-  and 500 ms out sits inside that guidance and has been adopted on a record here.
+  and 500 ms out has been adopted on a record here. Be exact about how that sits
+  against the citation: the fade-**in** is inside "a fraction of a second", while
+  500 ms is well **short** of "typically a few seconds" — it is a compromise
+  between the reference and a margin only half a second long, not the practice
+  figure. A margin the reference's length would want the reference's fade.
 
   So choose the fade *with* the margin, not independently of it, and say which job
   it is doing. The constraint that survives either way: **keep each fade inside

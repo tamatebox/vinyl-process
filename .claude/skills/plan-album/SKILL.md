@@ -8,6 +8,54 @@ description: Orchestrate planning for a raw vinyl recording — run the analyzer
 Turn a raw recording into a validated `processing_plan.json`, then execute it.
 You are the planning layer: **you decide, Python only measures and executes.**
 
+## Outside references
+
+Where a claim below is a matter of restoration practice rather than of this
+codebase, it is cited. Anything here without a citation is an in-house judgement
+and should be treated as uncalibrated until someone finds a source for it.
+
+**The order of the stages.** Sound Forge Pro's
+[vinyl-restoration guide](https://soundforgepro.com/sound-forge-pro-for-vinyl-restoration/)
+states the principle this pipeline's order is an instance of: "**Work from
+discrete defects toward continuous ones**", then "Normalize last, if a derivative
+needs a defined peak or loudness." Its reason for the first half is mechanical
+rather than aesthetic — "**Large clicks can corrupt a noise profile** and make
+later processing pump or smear" — so click repair ahead of anything broadband is
+not a matter of taste. The same guide is where this project's stated limitation
+about de-noise comes from: "The noise print must contain only the steady unwanted
+bed: no reverb tail, no room tone that belongs to the recording, no music fading
+into silence", and Audacity's
+[LP workflow](https://manual.audacityteam.org/man/sample_workflow_for_lp_digitization.html)
+step 10 takes that print "from either the lead-in grooves immediately before the
+music starts, or from a lead-in between tracks". Both of those are what `split`
+throws away, which is why de-noise cannot be a post-split stage here — see
+[architecture.md](../../../docs/architecture.md) *Known limitations*.
+
+**Quantise once, and derive the deliverables.** The same guide: "If you
+intentionally reduce from 24-bit to 16-bit, **apply dither once, after all EQ,
+level and sample-rate changes**." That is the whole argument for rendering the
+review ladder wider and undithered — a rung that quantised would be a second
+quantisation of the same programme, and the album's own is the one that counts.
+[plan-export](../plan-export/SKILL.md) owns the album's depth; this ladder is not
+the place to decide it.
+
+**A listening copy is a different object from the master.** IASA's guidelines
+describe the archival strategy as "copying vulnerable original tapes to sturdy
+studio tapes and to making **listening copies** for recordings in frequent demand"
+([handling and storage](https://www.iasa-web.org/book/export/html/3812)). Note
+what that citation is and is not: it is about physical carriers, and the analogy
+to a review render is **ours**. What it supports is that a separate audition class
+is normal archival practice; it does not license any particular depth or rate for
+one. The claim that "mastering practice approves a high-resolution master and
+derives each deliverable from it" stood here uncited and has been narrowed to the
+dither citation above, which is the part that has a source.
+
+**Uncalibrated numbers in this skill**: the **~5 s** per-track difference a
+checkpoint must explain, and the **~1 dB** between two sides' gains worth noting in
+`notes`. Both in-house thresholds for *when to say something*, not for what to do —
+which is the only kind of number this skill should carry, since every dial belongs
+to a stage skill.
+
 ## How to run it
 
 Work through the steps below **one at a time, stopping at every checkpoint**. A
@@ -80,10 +128,9 @@ signal-correlated distortion into exactly the quiet tails and fades the person i
 being asked to judge. A wider render adds nothing and quantises nothing, so what
 they hear is the stage under review and only that.
 
-This is the ordinary shape of the work rather than a compromise: mastering
-practice approves a high-resolution master and derives each deliverable from it,
-and IASA's hierarchy makes the audition copy a separate class from the
-preservation copy for the same reason. What it costs is that the person approves
+This is the ordinary shape of the work rather than a compromise — dither is
+applied once, after every level and rate change, and an audition copy is its own
+class of object (*Outside references*). What it costs is that the person approves
 something that is not byte-for-byte what ships, and the answer to that is *not* to
 make them identical — it is to **verify** the deliverable against the spec rather
 than re-audition it: the depth and rate are what the plan asked for, dither ran
@@ -115,8 +162,8 @@ too far with it.
 `review/split-loud/` is not a rung on the ladder at all. It is `review/split/`
 with one flat gain applied outside the plan, so that a tail is loud enough to
 judge; nothing is ever compared against it and it carries no manifest. See
-[plan-split](../plan-split/SKILL.md). Delete `review/` once `album/` is agreed — on a 35-minute
-album the renders and their figures came to 972 MB against 217 MB for the album:
+[plan-split](../plan-split/SKILL.md). Delete `review/` once `album/` is agreed —
+the ladder and its figures run **four to five times the size of the album**:
 
 ```sh
 python scripts/clean_job.py jobs/<record>            # what would go
@@ -148,9 +195,8 @@ show).
 side as a whole — are the cuts where they should be, does one track stand out, do
 the two sides sit at the same level. The per-track figure has five times the
 vertical resolution and is for one boundary or one tail. This is not a preference:
-on the album this was written from, the stacked view reduced a 2.2 s run-out tail
-to a hairline and could not show whether a long fade descended smoothly or
-stepped. Both were obvious per track.
+a stacked view reduces a two-second tail to a hairline and cannot show whether a
+long fade descends smoothly or steps. Both are obvious per track.
 
 **Plot the render, not the step.** Do not take a figure before and after each of
 the five stages. `metadata` changes no samples, so its pair would be identical;
@@ -184,13 +230,13 @@ you are reporting — "nothing a figure can detect went wrong" is an honest and
 useful sentence; "it looks fine" pretending to cover both is not.
 
 **No scripts in the job directory.** A Python file there is the planning layer
-written in Python, which is the one thing this project does not do. The plan is
-the record of the decisions and `decision.rationale` is where the reasoning goes;
-a one-off script that emits the boundaries hides them from review instead. One
-lived in a job directory here, hard-coded the gap positions as seconds, never
-looked at `boundaries.candidates`, and shipped a side with 11 s of run-out groove
-noise appended — and because the script was the only account of how it got there,
-nothing caught it.
+written in Python, which is the one thing this project does not do, and it is
+invisible to every check the repository has — see
+[adr/0011](../../../docs/adr/0011-a-job-directory-holds-no-scripts.md), which
+records the side that shipped with 11 s of run-out groove noise appended because
+the only account of how the boundaries got there was a script nobody reviewed. The
+plan is the record of the decisions and `decision.rationale` is where the reasoning
+goes.
 
 ## Procedure
 
@@ -221,13 +267,13 @@ decision below must cope with that rather than assume a field exists.
 > and the titles **as this pressing prints them**.
 >
 > Do not proceed on a tracklist from anywhere else. A discography site gives you
-> the album, never the pressing, and the difference is not academic: on the record
-> this instruction was added for, a Wikipedia tracklist got nine titles right and
-> the tenth wrong by one character — 墮落 for the printed 墜落, a different word —
-> and one duration wrong by 6 s. Both were already burnt into the review
-> filenames the person had been listening to for two checkpoints. If they cannot
-> supply an ID, say the tracklist is provisional every time you show it, and keep
-> `metadata.decision.confidence` low until it is settled.
+> the album, never the pressing, and the difference is not academic: a
+> non-authoritative tracklist has come back **nine titles right out of ten**, with
+> the tenth wrong by a single character — a different word — and one duration out
+> by 6 s. Both were already burnt into the review filenames the person had been
+> listening to for two checkpoints. Nine right is what makes this failure quiet.
+> If they cannot supply an ID, say the tracklist is provisional every time you show
+> it, and keep `metadata.decision.confidence` low until it is settled.
 
 ### 2. Gather context
 
@@ -238,6 +284,9 @@ decision below must cope with that rather than assume a field exists.
 - Tracklist with per-track durations, when a release is known.
 
 ### 3. Decide each section, checking in after each one
+
+The order is the pipeline's, and the pipeline's is practice's: discrete defects
+before continuous ones, level last (*Outside references*).
 
 | Order | Section | Skill |
 |---|---|---|
@@ -252,8 +301,8 @@ decision below must cope with that rather than assume a field exists.
 the gap is not small: a side's loudest sample is usually the stylus drop, and its
 densest crackle is the lead-in and the run-out — none of which reach the album.
 Reading a whole-file figure as though it described the album has produced a
-predicted gain 5.6 dB wrong and a repair workload overstated fourfold, both on the
-same pressing, both from numbers these skills asked for by name. Before quoting any
+predicted gain **5.6 dB** wrong and a repair workload overstated **fourfold**, on
+one pressing, both from numbers these skills asked for by name. Before quoting any
 measurement at a checkpoint, ask whether it describes what will be exported; where
 it does not, either restrict it to the cuts or say plainly which one it is.
 
