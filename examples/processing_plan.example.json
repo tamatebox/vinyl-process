@@ -1,5 +1,5 @@
 {
-  "schema_version": "3.0",
+  "schema_version": "3.1",
   "document_type": "processing_plan",
   "created_by": "plan-album",
   "source": {
@@ -89,6 +89,8 @@
     },
     "enabled": true,
     "total_tracks": null,
+    "disc_number": null,
+    "total_discs": null,
     "album": "Test Pressing",
     "album_artist": "Synthetic Ensemble",
     "artist": "Synthetic Ensemble",
@@ -102,6 +104,7 @@
     "discogs_release_id": "1873013",
     "musicbrainz_release_id": null,
     "artwork_path": null,
+    "comment": null,
     "tracks": [
       {
         "index": 1,

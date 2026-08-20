@@ -1,5 +1,5 @@
 {
-  "schema_version": "3.0",
+  "schema_version": "3.1",
   "document_type": "manifest",
   "generated_by": "vinyl-process 0.1.0",
   "run_key": "0000000000000000000000000000000000000000000000000000000000000000",
@@ -61,7 +61,7 @@
       "status": "applied",
       "engine": null,
       "engine_version": null,
-      "params_digest": "add6b82dee4679907d0f8868645c2967b27d81ee06e180788a10154af06fb620",
+      "params_digest": "551ff8abc084d33eed2e989e32b00250d012d62112be9740bcb8b3fc079050dc",
       "detail": "tags written after audio processing"
     }
   ],

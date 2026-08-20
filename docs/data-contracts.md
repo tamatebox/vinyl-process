@@ -33,7 +33,7 @@ happened.
 
 ```jsonc
 {
-  "schema_version": "3.0",
+  "schema_version": "3.1",
   "document_type": "analysis",
   "generated_by": "vinyl-process 0.1.0",
   "source": { "path": "side-a.wav", "sha256": "…", "sample_rate": 44100,
@@ -204,7 +204,7 @@ block: which skill decided, why, how confident it was, and what it consulted.
 
 ```jsonc
 {
-  "schema_version": "3.0",
+  "schema_version": "3.1",
   "document_type": "processing_plan",
   "created_by": "plan-album",
   "source": { …same shape as analysis.source; sha256 is verified before running… },
@@ -257,6 +257,11 @@ block: which skill decided, why, how confident it was, and what it consulted.
     "styles": ["Prog Rock"], "label": "Harvest", "catalog_number": "SHVL 804",
     "discogs_release_id": "1873013", "musicbrainz_release_id": null,
     "artwork_path": null,
+    "disc_number": 1, "total_discs": 1,   // the disc, not the side: A/B are
+                                          // disc 1, C/D disc 2. null on a single
+    "comment": "Vinyl rip. Discogs release 1873013 (SHVL 804). …",
+    // free text, written to COMMENT as given. plan-metadata composes it from the
+    // [rip] configuration section; see adr/0009
     "tracks": [ { "index": 1, "title": "Speak to Me", "artist": null,
                   "position": "A1" } ]
   },
@@ -291,7 +296,7 @@ Written next to the exported album. This is the receipt.
 
 ```jsonc
 {
-  "schema_version": "3.0",
+  "schema_version": "3.1",
   "document_type": "manifest",
   "generated_by": "vinyl-process 0.1.0",
   "run_key": "…",                    // digest over (source digest, plan digest)

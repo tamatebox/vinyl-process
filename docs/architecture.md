@@ -244,6 +244,14 @@ Two halves, crossing different boundaries:
   naming). **Read by planning skills only.** They influence the plan, and the plan
   alone drives the executor, so the plan stays the complete record. The layer test
   enforces this: `executor.py` cannot import `config`.
+- `[rip]` — the chain the record was played and digitised through. Provenance
+  rather than taste, and a constant rather than a per-record decision, which is
+  why it is configuration; read by planning skills only, on the same terms.
+  `plan-metadata` composes it into `metadata.comment` and the plan carries the
+  finished string, so no rendering rule lives in Python
+  ([adr/0009](adr/0009-the-rip-chain-is-configuration-the-comment-is-a-plan-value.md)).
+  It is excluded from `config_digest`: renaming a cartridge cannot change a
+  measurement.
 
 Resolution order: `--config` → `$VINYL_PROCESS_CONFIG` → `./vinyl-process.toml` →
 `$XDG_CONFIG_HOME/vinyl-process/config.toml` → built-in defaults.

@@ -138,3 +138,53 @@ def test_album_total_overrides_the_per_run_count() -> None:
     tags = resolve_tags(side_b, 6, total_tracks=5)
     assert tags["tracknumber"] == ["6"]
     assert tags["tracktotal"] == ["10"]
+
+
+DOUBLE_ALBUM = MetadataPlan.model_validate(
+    {
+        "total_tracks": 16,
+        "disc_number": 2,
+        "total_discs": 2,
+        "album": "Two Records",
+        "comment": "Vinyl rip. Discogs release 1873013 (FIX-001).",
+        "tracks": [{"index": 9, "title": "Ninth", "position": "C1"}],
+    }
+)
+
+
+def test_disc_number_and_comment_reach_a_flac(audio_file: Path) -> None:
+    apply_tags(audio_file, DOUBLE_ALBUM, 9, 8)
+    tags = mutagen.File(str(audio_file)).tags
+    assert tags["discnumber"] == ["2"]
+    assert tags["disctotal"] == ["2"]
+    assert tags["comment"] == ["Vinyl rip. Discogs release 1873013 (FIX-001)."]
+
+
+def test_disc_number_and_comment_reach_an_id3_container(tmp_path: Path) -> None:
+    """TPOS carries "n/m" in one frame and COMM needs a language, so neither
+    goes through the plain frame map the other tags use."""
+    t = np.arange(SAMPLE_RATE // 10) / SAMPLE_RATE
+    tone = 0.2 * np.sin(2 * np.pi * 440 * t)
+    path = tmp_path / "track.wav"
+    save_audio(path, AudioBuffer(np.column_stack([tone, tone]), SAMPLE_RATE), "wav", 24)
+
+    apply_tags(path, DOUBLE_ALBUM, 9, 8)
+    tags = mutagen.File(str(path)).tags
+    assert tags["TPOS"].text == ["2/2"]
+    assert tags["COMM::eng"].text == ["Vinyl rip. Discogs release 1873013 (FIX-001)."]
+
+
+def test_a_single_disc_album_carries_no_disc_tags() -> None:
+    """The fields are optional, and an absent disc number must stay absent
+    rather than become a 1 nobody chose."""
+    tags = resolve_tags(MetadataPlan(album="One Record"), 1, 1)
+    assert "discnumber" not in tags
+    assert "disctotal" not in tags
+    assert "comment" not in tags
+
+
+def test_a_disc_number_without_a_total_is_written_alone() -> None:
+    plan = MetadataPlan.model_validate({"disc_number": 1, "tracks": [{"index": 1, "title": "A"}]})
+    tags = resolve_tags(plan, 1, 1)
+    assert tags["discnumber"] == ["1"]
+    assert "disctotal" not in tags

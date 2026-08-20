@@ -15,6 +15,16 @@ Two clearly separated halves, because they cross different layer boundaries:
     record of what was done. Nothing in :mod:`vinyl_process.executor` may consult
     preferences.
 
+``[rip]``
+    The chain the record was played and digitised through — turntable, cartridge,
+    phono stage, ADC. Provenance rather than taste, which is why it is its own
+    section, and a constant rather than a per-record decision, which is why it is
+    configuration at all: it is retyped for every album otherwise. **Only planning
+    skills read it**, on the same terms as preferences: plan-metadata composes it
+    into ``metadata.comment`` and the plan carries the finished string. Nothing
+    here is measured and nothing here is checked against the audio — if the ADC
+    is wrong in this file, it is wrong in the tag.
+
 Resolution order (first match wins): explicit path -> ``$VINYL_PROCESS_CONFIG``
 -> ``./vinyl-process.toml`` -> ``$XDG_CONFIG_HOME/vinyl-process/config.toml``
 -> built-in defaults.
@@ -64,11 +74,32 @@ class Preferences(ContractModel):
     title_style: TitleStyle = "as_printed"
 
 
+class RipChain(ContractModel):
+    """The equipment the transfer came through. Every field is optional, because
+    a chain nobody recorded is better described by omission than by a guess.
+
+    There is deliberately no method here that renders these into a sentence.
+    Which of them belong in a tag, in what order and under what wording is a
+    choice, and choices are made by a skill and recorded in the plan.
+    """
+
+    turntable: str | None = None
+    tonearm: str | None = None
+    headshell: str | None = None
+    cartridge: str | None = None
+    stylus: str | None = None
+    phono_stage: str | None = None
+    adc: str | None = None
+    software: str | None = None
+    notes: str | None = None
+
+
 class Config(ContractModel):
     analyzer: dict[str, dict[str, Any]] = Field(default_factory=dict)
     """Per-analyzer parameter overrides, e.g. ``{"rms_profile": {"hop_seconds": 0.05}}``."""
 
     preferences: Preferences = Field(default_factory=Preferences)
+    rip: RipChain = Field(default_factory=RipChain)
     source_path: str | None = None
     """Where this configuration came from; ``None`` means built-in defaults."""
 
@@ -85,24 +116,33 @@ def default_config() -> Config:
 
 
 def find_config(explicit: str | Path | None = None) -> Path | None:
-    """First existing configuration file in resolution order, or ``None``."""
-    candidates: list[Path] = []
+    """First existing configuration file in resolution order, or ``None``.
+
+    A path the caller *named* — ``--config`` or ``$VINYL_PROCESS_CONFIG`` — must
+    exist. It is refused rather than skipped, because falling through to the next
+    candidate would run the tool with parameters nobody asked for and stamp the
+    resulting ``config_digest`` as though they had been chosen. That went
+    unnoticed for as long as no user configuration existed to fall through *to*:
+    with the search list empty below the typo, the error was raised anyway and the
+    behaviour looked correct.
+    """
+    named: Path | None = None
     if explicit is not None:
-        candidates.append(Path(explicit))
-    env_value = os.environ.get(CONFIG_ENV_VAR)
-    if env_value:
-        candidates.append(Path(env_value))
-    candidates.append(Path.cwd() / PROJECT_CONFIG_NAME)
+        named = Path(explicit)
+    else:
+        env_value = os.environ.get(CONFIG_ENV_VAR)
+        if env_value:
+            named = Path(env_value)
+    if named is not None:
+        if named.is_file():
+            return named
+        raise ConfigError(f"configuration file not found: {named}")
+
+    candidates = [Path.cwd() / PROJECT_CONFIG_NAME]
     xdg = os.environ.get("XDG_CONFIG_HOME")
     base = Path(xdg) if xdg else Path.home() / ".config"
     candidates.append(base / "vinyl-process" / "config.toml")
-
-    for candidate in candidates:
-        if candidate.is_file():
-            return candidate
-    if explicit is not None:
-        raise ConfigError(f"configuration file not found: {explicit}")
-    return None
+    return next((candidate for candidate in candidates if candidate.is_file()), None)
 
 
 def load_config(explicit: str | Path | None = None) -> Config:

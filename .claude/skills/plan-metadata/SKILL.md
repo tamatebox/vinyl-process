@@ -52,7 +52,19 @@ conclude must be *in* the plan.
      exactly, so a wrong answer here mislabels every track after it.
 2. Extract album-level tags: `album`, `album_artist`, `artist`, `year`, `genre`,
    `styles`, `label`, `catalog_number`, and the resolved `discogs_release_id`
-   and/or `musicbrainz_release_id`. `genre` is a single string and `styles` a list,
+   and/or `musicbrainz_release_id`.
+
+   **A resolved field is not a wanted field.** A Discogs release will fill more of
+   this section than most people want written into their library, and the tag set
+   is theirs to choose: on the album this note comes from, four of the fields that
+   resolved cleanly — genre, styles, label and the vinyl position — were struck at
+   the checkpoint, and one of them (`label`) had two candidate values that would
+   have cost a round trip to settle for a tag nobody wanted. So resolve everything,
+   then **show the tag set and let them prune it**, rather than presenting a filled
+   section as settled. A field left `null` is simply not written: no `TPUB`, no
+   `TCON`, no `VINYL_POSITION`. Check first whether anything else reads the field —
+   `catalog_number` and `position` are available to the filename template, so
+   clearing them can change a filename as well as a tag. `genre` is a single string and `styles` a list,
    so where the release names several genres, take the primary one and put the rest
    in `styles`. Set `total_tracks` to the album's count whenever this plan covers
    only one side: without it the executor falls back on the number of tracks *this*
@@ -69,7 +81,36 @@ conclude must be *in* the plan.
      per-track `artist` on every entry. The tagger falls back track → `artist` →
      `album_artist`, so an album-level `artist` would quietly become the performer
      of any track whose own artist you could not fill.
-4. Artwork: set `artwork_path` to a local `.jpg`/`.jpeg`/`.png` file if the user has
+4. `disc_number` and `total_discs`: the **disc**, not the side. Both sides of one
+   record are the same disc — the side is already in `tracks[].position` — so a
+   double album is discs 1 and 2 across four plans. Leave both `null` on a single
+   record rather than writing `1/1`, which is a fact nobody asked for.
+5. `comment`: compose it from the `[rip]` configuration section and write the
+   finished string into the plan. That section holds the chain the record was
+   played and digitised through — turntable, tonearm, headshell, cartridge,
+   stylus, phono stage, ADC, software — because it is the same for every album
+   until something is replaced. It has no method that renders itself, on purpose:
+   what goes in a comment and in what order is a choice, and choices belong in the
+   plan ([adr/0009](../../../docs/adr/0009-the-rip-chain-is-configuration-the-comment-is-a-plan-value.md)).
+
+   Provenance only — which pressing, and what it came through:
+
+   ```
+   Vinyl rip. Discogs release 28396297 (UIJY-75237).
+   Technics SL-1200MK5 / LP Gear Ultimate Headshell / Audio-Technica ATN-3600L
+   / Linn Akurate DSM/2 / Behringer U-Control UCA222 — 48 kHz 16-bit
+   ```
+
+   Leave out what the chain does not record; an omitted phono stage is honest and
+   a guessed one is not. Do **not** put the processing in here — the mode, the
+   gain, whether declick ran. The manifest is where that lives, it is measured
+   rather than asserted, and a comment repeating it goes stale the moment the plan
+   is re-run with one value changed.
+
+   Nothing checks the chain against the audio. If the ADC in the configuration is
+   wrong it is wrong in every tag, silently, so read it back at the checkpoint
+   instead of assuming it.
+6. Artwork: set `artwork_path` to a local `.jpg`/`.jpeg`/`.png` file if the user has
    one, as an **absolute path** — it is resolved at execution time against whatever
    the working directory happens to be. Confirm the file exists and has one of those
    three extensions *before* writing the plan: `lint` does not check artwork at all,
@@ -93,6 +134,9 @@ conclude must be *in* the plan.
   "musicbrainz_release_id": null,
   "artwork_path": null,
   "total_tracks": 10,               // album-wide, when this plan is one side
+  "disc_number": null,              // the disc, not the side; null on a single
+  "total_discs": null,
+  "comment": "Vinyl rip. Discogs release 1873013 (SHVL 804). …",
   "tracks": [ { "index": 1, "title": "Speak to Me", "artist": null, "position": "A1" } ],
   "decision": { "skill": "plan-metadata", "rationale": "…", "confidence": 0.9,
                 "inputs": ["discogs:release/1873013"] }
@@ -108,6 +152,8 @@ A wrong release makes every tag wrong, and it is cheap to check. Present:
 - **how** you matched it — catalogue number from the sleeve, track count, per-side
   durations within N seconds;
 - the tracklist as it will be tagged, with the vinyl positions;
+- the `comment` in full, and the `[rip]` fields it came from. It is the one tag
+  no measurement can check, so the person who owns the equipment has to read it;
 - anything you could not verify, marked as such.
 
 Never present titles taken from memory as if they were looked up.
@@ -124,6 +170,15 @@ Never present titles taken from memory as if they were looked up.
   `preferences.title_style` is `transliterate`.
 - Never fill titles from memory for an obscure release. Verify against a source,
   or ask.
+- **Titles that were provisional have already been written to disk.** The review
+  renders take their filenames from this section, so a tracklist used before the
+  release was settled is sitting in the directory the person has been listening to.
+  When the pressing resolves, diff the titles against what `review/` actually
+  holds and say what moved — on the album this rule comes from, `07 - 墮落.flac`
+  had been played and plotted under a title the sleeve does not carry. Re-render
+  only if `review/` is still being used to decide something; if `album/` is next,
+  name the stale files instead, because a plot or a manifest that refers to them
+  by the old name is about to be replaced anyway.
 - **A discography site is not the pressing.** It gives you the album, and the tags
   follow the record in the room. On the release this rule was written from, a
   Wikipedia tracklist had 墮落 where the sleeve prints 墜落 — one character, a

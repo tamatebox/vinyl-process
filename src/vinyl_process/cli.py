@@ -438,6 +438,9 @@ def config_show(ctx: click.Context, as_json: bool) -> None:
     click.echo(f"digest: {settings.digest()[:12]}")
     for key, value in settings.preferences.model_dump().items():
         click.echo(f"preferences.{key} = {value!r}")
+    for key, value in settings.rip.model_dump().items():
+        if value is not None:
+            click.echo(f"rip.{key} = {value!r}")
     for analyzer_name, params in sorted(settings.analyzer.items()):
         click.echo(f"analyzer.{analyzer_name} = {params!r}")
 

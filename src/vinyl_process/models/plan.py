@@ -153,6 +153,13 @@ class MetadataPlan(ToggleableSection):
     """Tracks on the whole album, when this plan covers only one side. ``None``
     means "as many as this plan produces"."""
 
+    disc_number: int | None = Field(default=None, ge=1)
+    """Which disc of the set, when there is more than one. The two sides of one
+    record are the same disc — the side is already in ``tracks[].position`` — so
+    on a double album A/B are disc 1 and C/D are disc 2."""
+
+    total_discs: int | None = Field(default=None, ge=1)
+
     album: str | None = None
     album_artist: str | None = None
     artist: str | None = None
@@ -164,6 +171,14 @@ class MetadataPlan(ToggleableSection):
     discogs_release_id: str | None = None
     musicbrainz_release_id: str | None = None
     artwork_path: str | None = None
+
+    comment: str | None = None
+    """Free text for the COMMENT tag, composed by plan-metadata and written as
+    given. It is where the provenance of the transfer goes — which pressing, and
+    the chain it was played and digitised through, from the ``[rip]`` section of
+    the configuration. Composed there and not here because what belongs in it is
+    a choice, and choices live in the plan."""
+
     tracks: list[TrackTag] = Field(default_factory=list)
 
     @model_validator(mode="after")

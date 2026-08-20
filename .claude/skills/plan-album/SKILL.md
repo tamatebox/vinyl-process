@@ -70,6 +70,30 @@ has not reached yet and executing into its own directory:
 `metadata` stays enabled throughout — the filenames are rendered from it — and
 `export` has no switch at all.
 
+**Render the ladder at the capture's depth or wider, with `dither: "none"`, and
+say so at every checkpoint that uses it.** The ladder runs before `plan-export`
+does, so its rungs cannot match the album and should not pretend to. The two ways
+of trying both fail: 16-bit *with* dither means choosing the dither at checkpoint
+2, before the skill that owns it has run, which is the smuggled decision this
+ladder exists to prevent; 16-bit *without* dither is truncation, and it puts
+signal-correlated distortion into exactly the quiet tails and fades the person is
+being asked to judge. A wider render adds nothing and quantises nothing, so what
+they hear is the stage under review and only that.
+
+This is the ordinary shape of the work rather than a compromise: mastering
+practice approves a high-resolution master and derives each deliverable from it,
+and IASA's hierarchy makes the audition copy a separate class from the
+preservation copy for the same reason. What it costs is that the person approves
+something that is not byte-for-byte what ships, and the answer to that is *not* to
+make them identical — it is to **verify** the deliverable against the spec rather
+than re-audition it: the depth and rate are what the plan asked for, dither ran
+once, and `vinyl-process verify` proves the run reproduces. That is checkpoint 7's
+job.
+
+Say the difference out loud each time, in the checkpoint and not only in the
+plan's `rationale`. Burying it there is how it went unmentioned for three
+checkpoints on the album this rule came from.
+
 ```sh
 vinyl-process execute plan-side-a.json --audio <recording> \
   -o review/declick --manifest manifest-side-a.json

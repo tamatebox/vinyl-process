@@ -40,7 +40,12 @@ asked for something else.
    peak of the resampled result. Check it before shipping a resample.
 4. **Dither**: quantisation happens exactly once, in `save_audio`, from the float64
    the whole pipeline works in — so it is the *output* depth that decides, not the
-   capture's. `"none"` at 24 bit: the quantisation floor sits far below any
+   capture's. Once, per file that ships: the review ladder's renders are separate
+   runs and each would carry its own quantisation, which is one reason
+   [plan-album](../plan-album/SKILL.md) has them rendered wider and undithered
+   instead. This section decides the **album's** depth. It does not decide the
+   ladder's, and the two differing is expected — predict the difference at the
+   final checkpoint so it is not read as a fault. `"none"` at 24 bit: the quantisation floor sits far below any
    pressing's noise floor. `"tpdf"` whenever `bit_depth` is 16, with a fixed
    `dither_seed` so the export stays reproducible.
 5. **Naming**: `"{index:02d} - {title}"` by default. Available fields are

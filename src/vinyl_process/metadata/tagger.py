@@ -12,7 +12,21 @@ from pathlib import Path
 
 from mutagen.aiff import AIFF
 from mutagen.flac import FLAC, Picture
-from mutagen.id3 import APIC, ID3, TALB, TCON, TDRC, TIT2, TPE1, TPE2, TPUB, TRCK, TXXX
+from mutagen.id3 import (
+    APIC,
+    COMM,
+    ID3,
+    TALB,
+    TCON,
+    TDRC,
+    TIT2,
+    TPE1,
+    TPE2,
+    TPOS,
+    TPUB,
+    TRCK,
+    TXXX,
+)
 from mutagen.wave import WAVE
 
 from vinyl_process.errors import MetadataError
@@ -66,6 +80,9 @@ def resolve_tags(plan: MetadataPlan, track_index: int, total_tracks: int) -> dic
         "musicbrainz_albumid": plan.musicbrainz_release_id,
         "tracknumber": track_index,
         "tracktotal": album_total,
+        "discnumber": plan.disc_number,
+        "disctotal": plan.total_discs,
+        "comment": plan.comment,
         "position": track.position if track else None,
         "style": list(plan.styles) or None,
     }
@@ -130,10 +147,19 @@ def _write_id3(path: Path, tags: dict[str, list[str]], artwork: tuple[bytes, str
     for key, frame in _ID3_FRAMES.items():
         if key in tags:
             id3.add(frame(encoding=3, text=tags[key]))
+    # TRCK and TPOS carry "n/m" in one frame, which the Vorbis side splits over
+    # two keys; COMM needs a language and a description that Vorbis has no room
+    # for. All three are why these are not in the plain frame map above.
     if "tracknumber" in tags:
         total = tags.get("tracktotal", [""])[0]
         number = tags["tracknumber"][0]
         id3.add(TRCK(encoding=3, text=[f"{number}/{total}" if total else number]))
+    if "discnumber" in tags:
+        total = tags.get("disctotal", [""])[0]
+        number = tags["discnumber"][0]
+        id3.add(TPOS(encoding=3, text=[f"{number}/{total}" if total else number]))
+    if "comment" in tags:
+        id3.add(COMM(encoding=3, lang="eng", desc="", text=tags["comment"]))
     for key, description in _ID3_TXXX.items():
         if key in tags:
             id3.add(TXXX(encoding=3, desc=description, text=tags[key]))
