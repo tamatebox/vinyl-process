@@ -92,8 +92,31 @@ have none, ask the user for the track count before guessing.
 
 ## Checkpoint
 
-Hand back a table, one row per track: position, title, the duration you cut, the
-label's duration, and the difference. Then:
+**Render the cuts as whole tracks and hand them over to be listened to.** A table
+cannot settle a boundary. This was tried, and what came back was "I can't tell
+without hearing it" — which is right, and the Checkpoint below used to ask for a
+table anyway. Write a plan carrying this `split` section with **`declick` and
+`normalize` disabled** (leave `metadata` alone — the filenames come from it) and
+execute it into a directory of its own:
+
+```sh
+vinyl-process execute plan-side-a.json --audio <recording> -o split-only \
+  --manifest manifest-side-a.json
+```
+
+Seconds of compute, and it is the only check that works. Two things to get right:
+
+- **Disable `normalize`.** The question is whether the cuts are right, not whether
+  a level nobody has agreed to sounds good, and leaving it on quietly ships an
+  unreviewed decision. Say that the render is therefore quieter than the finished
+  album will be, so the volume gets turned up instead of the fades being judged
+  as too faint.
+- **Whole tracks, not excerpts.** Clips stitched around each cut — tail, dropped
+  segment, next entry — look informative and are not: that was tried too, and read
+  as unintelligible. People judge a track by playing it.
+
+Alongside the audio, a table, one row per track: position, title, the duration you
+cut, the label's duration, and the difference. Then:
 
 - name the evidence each boundary came from (`silence`, `rms_valley`, or
   interpolated from durations because nothing was detected there);
@@ -101,8 +124,9 @@ label's duration, and the difference. Then:
   cut short and a label duration that does not match the pressing;
 - flag any boundary whose `music_end_sample` had to be overridden.
 
-Boundaries are the one decision that cannot be checked afterwards without
-listening to the whole side, so do not move on until the table is agreed.
+Do not move on until the person has listened and agreed, and ask in the terms they
+can answer in: for each track, is the beginning clipped, does it end early, does it
+run on too long. Never in samples.
 
 ## Rules
 

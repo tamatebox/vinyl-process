@@ -20,7 +20,34 @@ that: by the time there are ten tagged FLACs, verifying them means listening to
 the whole side.
 
 A checkpoint that dumps data is not a checkpoint. Show a small table and the one
-question that matters.
+question that matters. Where the checkpoint is about audio, the audio is part of
+the checkpoint — see plan-split, whose boundaries cannot be judged from a table.
+
+## Where the files live
+
+One directory per record, holding everything about it and nothing else:
+
+```
+<job-dir>/
+  <recording>.flac            the capture, one file per side, name untouched
+  analysis-<stem>.json        one per recording, named after it
+  plan-<side>.json            one per recording — plan-side-a.json, plan-side-b.json
+  split-only/                 the boundary render for checkpoint 2; throwaway
+  album/                      the finished tracks + manifest-side-<side>.json
+```
+
+A single-file album collapses this to `analysis.json`, `processing_plan.json` and
+`album/`. Recordings are never committed — keep the job directory out of version
+control (this repository gitignores `jobs/`).
+
+**No scripts in the job directory.** A Python file there is the planning layer
+written in Python, which is the one thing this project does not do. The plan is
+the record of the decisions and `decision.rationale` is where the reasoning goes;
+a one-off script that emits the boundaries hides them from review instead. One
+lived in a job directory here, hard-coded the gap positions as seconds, never
+looked at `boundaries.candidates`, and shipped a side with 11 s of run-out groove
+noise appended — and because the script was the only account of how it got there,
+nothing caught it.
 
 ## Procedure
 
