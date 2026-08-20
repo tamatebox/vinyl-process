@@ -35,9 +35,17 @@ have none, ask the user for the track count before guessing.
 2. Score candidates: high-confidence `silence` first; `rms_valley` where silence
    is missing (segued or live sides); `spectral_change` only to break ties
    between nearby candidates.
-3. Match candidates to expected positions. Within ±5 % of the side's length is a
-   strong match. Where no candidate is near an expected boundary, interpolate
-   from the durations and say so in the `decision.rationale`.
+3. Match candidates to expected positions by **walking the side in order, not by
+   nearest neighbour**. Take the first strong candidate lying at least a plausible
+   track's worth of music past the previous cut, and let a candidate's confidence
+   and the length of its gap outrank its distance from the expected position.
+   Nearest neighbour fails late in a side: the expected positions drift by the
+   length of every gap not yet accounted for, always towards the run-out, and ±5 %
+   of a 20-minute side is ±60 s — wide enough to bracket several unrelated gaps. On
+   a tested pressing the last expected boundary had four candidates at confidence
+   1.00 inside the tolerance, and the nearest of them was 28 s into the run-out
+   groove. Where no candidate is near an expected boundary, interpolate from the
+   durations and say so in the `decision.rationale`.
 4. Resolve count mismatches explicitly:
    - **more candidates than tracks** — drop the weakest. Quiet passages inside a
      track are the usual false positive; classical and live sides are prone to
@@ -53,10 +61,18 @@ have none, ask the user for the track count before guessing.
      track's pre-roll.
 
    Err long. Extra surface noise is faded out and inaudible; a clipped fade is not
-   recoverable. The **last track of a side** has no following gap to decay into —
-   only the run-out, which sits at the same level as the fade — so
-   `music_end_sample` is a lower bound there. Interpolate that end from the
-   label's duration instead, and say so in the rationale.
+   recoverable. The **last track of a side** has no following track to constrain
+   it, but it is not unmeasured: close it at the `music_end_sample` of the first
+   silence region that opens after it began, exactly like every other track — the
+   walk in step 3 lands on that same region, and a nearer candidate deeper in the
+   run-out is not a competitor for it. Do **not** interpolate that end from the
+   label's duration — the instruction here used to say so, and it appended 11 s of
+   run-out groove noise to a side whose printed duration was that much too long.
+   Confirm the cut against `rms_profile` past it: a flat plateau is the run-out
+   groove and the cut stands, while a level still descending means the fade is
+   still running, so extend to where it flattens. The label is a cross-check —
+   report a disagreement over ~5 s as a fact about the pressing, not as a reason
+   to move the cut.
 6. Emit the section.
 
 ## Output
@@ -95,8 +111,15 @@ listening to the whole side, so do not move on until the table is agreed.
   continues where side A stopped (6, 7, …) so both sides export into one directory
   with correct filenames and tags. Indices must be contiguous and ascending;
   tracks must not overlap; the dead middle of a gap stays in neither track.
-- The first track starts at `lead_in_end_sample` (or 0); the last ends at
-  `lead_out_start_sample` (or the final sample). Cut *inside* a silence.
+- Start the first track from the first silence region's `end_sample`, less the
+  same pre-roll every other track gets — **not** from `lead_in_end_sample`. That
+  marker is where the lead-in groove stops, and the needle drop lands *after* it:
+  on both sides of a tested pressing the loudest sample of the whole side was the
+  drop itself, at −3.4 dBFS between `lead_in_end_sample` and the first gap, against
+  −9 dBFS for the loudest music. Starting at the marker puts that pop inside track
+  1 and then hands it to `album_peak`, which costs 5.6 dB of gain across the whole
+  album. Likewise the last track ends at its own `music_end_sample` (step 5), not
+  at `lead_out_start_sample`. Cut *inside* a silence.
 - Titles do not belong here — they live in the `metadata` section. The plan must
   not carry the same string twice.
 - Both edges need a fade, and a short one is what is needed. A vinyl cut lands in
