@@ -24,6 +24,13 @@
   from `analysis.json` before the plan ships. A plan may only cite what
   `analysis.json` records. Ad-hoc numbers have nothing behind them and have been
   wrong.
+- **Best practice means analogue-ripping practice.** Where a decision needs an
+  outside convention, research LP digitisation and needledrop sources and cite
+  them in the `rationale`. Digital mastering and streaming-delivery conventions do
+  not transfer: they assume a track's edges are digital silence, where here they
+  are groove noise at the record's own noise floor. Never quote a convention from
+  memory — recalled figures have been unfounded, and one circulating as a platform
+  spec was not in that platform's document at all.
 - Positions in contracts are integer sample indices, never seconds.
 
 ## Working here
