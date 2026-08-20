@@ -1,0 +1,649 @@
+{
+  "$defs": {
+    "DeclickPlan": {
+      "additionalProperties": false,
+      "properties": {
+        "algorithm": {
+          "default": "mad_interpolate",
+          "title": "Algorithm",
+          "type": "string"
+        },
+        "decision": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/StageDecision"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "enabled": {
+          "default": true,
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "engine": {
+          "default": "native",
+          "title": "Engine",
+          "type": "string"
+        },
+        "max_click_width_ms": {
+          "default": 2.0,
+          "exclusiveMinimum": 0,
+          "title": "Max Click Width Ms",
+          "type": "number"
+        },
+        "params": {
+          "additionalProperties": true,
+          "title": "Params",
+          "type": "object"
+        },
+        "preset": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Preset"
+        },
+        "strength": {
+          "default": 1.0,
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Strength",
+          "type": "number"
+        },
+        "threshold": {
+          "default": 6.0,
+          "exclusiveMinimum": 0,
+          "title": "Threshold",
+          "type": "number"
+        }
+      },
+      "title": "DeclickPlan",
+      "type": "object"
+    },
+    "DocumentRef": {
+      "additionalProperties": false,
+      "description": "Reference from one document to another, pinned by digest.",
+      "properties": {
+        "path": {
+          "title": "Path",
+          "type": "string"
+        },
+        "sha256": {
+          "title": "Sha256",
+          "type": "string"
+        }
+      },
+      "required": [
+        "path",
+        "sha256"
+      ],
+      "title": "DocumentRef",
+      "type": "object"
+    },
+    "ExportPlan": {
+      "additionalProperties": false,
+      "properties": {
+        "bit_depth": {
+          "default": 24,
+          "enum": [
+            16,
+            24
+          ],
+          "title": "Bit Depth",
+          "type": "integer"
+        },
+        "decision": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/StageDecision"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "dither": {
+          "default": "none",
+          "enum": [
+            "none",
+            "tpdf"
+          ],
+          "title": "Dither",
+          "type": "string"
+        },
+        "dither_seed": {
+          "default": 0,
+          "title": "Dither Seed",
+          "type": "integer"
+        },
+        "format": {
+          "default": "flac",
+          "enum": [
+            "flac",
+            "wav",
+            "aiff"
+          ],
+          "title": "Format",
+          "type": "string"
+        },
+        "sample_rate": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Sample Rate"
+        },
+        "track_filename_template": {
+          "default": "{index:02d} - {title}",
+          "title": "Track Filename Template",
+          "type": "string"
+        },
+        "write_tags": {
+          "default": true,
+          "title": "Write Tags",
+          "type": "boolean"
+        }
+      },
+      "title": "ExportPlan",
+      "type": "object"
+    },
+    "MetadataPlan": {
+      "additionalProperties": false,
+      "properties": {
+        "album": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Album"
+        },
+        "album_artist": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Album Artist"
+        },
+        "artist": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Artist"
+        },
+        "artwork_path": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Artwork Path"
+        },
+        "catalog_number": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Catalog Number"
+        },
+        "decision": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/StageDecision"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "discogs_release_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Discogs Release Id"
+        },
+        "enabled": {
+          "default": true,
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "genre": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Genre"
+        },
+        "label": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Label"
+        },
+        "musicbrainz_release_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Musicbrainz Release Id"
+        },
+        "styles": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Styles",
+          "type": "array"
+        },
+        "tracks": {
+          "items": {
+            "$ref": "#/$defs/TrackTag"
+          },
+          "title": "Tracks",
+          "type": "array"
+        },
+        "year": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Year"
+        }
+      },
+      "title": "MetadataPlan",
+      "type": "object"
+    },
+    "NormalizePlan": {
+      "additionalProperties": false,
+      "properties": {
+        "decision": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/StageDecision"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "enabled": {
+          "default": true,
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "engine": {
+          "default": "native",
+          "title": "Engine",
+          "type": "string"
+        },
+        "mode": {
+          "default": "album_peak",
+          "enum": [
+            "album_peak",
+            "album_rms",
+            "track_peak",
+            "none"
+          ],
+          "title": "Mode",
+          "type": "string"
+        },
+        "target_db": {
+          "default": -1.0,
+          "maximum": 0.0,
+          "title": "Target Db",
+          "type": "number"
+        }
+      },
+      "title": "NormalizePlan",
+      "type": "object"
+    },
+    "SourceInfo": {
+      "additionalProperties": false,
+      "description": "Identity of the source recording a document refers to.\n\n``sha256`` is the anchor of reproducibility: the executor refuses to run a\nplan against audio whose digest does not match.",
+      "properties": {
+        "channels": {
+          "exclusiveMinimum": 0,
+          "title": "Channels",
+          "type": "integer"
+        },
+        "duration_seconds": {
+          "minimum": 0,
+          "title": "Duration Seconds",
+          "type": "number"
+        },
+        "num_samples": {
+          "minimum": 0,
+          "title": "Num Samples",
+          "type": "integer"
+        },
+        "path": {
+          "title": "Path",
+          "type": "string"
+        },
+        "sample_rate": {
+          "exclusiveMinimum": 0,
+          "title": "Sample Rate",
+          "type": "integer"
+        },
+        "sha256": {
+          "title": "Sha256",
+          "type": "string"
+        }
+      },
+      "required": [
+        "path",
+        "sha256",
+        "sample_rate",
+        "channels",
+        "num_samples",
+        "duration_seconds"
+      ],
+      "title": "SourceInfo",
+      "type": "object"
+    },
+    "SplitPlan": {
+      "additionalProperties": false,
+      "properties": {
+        "decision": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/StageDecision"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "enabled": {
+          "default": true,
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "engine": {
+          "default": "native",
+          "title": "Engine",
+          "type": "string"
+        },
+        "tracks": {
+          "items": {
+            "$ref": "#/$defs/TrackBoundary"
+          },
+          "title": "Tracks",
+          "type": "array"
+        }
+      },
+      "title": "SplitPlan",
+      "type": "object"
+    },
+    "StageDecision": {
+      "additionalProperties": false,
+      "description": "Why this section looks the way it does.",
+      "properties": {
+        "confidence": {
+          "anyOf": [
+            {
+              "maximum": 1.0,
+              "minimum": 0.0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Confidence"
+        },
+        "inputs": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Inputs",
+          "type": "array"
+        },
+        "rationale": {
+          "default": "",
+          "title": "Rationale",
+          "type": "string"
+        },
+        "skill": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Skill"
+        }
+      },
+      "title": "StageDecision",
+      "type": "object"
+    },
+    "TrackBoundary": {
+      "additionalProperties": false,
+      "description": "A cut, in integer source samples. Titles live in the metadata section \u2014\nthe plan must not carry the same string twice.",
+      "properties": {
+        "end_sample": {
+          "exclusiveMinimum": 0,
+          "title": "End Sample",
+          "type": "integer"
+        },
+        "fade_in_ms": {
+          "default": 0.0,
+          "minimum": 0.0,
+          "title": "Fade In Ms",
+          "type": "number"
+        },
+        "fade_out_ms": {
+          "default": 0.0,
+          "minimum": 0.0,
+          "title": "Fade Out Ms",
+          "type": "number"
+        },
+        "index": {
+          "minimum": 1,
+          "title": "Index",
+          "type": "integer"
+        },
+        "start_sample": {
+          "minimum": 0,
+          "title": "Start Sample",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "index",
+        "start_sample",
+        "end_sample"
+      ],
+      "title": "TrackBoundary",
+      "type": "object"
+    },
+    "TrackTag": {
+      "additionalProperties": false,
+      "properties": {
+        "artist": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Artist"
+        },
+        "index": {
+          "minimum": 1,
+          "title": "Index",
+          "type": "integer"
+        },
+        "position": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Position"
+        },
+        "title": {
+          "title": "Title",
+          "type": "string"
+        }
+      },
+      "required": [
+        "index",
+        "title"
+      ],
+      "title": "TrackTag",
+      "type": "object"
+    }
+  },
+  "$id": "https://vinyl-process.invalid/schemas/processing_plan.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "analysis": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/DocumentRef"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "created_by": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Created By"
+    },
+    "declick": {
+      "$ref": "#/$defs/DeclickPlan"
+    },
+    "document_type": {
+      "const": "processing_plan",
+      "default": "processing_plan",
+      "title": "Document Type",
+      "type": "string"
+    },
+    "export": {
+      "$ref": "#/$defs/ExportPlan"
+    },
+    "metadata": {
+      "$ref": "#/$defs/MetadataPlan"
+    },
+    "normalize": {
+      "$ref": "#/$defs/NormalizePlan"
+    },
+    "notes": {
+      "default": "",
+      "title": "Notes",
+      "type": "string"
+    },
+    "schema_version": {
+      "default": "1.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "source": {
+      "$ref": "#/$defs/SourceInfo"
+    },
+    "split": {
+      "$ref": "#/$defs/SplitPlan"
+    }
+  },
+  "required": [
+    "source",
+    "split",
+    "declick",
+    "normalize",
+    "metadata",
+    "export"
+  ],
+  "title": "ProcessingPlan",
+  "type": "object"
+}

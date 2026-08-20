@@ -1,0 +1,392 @@
+{
+  "schema_version": "1.0",
+  "document_type": "analysis",
+  "generated_by": "vinyl-process 0.1.0",
+  "source": {
+    "path": "side-a.wav",
+    "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+    "sample_rate": 44100,
+    "channels": 2,
+    "num_samples": 956970,
+    "duration_seconds": 21.7
+  },
+  "config_digest": "0000000000000000000000000000000000000000000000000000000000000000",
+  "analyzers": [
+    {
+      "name": "rms_profile",
+      "version": "1.0",
+      "status": "ok",
+      "message": null,
+      "duration_ms": null
+    },
+    {
+      "name": "surface_noise",
+      "version": "1.0",
+      "status": "ok",
+      "message": null,
+      "duration_ms": null
+    },
+    {
+      "name": "silence",
+      "version": "1.0",
+      "status": "ok",
+      "message": null,
+      "duration_ms": null
+    },
+    {
+      "name": "boundaries",
+      "version": "1.0",
+      "status": "ok",
+      "message": null,
+      "duration_ms": null
+    },
+    {
+      "name": "clicks",
+      "version": "1.0",
+      "status": "ok",
+      "message": null,
+      "duration_ms": null
+    },
+    {
+      "name": "clipping",
+      "version": "1.0",
+      "status": "ok",
+      "message": null,
+      "duration_ms": null
+    },
+    {
+      "name": "peaks",
+      "version": "1.0",
+      "status": "ok",
+      "message": null,
+      "duration_ms": null
+    },
+    {
+      "name": "dynamic_range",
+      "version": "1.0",
+      "status": "ok",
+      "message": null,
+      "duration_ms": null
+    },
+    {
+      "name": "recording_info",
+      "version": "1.0",
+      "status": "ok",
+      "message": null,
+      "duration_ms": null
+    },
+    {
+      "name": "spectral",
+      "version": "1.0",
+      "status": "ok",
+      "message": null,
+      "duration_ms": null
+    },
+    {
+      "name": "transients",
+      "version": "1.0",
+      "status": "ok",
+      "message": null,
+      "duration_ms": null
+    }
+  ],
+  "recording_info": {
+    "meta": {
+      "analyzer": "recording_info",
+      "version": "1.0",
+      "params": {},
+      "confidence": 1.0
+    },
+    "subtype": "PCM_24",
+    "bit_depth": 24,
+    "dc_offset": [6.69e-06, 6.59e-06],
+    "channel_peak_db": [-3.96, -4.09],
+    "channel_rms_db": [-10.81, -10.94],
+    "channel_balance_db": 0.13,
+    "channel_correlation": 1.0
+  },
+  "rms_profile": {
+    "meta": {
+      "analyzer": "rms_profile",
+      "version": "1.0",
+      "params": {
+        "window_seconds": 0.2,
+        "hop_seconds": 0.1
+      },
+      "confidence": 1.0
+    },
+    "window_seconds": 0.2,
+    "hop_seconds": 0.1,
+    "values_db": [-67.96, -67.98, -68.07, -68.06, -68.09, -68.06, -68.0, -67.99, -68.05, -68.04, -68.02, -68.02, -68.02, -67.98, -67.98, -68.05, -67.99, -67.92, -67.96, -14.0, -10.02, -9.23, -9.23, -9.23, -9.23, -9.23, -9.23, -9.23, -9.23, -9.23, -9.23, -9.23, -9.23, -9.23, -9.23, -9.23, -9.23, -9.23, -9.23, -9.23, -9.23, -9.23, -9.23, -9.23, -9.23, -9.23, -9.23, -9.23, -9.23, -9.23, -9.23, -9.23, -9.23, -9.23, -9.23, -9.23, -9.23, -9.23, -9.23, -9.23, -9.23, -9.23, -9.23, -9.23, -9.23, -9.23, -9.23, -9.23, -9.23, -9.23, -9.23, -9.23, -9.23, -9.23, -9.23, -9.23, -9.23, -9.23, -9.23, -9.23, -9.23, -9.23, -9.23, -9.23, -9.23, -9.23, -9.23, -9.23, -9.23, -9.23, -9.23, -9.23, -9.23, -9.23, -9.23, -9.23, -9.23, -9.23, -10.02, -14.0, -68.02, -68.08, -68.05, -67.97, -68.01, -68.03, -68.02, -68.06, -68.03, -68.01, -68.04, -68.16, -68.13, -68.09, -68.09, -68.0, -68.01, -68.08, -68.14, -68.03, -68.0, -13.97, -10.01, -9.23, -9.24, -9.23, -9.23, -9.23, -9.24, -9.23, -9.22, -9.21, -9.22, -9.23, -9.24, -9.23, -9.23, -9.23, -9.24, -9.23, -9.22, -9.21, -9.22, -9.23, -9.24, -9.23, -9.23, -9.23, -9.24, -9.23, -9.22, -9.21, -9.22, -9.23, -9.24, -9.23, -9.23, -9.23, -9.24, -9.24, -9.22, -9.21, -9.22, -9.23, -9.24, -9.23, -9.23, -9.23, -9.24, -9.23, -9.22, -9.21, -9.22, -9.23, -9.24, -9.23, -9.23, -9.23, -9.24, -9.23, -9.22, -9.21, -9.22, -9.23, -9.24, -9.23, -9.23, -9.23, -9.24, -9.23, -10.01, -13.97, -68.04, -67.98, -67.98, -68.0, -68.06, -68.16, -68.06, -67.96, -68.03, -68.08, -68.06, -68.09, -68.17, -68.13, -68.02, -67.95, -68.02, -68.08, -68.09, -68.05, -68.05, -68.11, -68.07, -68.04]
+  },
+  "surface_noise": {
+    "meta": {
+      "analyzer": "surface_noise",
+      "version": "1.0",
+      "params": {
+        "floor_percentile": 5.0,
+        "spread_percentile": 10.0
+      },
+      "confidence": 0.99
+    },
+    "noise_floor_db": -68.09,
+    "stability_db": 0.03
+  },
+  "silence": {
+    "meta": {
+      "analyzer": "silence",
+      "version": "1.0",
+      "params": {
+        "margin_db": 8.0,
+        "min_duration_seconds": 0.5
+      },
+      "confidence": 0.99
+    },
+    "threshold_db": -60.09,
+    "regions": [
+      {
+        "start_sample": 0,
+        "end_sample": 88200,
+        "mean_rms_db": -68.01,
+        "duration_seconds": 2.0,
+        "confidence": 1.0
+      },
+      {
+        "start_sample": 441000,
+        "end_sample": 538020,
+        "mean_rms_db": -68.05,
+        "duration_seconds": 2.2,
+        "confidence": 1.0
+      },
+      {
+        "start_sample": 846720,
+        "end_sample": 956970,
+        "mean_rms_db": -68.05,
+        "duration_seconds": 2.5,
+        "confidence": 1.0
+      }
+    ]
+  },
+  "boundaries": {
+    "meta": {
+      "analyzer": "boundaries",
+      "version": "1.0",
+      "params": {
+        "valley_depth_db": 12.0,
+        "valley_order": 10,
+        "smoothing_frames": 5,
+        "spectral_nperseg": 4096,
+        "spectral_top_n": 20,
+        "spectral_min_z": 4.0,
+        "spectral_min_separation_seconds": 0.5
+      },
+      "confidence": 0.99
+    },
+    "candidates": [
+      {
+        "sample": 17640,
+        "method": "rms_valley",
+        "confidence": 0.8
+      },
+      {
+        "sample": 88064,
+        "method": "spectral_change",
+        "confidence": 0.6
+      },
+      {
+        "sample": 143360,
+        "method": "spectral_change",
+        "confidence": 0.6
+      },
+      {
+        "sample": 223232,
+        "method": "spectral_change",
+        "confidence": 0.6
+      },
+      {
+        "sample": 346112,
+        "method": "spectral_change",
+        "confidence": 0.6
+      },
+      {
+        "sample": 436224,
+        "method": "spectral_change",
+        "confidence": 0.6
+      },
+      {
+        "sample": 489510,
+        "method": "silence",
+        "confidence": 1.0
+      },
+      {
+        "sample": 493920,
+        "method": "rms_valley",
+        "confidence": 0.8
+      },
+      {
+        "sample": 538624,
+        "method": "spectral_change",
+        "confidence": 0.6
+      },
+      {
+        "sample": 624640,
+        "method": "spectral_change",
+        "confidence": 0.6
+      },
+      {
+        "sample": 706560,
+        "method": "spectral_change",
+        "confidence": 0.6
+      },
+      {
+        "sample": 841728,
+        "method": "spectral_change",
+        "confidence": 0.6
+      },
+      {
+        "sample": 895230,
+        "method": "rms_valley",
+        "confidence": 0.8
+      }
+    ],
+    "lead_in_end_sample": 88200,
+    "lead_out_start_sample": 846720
+  },
+  "clicks": {
+    "meta": {
+      "analyzer": "clicks",
+      "version": "1.0",
+      "params": {
+        "threshold_mad": 6.0,
+        "max_width_ms": 3.0,
+        "highpass_hz": 3000.0,
+        "max_positions": 5000
+      },
+      "confidence": 0.75
+    },
+    "count": 7,
+    "rate_per_minute": 19.35,
+    "amplitude_histogram": {
+      "unit": "dBFS",
+      "bin_edges": [-90.0, -60.0, -50.0, -40.0, -30.0, -20.0, -10.0, 0.0],
+      "counts": [2, 0, 0, 0, 0, 5, 0]
+    },
+    "width_histogram": {
+      "unit": "ms",
+      "bin_edges": [0.0, 0.1, 0.25, 0.5, 1.0, 2.0, 4.0, 8.0],
+      "counts": [0, 5, 0, 2, 0, 0, 0]
+    },
+    "density_per_minute": [7.0],
+    "positions_sample": [145527, 224907, 348387, 540210, 626217, 707802, 844500],
+    "positions_truncated": false
+  },
+  "peaks": {
+    "meta": {
+      "analyzer": "peaks",
+      "version": "1.0",
+      "params": {},
+      "confidence": 1.0
+    },
+    "peak_db": -3.96,
+    "peak_sample": 540227,
+    "rms_db": -10.87,
+    "crest_factor_db": 6.91
+  },
+  "dynamic_range": {
+    "meta": {
+      "analyzer": "dynamic_range",
+      "version": "1.0",
+      "params": {},
+      "confidence": 0.7
+    },
+    "dr_estimate_db": 5.26,
+    "loud_rms_db": -9.22,
+    "percentiles": {
+      "p05_db": -68.09,
+      "p50_db": -9.23,
+      "p95_db": -9.22
+    }
+  },
+  "clipping": {
+    "meta": {
+      "analyzer": "clipping",
+      "version": "1.0",
+      "params": {
+        "clip_level": 0.9999,
+        "min_run_samples": 3
+      },
+      "confidence": 0.98
+    },
+    "clipped_sample_count": 0,
+    "clipped_region_count": 0,
+    "longest_run_samples": 0,
+    "ratio": 0.0
+  },
+  "spectral": {
+    "meta": {
+      "analyzer": "spectral",
+      "version": "1.0",
+      "params": {
+        "nperseg": 4096,
+        "rumble_max_hz": 40.0,
+        "hiss_min_hz": 12000.0,
+        "rolloff_fraction": 0.85
+      },
+      "confidence": 1.0
+    },
+    "centroid_mean_hz": 3564.0,
+    "centroid_std_hz": 4920.7,
+    "rolloff_mean_hz": 6109.9,
+    "rumble_db": -65.97,
+    "hiss_db": -55.25,
+    "bands": [
+      {
+        "low_hz": 0.0,
+        "high_hz": 40.0,
+        "energy_db": -65.97
+      },
+      {
+        "low_hz": 40.0,
+        "high_hz": 160.0,
+        "energy_db": -58.05
+      },
+      {
+        "low_hz": 160.0,
+        "high_hz": 640.0,
+        "energy_db": -0.35
+      },
+      {
+        "low_hz": 640.0,
+        "high_hz": 2560.0,
+        "energy_db": -11.14
+      },
+      {
+        "low_hz": 2560.0,
+        "high_hz": 10240.0,
+        "energy_db": -46.16
+      },
+      {
+        "low_hz": 10240.0,
+        "high_hz": 22050.0,
+        "energy_db": -53.87
+      }
+    ]
+  },
+  "transients": {
+    "meta": {
+      "analyzer": "transients",
+      "version": "1.0",
+      "params": {
+        "hop_seconds": 0.01,
+        "threshold_mad": 6.0,
+        "min_rise_db": 3.0
+      },
+      "confidence": 0.7
+    },
+    "hop_seconds": 0.01,
+    "density_per_second": [0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+    "mean_per_second": 0.091,
+    "peak_per_second": 1.0
+  },
+  "warnings": []
+}

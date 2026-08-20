@@ -1,0 +1,223 @@
+# Data Contracts
+
+Three JSON documents connect the layers. Their single source of truth is the
+pydantic models in `src/vinyl_process/models/`; the JSON Schemas generated from
+them are committed under `schemas/` (regenerate with
+`vinyl-process schemas -o schemas/`). Real, validated examples live in
+`examples/`.
+
+All documents share:
+
+- **`schema_version`** — `"MAJOR.MINOR"`. Consumers reject a foreign major.
+- **`document_type`** — `analysis` / `processing_plan` / `manifest`, so a file can
+  be identified without guessing.
+- **`extra="forbid"`** — unknown fields are validation errors, so a typo in a
+  hand-authored plan fails loudly instead of being silently ignored.
+- **Integer sample positions.** Every position is a sample index into the source
+  file, never seconds; durations in seconds appear alongside for human readability
+  only. See [adr/0002-sample-positions-are-integers.md](adr/0002-sample-positions-are-integers.md).
+- **Digests are SHA-256, lowercase hex, no prefix** — for files (`sha256`) and for
+  canonical JSON (`params_digest`, `run_key`, `config_digest`).
+
+## analysis.json — Analyzer → Planning Skills
+
+Produced by `vinyl-process analyze`. Pure measurement; nothing in it is a
+decision. It contains **no timestamps**, so analysing the same file twice gives
+byte-identical output.
+
+One section per analyzer, named after it. **Every section is optional**: a
+partial document is valid, because `analyze --analyzers rms_profile,clicks` is a
+supported workflow and because a failing analyzer degrades the document instead of
+the run. Consumers must handle absent sections — read `analyzers[]` to see what
+happened.
+
+```jsonc
+{
+  "schema_version": "1.0",
+  "document_type": "analysis",
+  "generated_by": "vinyl-process 0.1.0",
+  "source": { "path": "side-a.wav", "sha256": "…", "sample_rate": 44100,
+              "channels": 2, "num_samples": 956970, "duration_seconds": 21.7 },
+  "config_digest": "…",             // digest of the [analyzer.*] settings used
+  "analyzers": [                    // one record per analyzer that ran
+    { "name": "silence", "version": "1.0", "status": "ok",
+      "message": null, "duration_ms": null }   // status: ok | failed | skipped
+  ],
+
+  "recording_info": { "meta": { "analyzer": "recording_info", "version": "1.0",
+                                "params": {}, "confidence": 1.0 },
+    "subtype": "PCM_24", "bit_depth": 24, "dc_offset": [0.0, 0.0],
+    "channel_peak_db": [-3.9, -4.1], "channel_rms_db": [-19.2, -19.3],
+    "channel_balance_db": 0.13, "channel_correlation": 0.999 },
+
+  "rms_profile":   { "window_seconds": 0.2, "hop_seconds": 0.1,
+                     "values_db": [-68.1, -67.9, …] },
+  "surface_noise": { "noise_floor_db": -68.0, "stability_db": 0.4 },
+  "silence":       { "threshold_db": -60.0,
+                     "regions": [ { "start_sample": 0, "end_sample": 88200,
+                                    "mean_rms_db": -68.0, "duration_seconds": 2.0,
+                                    "confidence": 0.93 } ] },
+  "boundaries":    { "candidates": [ { "sample": 489510, "method": "silence",
+                                       "confidence": 0.91 } ],
+                     "lead_in_end_sample": 88200,
+                     "lead_out_start_sample": 846720 },
+  "clicks":        { "count": 5, "rate_per_minute": 13.8,
+                     "amplitude_histogram": { "unit": "dBFS", "bin_edges": [...],
+                                              "counts": [...] },
+                     "width_histogram": { "unit": "ms", "bin_edges": [...],
+                                          "counts": [...] },
+                     "density_per_minute": [5.0],
+                     "positions_sample": [...], "positions_truncated": false },
+  "peaks":         { "peak_db": -3.96, "peak_sample": 123456,
+                     "rms_db": -19.2, "crest_factor_db": 15.3 },
+  "dynamic_range": { "dr_estimate_db": 12.8, "loud_rms_db": -16.7,
+                     "percentiles": { "p05_db": -68.0, "p50_db": -21.0,
+                                      "p95_db": -16.7 } },
+  "clipping":      { "clipped_sample_count": 0, "clipped_region_count": 0,
+                     "longest_run_samples": 0, "ratio": 0.0 },
+  "spectral":      { "centroid_mean_hz": 2412.0, "centroid_std_hz": 810.0,
+                     "rolloff_mean_hz": 9120.0, "rumble_db": -48.2,
+                     "hiss_db": -55.0,
+                     "bands": [ { "low_hz": 0.0, "high_hz": 40.0,
+                                  "energy_db": -48.2 } ] },
+  "transients":    { "hop_seconds": 0.01, "density_per_second": [0.0, 1.0, …],
+                     "mean_per_second": 0.1, "peak_per_second": 2.0 },
+
+  "warnings": ["clipping: 2 region(s), 31 sample(s) at full scale"]
+}
+```
+
+Every section carries `meta` (omitted above except once for brevity):
+
+```jsonc
+"meta": { "analyzer": "clicks", "version": "1.0",
+          "params": { "threshold_mad": 6.0, "max_width_ms": 3.0, … },
+          "confidence": 0.75 }
+```
+
+`meta.params` records the parameters actually used, so a measurement stays
+explainable years later. `meta.confidence` is `1.0` for direct measurements
+(peaks, channel levels), lower for estimators (0.75 for click statistics, 0.7 for
+the dynamic-range approximation) and computed per case for silence and clipping.
+`warnings` states facts, never advice — advice would be a decision.
+
+## processing_plan.json — Planning Skills → DSP Executor
+
+Authored by the `plan-*` skills. The complete record of every decision; the
+executor adds nothing subjective. Each section carries an optional `decision`
+block: which skill decided, why, how confident it was, and what it consulted.
+
+```jsonc
+{
+  "schema_version": "1.0",
+  "document_type": "processing_plan",
+  "created_by": "plan-album",
+  "source": { …same shape as analysis.source; sha256 is verified before running… },
+  "analysis": { "path": "analysis.json", "sha256": "…" },
+
+  "split": {
+    "enabled": true,
+    "engine": "native",
+    "decision": { "skill": "plan-split", "rationale": "…", "confidence": 0.92,
+                  "inputs": ["analysis.json#boundaries", "discogs:release/1873013"] },
+    "tracks": [ { "index": 1, "start_sample": 88200, "end_sample": 445410,
+                  "fade_in_ms": 20.0, "fade_out_ms": 30.0 } ]
+  },
+
+  "declick": {
+    "enabled": true, "engine": "native",
+    "algorithm": "mad_interpolate",   // engine-defined id
+    "threshold": 6.0,                 // engine-defined scale (native: MAD sigmas)
+    "max_click_width_ms": 2.0,        // also the rejection rule for wide events
+    "strength": 1.0,                  // 0..1 blend of the repair
+    "preset": null,
+    "params": {}                      // engine-specific extras, e.g. highpass_hz
+  },
+
+  "normalize": {
+    "enabled": true, "engine": "native",
+    "mode": "album_peak",             // album_peak | album_rms | track_peak | none
+    "target_db": -1.0
+    // The gain arithmetic is deterministic and runs post-declick in the executor;
+    // the strategy and target are the decision, recorded here.
+  },
+
+  "metadata": {
+    "enabled": true,                  // false = do not write tags (names still used)
+    "album": "The Dark Side of the Moon", "album_artist": "Pink Floyd",
+    "artist": "Pink Floyd", "year": 1973, "genre": "Rock",
+    "styles": ["Prog Rock"], "label": "Harvest", "catalog_number": "SHVL 804",
+    "discogs_release_id": "1873013", "musicbrainz_release_id": null,
+    "artwork_path": null,
+    "tracks": [ { "index": 1, "title": "Speak to Me", "artist": null,
+                  "position": "A1" } ]
+  },
+
+  "export": {
+    "format": "flac",                 // flac | wav | aiff
+    "bit_depth": 24,                  // 16 | 24
+    "sample_rate": null,              // null keeps the source rate
+    "dither": "none",                 // none | tpdf
+    "dither_seed": 0,                 // seeded, so dithered exports reproduce
+    "track_filename_template": "{index:02d} - {title}",
+    "write_tags": true
+  },
+
+  "notes": "why these boundaries and thresholds were chosen (audit trail)"
+}
+```
+
+Contract rules a schema cannot express are checked by `vinyl-process lint`:
+the named engines exist, are available and have the capability; cuts fit inside
+the recording; fades fit inside their track; the filename template renders and
+does not collide; the source digest still matches; the analysis describes the same
+recording. See [cli.md](cli.md#lint).
+
+Titles appear **only** in `metadata.tracks` — export filenames are rendered from
+them, so the plan never carries the same string twice
+([adr/0004-titles-live-in-metadata-only.md](adr/0004-titles-live-in-metadata-only.md)).
+
+## manifest.json — DSP Executor → archive
+
+Written next to the exported album. This is the receipt.
+
+```jsonc
+{
+  "schema_version": "1.0",
+  "document_type": "manifest",
+  "generated_by": "vinyl-process 0.1.0",
+  "run_key": "…",                    // digest over (source digest, plan digest)
+  "source": { …SourceInfo of the audio actually read… },
+  "plan": { "path": "processing_plan.json", "sha256": "…" },
+  "stages": [
+    { "stage": "split", "status": "applied", "engine": "native",
+      "engine_version": "native 0.1.0 (numpy 2.4.6)",
+      "params_digest": "…",          // digest of the plan section that ran
+      "detail": "" },
+    { "stage": "normalize", "status": "applied", "engine": "native",
+      "detail": "mode=album_peak gain_db=+2.9618" }
+  ],
+  "applied_gain_db": 2.9618,          // null for track_peak (one gain per track)
+  "outputs": [
+    { "track_index": 1, "path": "album/01 - Speak to Me.flac", "sha256": "…",
+      "bytes": 475509, "num_samples": 357210, "sample_rate": 44100,
+      "duration_seconds": 8.1, "source_start_sample": 88200,
+      "source_end_sample": 445410, "tagged": true }
+  ],
+  "environment": { "python": "3.11.11", "numpy": "…", "libsndfile": "…", … },
+  "started_at": "2026-08-20T01:44:00+00:00",
+  "completed_at": "2026-08-20T01:44:03+00:00",
+  "warnings": []
+}
+```
+
+`started_at` / `completed_at` / `environment` are informational and are the only
+fields allowed to differ between two runs of the same plan. Everything else —
+`run_key`, `applied_gain_db`, every output digest — must match, and
+`vinyl-process verify` proves it.
+
+## Metadata sources
+
+Skills may consult Discogs, MusicBrainz and local files. Whatever they conclude is
+copied *into the plan*: the executor performs no network access, ever. That is why
+`metadata` is a plain data section rather than a set of lookup instructions.

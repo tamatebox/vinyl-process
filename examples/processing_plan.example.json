@@ -1,0 +1,136 @@
+{
+  "schema_version": "1.0",
+  "document_type": "processing_plan",
+  "created_by": "plan-album",
+  "source": {
+    "path": "side-a.wav",
+    "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+    "sample_rate": 44100,
+    "channels": 2,
+    "num_samples": 956970,
+    "duration_seconds": 21.7
+  },
+  "analysis": {
+    "path": "analysis.json",
+    "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+  },
+  "split": {
+    "decision": {
+      "skill": "plan-split",
+      "rationale": "Two silence candidates matched the expected two-track side; cuts placed inside the gap with short fades to hide the surface-noise step.",
+      "confidence": 0.92,
+      "inputs": [
+        "analysis.json#boundaries",
+        "discogs:release/1873013"
+      ]
+    },
+    "enabled": true,
+    "engine": "native",
+    "tracks": [
+      {
+        "index": 1,
+        "start_sample": 88200,
+        "end_sample": 445410,
+        "fade_in_ms": 20.0,
+        "fade_out_ms": 30.0
+      },
+      {
+        "index": 2,
+        "start_sample": 538020,
+        "end_sample": 851130,
+        "fade_in_ms": 20.0,
+        "fade_out_ms": 30.0
+      }
+    ]
+  },
+  "declick": {
+    "decision": {
+      "skill": "plan-declick",
+      "rationale": "Moderate click rate, no loud clicks in the histogram and sparse transients: default threshold at full strength.",
+      "confidence": 0.85,
+      "inputs": [
+        "analysis.json#clicks",
+        "analysis.json#transients"
+      ]
+    },
+    "enabled": true,
+    "engine": "native",
+    "algorithm": "mad_interpolate",
+    "threshold": 6.0,
+    "max_click_width_ms": 2.0,
+    "strength": 1.0,
+    "preset": null,
+    "params": {}
+  },
+  "normalize": {
+    "decision": {
+      "skill": "plan-normalize",
+      "rationale": "Album-wide peak normalization keeps the level relationship between the sides' tracks; source is unclipped.",
+      "confidence": 0.95,
+      "inputs": [
+        "analysis.json#peaks",
+        "analysis.json#clipping"
+      ]
+    },
+    "enabled": true,
+    "engine": "native",
+    "mode": "album_peak",
+    "target_db": -1.0
+  },
+  "metadata": {
+    "decision": {
+      "skill": "plan-metadata",
+      "rationale": "Illustrative release; identifiers are placeholders.",
+      "confidence": null,
+      "inputs": [
+        "discogs:release/1873013"
+      ]
+    },
+    "enabled": true,
+    "album": "Test Pressing",
+    "album_artist": "Synthetic Ensemble",
+    "artist": "Synthetic Ensemble",
+    "year": 1973,
+    "genre": "Electronic",
+    "styles": [
+      "Drone"
+    ],
+    "label": "Fixture Records",
+    "catalog_number": "FIX-001",
+    "discogs_release_id": "1873013",
+    "musicbrainz_release_id": null,
+    "artwork_path": null,
+    "tracks": [
+      {
+        "index": 1,
+        "title": "First Movement",
+        "artist": null,
+        "position": "A1"
+      },
+      {
+        "index": 2,
+        "title": "Second Movement",
+        "artist": null,
+        "position": "A2"
+      }
+    ]
+  },
+  "export": {
+    "decision": {
+      "skill": "plan-export",
+      "rationale": "FLAC/24 keeps the capture depth for archival.",
+      "confidence": null,
+      "inputs": [
+        "vinyl-process.toml#preferences"
+      ]
+    },
+    "format": "flac",
+    "bit_depth": 24,
+    "sample_rate": null,
+    "dither": "none",
+    "dither_seed": 0,
+    "track_filename_template": "{index:02d} - {title}",
+    "write_tags": true
+  },
+  "notes": "Example plan for the synthesised fixture used by the test suite: a two-track side with a 2.2 s gap between tracks."
+}

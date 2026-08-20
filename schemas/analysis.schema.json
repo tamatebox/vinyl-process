@@ -1,0 +1,906 @@
+{
+  "$defs": {
+    "AnalyzerRun": {
+      "additionalProperties": false,
+      "description": "Record of one analyzer's execution, for debugging a partial document.",
+      "properties": {
+        "duration_ms": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Duration Ms"
+        },
+        "message": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Message"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "status": {
+          "enum": [
+            "ok",
+            "failed",
+            "skipped"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "version": {
+          "title": "Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "version",
+        "status"
+      ],
+      "title": "AnalyzerRun",
+      "type": "object"
+    },
+    "BandEnergy": {
+      "additionalProperties": false,
+      "properties": {
+        "energy_db": {
+          "title": "Energy Db",
+          "type": "number"
+        },
+        "high_hz": {
+          "exclusiveMinimum": 0,
+          "title": "High Hz",
+          "type": "number"
+        },
+        "low_hz": {
+          "minimum": 0,
+          "title": "Low Hz",
+          "type": "number"
+        }
+      },
+      "required": [
+        "low_hz",
+        "high_hz",
+        "energy_db"
+      ],
+      "title": "BandEnergy",
+      "type": "object"
+    },
+    "BoundariesSection": {
+      "additionalProperties": false,
+      "description": "Candidates plus the playable region.\n\n``lead_out_start_sample`` is where the trailing silence begins \u2014 for a\nfull-side recording this is the run-out groove.",
+      "properties": {
+        "candidates": {
+          "items": {
+            "$ref": "#/$defs/BoundaryCandidate"
+          },
+          "title": "Candidates",
+          "type": "array"
+        },
+        "lead_in_end_sample": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Lead In End Sample"
+        },
+        "lead_out_start_sample": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Lead Out Start Sample"
+        },
+        "meta": {
+          "$ref": "#/$defs/SectionMeta"
+        }
+      },
+      "required": [
+        "candidates"
+      ],
+      "title": "BoundariesSection",
+      "type": "object"
+    },
+    "BoundaryCandidate": {
+      "additionalProperties": false,
+      "description": "One *candidate* cut point. Choosing among candidates is the Split\nskill's job \u2014 the analyzer never ranks them into a final track list.",
+      "properties": {
+        "confidence": {
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Confidence",
+          "type": "number"
+        },
+        "method": {
+          "enum": [
+            "silence",
+            "rms_valley",
+            "spectral_change"
+          ],
+          "title": "Method",
+          "type": "string"
+        },
+        "sample": {
+          "minimum": 0,
+          "title": "Sample",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "sample",
+        "method",
+        "confidence"
+      ],
+      "title": "BoundaryCandidate",
+      "type": "object"
+    },
+    "ClicksSection": {
+      "additionalProperties": false,
+      "properties": {
+        "amplitude_histogram": {
+          "$ref": "#/$defs/Histogram"
+        },
+        "count": {
+          "minimum": 0,
+          "title": "Count",
+          "type": "integer"
+        },
+        "density_per_minute": {
+          "items": {
+            "type": "number"
+          },
+          "title": "Density Per Minute",
+          "type": "array"
+        },
+        "meta": {
+          "$ref": "#/$defs/SectionMeta"
+        },
+        "positions_sample": {
+          "items": {
+            "type": "integer"
+          },
+          "title": "Positions Sample",
+          "type": "array"
+        },
+        "positions_truncated": {
+          "default": false,
+          "title": "Positions Truncated",
+          "type": "boolean"
+        },
+        "rate_per_minute": {
+          "minimum": 0,
+          "title": "Rate Per Minute",
+          "type": "number"
+        },
+        "width_histogram": {
+          "$ref": "#/$defs/Histogram"
+        }
+      },
+      "required": [
+        "count",
+        "rate_per_minute",
+        "amplitude_histogram",
+        "width_histogram",
+        "density_per_minute",
+        "positions_sample"
+      ],
+      "title": "ClicksSection",
+      "type": "object"
+    },
+    "ClippingSection": {
+      "additionalProperties": false,
+      "properties": {
+        "clipped_region_count": {
+          "minimum": 0,
+          "title": "Clipped Region Count",
+          "type": "integer"
+        },
+        "clipped_sample_count": {
+          "minimum": 0,
+          "title": "Clipped Sample Count",
+          "type": "integer"
+        },
+        "longest_run_samples": {
+          "minimum": 0,
+          "title": "Longest Run Samples",
+          "type": "integer"
+        },
+        "meta": {
+          "$ref": "#/$defs/SectionMeta"
+        },
+        "ratio": {
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Ratio",
+          "type": "number"
+        }
+      },
+      "required": [
+        "clipped_sample_count",
+        "clipped_region_count",
+        "longest_run_samples",
+        "ratio"
+      ],
+      "title": "ClippingSection",
+      "type": "object"
+    },
+    "DynamicRangeSection": {
+      "additionalProperties": false,
+      "properties": {
+        "dr_estimate_db": {
+          "title": "Dr Estimate Db",
+          "type": "number"
+        },
+        "loud_rms_db": {
+          "title": "Loud Rms Db",
+          "type": "number"
+        },
+        "meta": {
+          "$ref": "#/$defs/SectionMeta"
+        },
+        "percentiles": {
+          "$ref": "#/$defs/Percentiles"
+        }
+      },
+      "required": [
+        "dr_estimate_db",
+        "loud_rms_db",
+        "percentiles"
+      ],
+      "title": "DynamicRangeSection",
+      "type": "object"
+    },
+    "Histogram": {
+      "additionalProperties": false,
+      "description": "``len(bin_edges) == len(counts) + 1``, as produced by ``np.histogram``.",
+      "properties": {
+        "bin_edges": {
+          "items": {
+            "type": "number"
+          },
+          "title": "Bin Edges",
+          "type": "array"
+        },
+        "counts": {
+          "items": {
+            "type": "integer"
+          },
+          "title": "Counts",
+          "type": "array"
+        },
+        "unit": {
+          "title": "Unit",
+          "type": "string"
+        }
+      },
+      "required": [
+        "unit",
+        "bin_edges",
+        "counts"
+      ],
+      "title": "Histogram",
+      "type": "object"
+    },
+    "PeaksSection": {
+      "additionalProperties": false,
+      "properties": {
+        "crest_factor_db": {
+          "title": "Crest Factor Db",
+          "type": "number"
+        },
+        "meta": {
+          "$ref": "#/$defs/SectionMeta"
+        },
+        "peak_db": {
+          "title": "Peak Db",
+          "type": "number"
+        },
+        "peak_sample": {
+          "minimum": 0,
+          "title": "Peak Sample",
+          "type": "integer"
+        },
+        "rms_db": {
+          "title": "Rms Db",
+          "type": "number"
+        }
+      },
+      "required": [
+        "peak_db",
+        "peak_sample",
+        "rms_db",
+        "crest_factor_db"
+      ],
+      "title": "PeaksSection",
+      "type": "object"
+    },
+    "Percentiles": {
+      "additionalProperties": false,
+      "properties": {
+        "p05_db": {
+          "title": "P05 Db",
+          "type": "number"
+        },
+        "p50_db": {
+          "title": "P50 Db",
+          "type": "number"
+        },
+        "p95_db": {
+          "title": "P95 Db",
+          "type": "number"
+        }
+      },
+      "required": [
+        "p05_db",
+        "p50_db",
+        "p95_db"
+      ],
+      "title": "Percentiles",
+      "type": "object"
+    },
+    "RecordingInfoSection": {
+      "additionalProperties": false,
+      "description": "Electrical and format characteristics of the capture itself.",
+      "properties": {
+        "bit_depth": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Bit Depth"
+        },
+        "channel_balance_db": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Channel Balance Db"
+        },
+        "channel_correlation": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Channel Correlation"
+        },
+        "channel_peak_db": {
+          "items": {
+            "type": "number"
+          },
+          "title": "Channel Peak Db",
+          "type": "array"
+        },
+        "channel_rms_db": {
+          "items": {
+            "type": "number"
+          },
+          "title": "Channel Rms Db",
+          "type": "array"
+        },
+        "dc_offset": {
+          "items": {
+            "type": "number"
+          },
+          "title": "Dc Offset",
+          "type": "array"
+        },
+        "meta": {
+          "$ref": "#/$defs/SectionMeta"
+        },
+        "subtype": {
+          "title": "Subtype",
+          "type": "string"
+        }
+      },
+      "required": [
+        "subtype",
+        "dc_offset",
+        "channel_peak_db",
+        "channel_rms_db"
+      ],
+      "title": "RecordingInfoSection",
+      "type": "object"
+    },
+    "RmsProfileSection": {
+      "additionalProperties": false,
+      "description": "Windowed loudness envelope; the basis for silence and valley detection.",
+      "properties": {
+        "hop_seconds": {
+          "exclusiveMinimum": 0,
+          "title": "Hop Seconds",
+          "type": "number"
+        },
+        "meta": {
+          "$ref": "#/$defs/SectionMeta"
+        },
+        "values_db": {
+          "items": {
+            "type": "number"
+          },
+          "title": "Values Db",
+          "type": "array"
+        },
+        "window_seconds": {
+          "exclusiveMinimum": 0,
+          "title": "Window Seconds",
+          "type": "number"
+        }
+      },
+      "required": [
+        "window_seconds",
+        "hop_seconds",
+        "values_db"
+      ],
+      "title": "RmsProfileSection",
+      "type": "object"
+    },
+    "SectionMeta": {
+      "additionalProperties": false,
+      "description": "Provenance of one analyzer section.\n\nFilled in by the analyzer runner, except ``confidence``, which the analyzer\nitself sets when it can quantify how much its own output can be trusted.",
+      "properties": {
+        "analyzer": {
+          "default": "",
+          "title": "Analyzer",
+          "type": "string"
+        },
+        "confidence": {
+          "anyOf": [
+            {
+              "maximum": 1.0,
+              "minimum": 0.0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Confidence"
+        },
+        "params": {
+          "additionalProperties": true,
+          "title": "Params",
+          "type": "object"
+        },
+        "version": {
+          "default": "",
+          "title": "Version",
+          "type": "string"
+        }
+      },
+      "title": "SectionMeta",
+      "type": "object"
+    },
+    "SilenceRegion": {
+      "additionalProperties": false,
+      "description": "A contiguous quiet stretch. Sample positions are inclusive-exclusive.",
+      "properties": {
+        "confidence": {
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Confidence",
+          "type": "number"
+        },
+        "duration_seconds": {
+          "minimum": 0,
+          "title": "Duration Seconds",
+          "type": "number"
+        },
+        "end_sample": {
+          "minimum": 0,
+          "title": "End Sample",
+          "type": "integer"
+        },
+        "mean_rms_db": {
+          "title": "Mean Rms Db",
+          "type": "number"
+        },
+        "start_sample": {
+          "minimum": 0,
+          "title": "Start Sample",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "start_sample",
+        "end_sample",
+        "mean_rms_db",
+        "duration_seconds",
+        "confidence"
+      ],
+      "title": "SilenceRegion",
+      "type": "object"
+    },
+    "SilenceSection": {
+      "additionalProperties": false,
+      "properties": {
+        "meta": {
+          "$ref": "#/$defs/SectionMeta"
+        },
+        "regions": {
+          "items": {
+            "$ref": "#/$defs/SilenceRegion"
+          },
+          "title": "Regions",
+          "type": "array"
+        },
+        "threshold_db": {
+          "title": "Threshold Db",
+          "type": "number"
+        }
+      },
+      "required": [
+        "threshold_db",
+        "regions"
+      ],
+      "title": "SilenceSection",
+      "type": "object"
+    },
+    "SourceInfo": {
+      "additionalProperties": false,
+      "description": "Identity of the source recording a document refers to.\n\n``sha256`` is the anchor of reproducibility: the executor refuses to run a\nplan against audio whose digest does not match.",
+      "properties": {
+        "channels": {
+          "exclusiveMinimum": 0,
+          "title": "Channels",
+          "type": "integer"
+        },
+        "duration_seconds": {
+          "minimum": 0,
+          "title": "Duration Seconds",
+          "type": "number"
+        },
+        "num_samples": {
+          "minimum": 0,
+          "title": "Num Samples",
+          "type": "integer"
+        },
+        "path": {
+          "title": "Path",
+          "type": "string"
+        },
+        "sample_rate": {
+          "exclusiveMinimum": 0,
+          "title": "Sample Rate",
+          "type": "integer"
+        },
+        "sha256": {
+          "title": "Sha256",
+          "type": "string"
+        }
+      },
+      "required": [
+        "path",
+        "sha256",
+        "sample_rate",
+        "channels",
+        "num_samples",
+        "duration_seconds"
+      ],
+      "title": "SourceInfo",
+      "type": "object"
+    },
+    "SpectralSection": {
+      "additionalProperties": false,
+      "properties": {
+        "bands": {
+          "items": {
+            "$ref": "#/$defs/BandEnergy"
+          },
+          "title": "Bands",
+          "type": "array"
+        },
+        "centroid_mean_hz": {
+          "title": "Centroid Mean Hz",
+          "type": "number"
+        },
+        "centroid_std_hz": {
+          "title": "Centroid Std Hz",
+          "type": "number"
+        },
+        "hiss_db": {
+          "title": "Hiss Db",
+          "type": "number"
+        },
+        "meta": {
+          "$ref": "#/$defs/SectionMeta"
+        },
+        "rolloff_mean_hz": {
+          "title": "Rolloff Mean Hz",
+          "type": "number"
+        },
+        "rumble_db": {
+          "title": "Rumble Db",
+          "type": "number"
+        }
+      },
+      "required": [
+        "centroid_mean_hz",
+        "centroid_std_hz",
+        "rolloff_mean_hz",
+        "rumble_db",
+        "hiss_db",
+        "bands"
+      ],
+      "title": "SpectralSection",
+      "type": "object"
+    },
+    "SurfaceNoiseSection": {
+      "additionalProperties": false,
+      "properties": {
+        "meta": {
+          "$ref": "#/$defs/SectionMeta"
+        },
+        "noise_floor_db": {
+          "title": "Noise Floor Db",
+          "type": "number"
+        },
+        "stability_db": {
+          "minimum": 0,
+          "title": "Stability Db",
+          "type": "number"
+        }
+      },
+      "required": [
+        "noise_floor_db",
+        "stability_db"
+      ],
+      "title": "SurfaceNoiseSection",
+      "type": "object"
+    },
+    "TransientsSection": {
+      "additionalProperties": false,
+      "description": "Transient density over time \u2014 how percussive the material is, which\ntells the Declick skill how much false-positive risk a threshold carries.",
+      "properties": {
+        "density_per_second": {
+          "items": {
+            "type": "number"
+          },
+          "title": "Density Per Second",
+          "type": "array"
+        },
+        "hop_seconds": {
+          "exclusiveMinimum": 0,
+          "title": "Hop Seconds",
+          "type": "number"
+        },
+        "mean_per_second": {
+          "minimum": 0,
+          "title": "Mean Per Second",
+          "type": "number"
+        },
+        "meta": {
+          "$ref": "#/$defs/SectionMeta"
+        },
+        "peak_per_second": {
+          "minimum": 0,
+          "title": "Peak Per Second",
+          "type": "number"
+        }
+      },
+      "required": [
+        "hop_seconds",
+        "density_per_second",
+        "mean_per_second",
+        "peak_per_second"
+      ],
+      "title": "TransientsSection",
+      "type": "object"
+    }
+  },
+  "$id": "https://vinyl-process.invalid/schemas/analysis.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "analyzers": {
+      "items": {
+        "$ref": "#/$defs/AnalyzerRun"
+      },
+      "title": "Analyzers",
+      "type": "array"
+    },
+    "boundaries": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/BoundariesSection"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "clicks": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ClicksSection"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "clipping": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ClippingSection"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "config_digest": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Config Digest"
+    },
+    "document_type": {
+      "const": "analysis",
+      "default": "analysis",
+      "title": "Document Type",
+      "type": "string"
+    },
+    "dynamic_range": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/DynamicRangeSection"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "generated_by": {
+      "title": "Generated By",
+      "type": "string"
+    },
+    "peaks": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/PeaksSection"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "recording_info": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/RecordingInfoSection"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "rms_profile": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/RmsProfileSection"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "schema_version": {
+      "default": "1.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "silence": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/SilenceSection"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "source": {
+      "$ref": "#/$defs/SourceInfo"
+    },
+    "spectral": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/SpectralSection"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "surface_noise": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/SurfaceNoiseSection"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "transients": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/TransientsSection"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "warnings": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Warnings",
+      "type": "array"
+    }
+  },
+  "required": [
+    "generated_by",
+    "source"
+  ],
+  "title": "AnalysisDocument",
+  "type": "object"
+}

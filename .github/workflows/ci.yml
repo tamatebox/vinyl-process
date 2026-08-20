@@ -1,0 +1,53 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
+      - name: Install ffmpeg
+        # The ffmpeg engine's tests skip themselves without it; CI should cover them.
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+
+      - name: Lint
+        run: |
+          ruff check .
+          ruff format --check .
+
+      - name: Type-check
+        run: mypy
+
+      - name: Test
+        run: pytest --cov --cov-report=term-missing
+
+      - name: Committed schemas match the models
+        # examples/ are checked for validity by the test suite instead: they are
+        # generated from real audio, whose bytes can differ across libsndfile builds.
+        run: |
+          vinyl-process schemas -o schemas/
+          git diff --exit-code -- schemas

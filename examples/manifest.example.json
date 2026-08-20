@@ -1,0 +1,105 @@
+{
+  "schema_version": "1.0",
+  "document_type": "manifest",
+  "generated_by": "vinyl-process 0.1.0",
+  "run_key": "0000000000000000000000000000000000000000000000000000000000000000",
+  "source": {
+    "path": "side-a.wav",
+    "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+    "sample_rate": 44100,
+    "channels": 2,
+    "num_samples": 956970,
+    "duration_seconds": 21.7
+  },
+  "plan": {
+    "path": "processing_plan.json",
+    "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+  },
+  "stages": [
+    {
+      "stage": "split",
+      "status": "applied",
+      "engine": "native",
+      "engine_version": "…",
+      "params_digest": "9a8fd512149553264f5d38ca3a81470d350d376c976a1c57905807e448455f3f",
+      "detail": ""
+    },
+    {
+      "stage": "declick",
+      "status": "applied",
+      "engine": "native",
+      "engine_version": "…",
+      "params_digest": "85a2184bb9b05c1015124bd59f845c2ce2422ce50f3174192f94c9a80a1aa04d",
+      "detail": "algorithm=mad_interpolate"
+    },
+    {
+      "stage": "normalize",
+      "status": "applied",
+      "engine": "native",
+      "engine_version": "…",
+      "params_digest": "72c891c4f3f3812f2234cf471cfe1ac098d7ae725da83a6cb6615a87ea523ac6",
+      "detail": "mode=album_peak gain_db=+2.9618"
+    },
+    {
+      "stage": "resample",
+      "status": "skipped",
+      "engine": null,
+      "engine_version": null,
+      "params_digest": null,
+      "detail": "export keeps the source sample rate"
+    },
+    {
+      "stage": "export",
+      "status": "applied",
+      "engine": null,
+      "engine_version": null,
+      "params_digest": "38a03bb9415ec165451f67ab945142d0e176085d798693c4a540d4f4553b423e",
+      "detail": "flac/24-bit, dither=none"
+    },
+    {
+      "stage": "metadata",
+      "status": "applied",
+      "engine": null,
+      "engine_version": null,
+      "params_digest": "14b452dfe02ef43a74b4dab1b71ee08baeb5afb8d0215442bc3670c0867a7c3b",
+      "detail": "tags written after audio processing"
+    }
+  ],
+  "applied_gain_db": 2.9618,
+  "outputs": [
+    {
+      "track_index": 1,
+      "path": "album/01 - First Movement.flac",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "bytes": 475548,
+      "num_samples": 357210,
+      "sample_rate": 44100,
+      "duration_seconds": 8.1,
+      "source_start_sample": 88200,
+      "source_end_sample": 445410,
+      "tagged": true
+    },
+    {
+      "track_index": 2,
+      "path": "album/02 - Second Movement.flac",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "bytes": 486022,
+      "num_samples": 313110,
+      "sample_rate": 44100,
+      "duration_seconds": 7.1,
+      "source_start_sample": 538020,
+      "source_end_sample": 851130,
+      "tagged": true
+    }
+  ],
+  "environment": {
+    "python": "…",
+    "platform": "…",
+    "numpy": "…",
+    "scipy": "…",
+    "soundfile": "…"
+  },
+  "started_at": "2026-01-01T00:00:00+00:00",
+  "completed_at": "2026-01-01T00:00:00+00:00",
+  "warnings": []
+}

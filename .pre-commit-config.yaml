@@ -1,0 +1,29 @@
+# pre-commit run --all-files
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.6.9
+    hooks:
+      - id: ruff
+        args: [--fix]
+      - id: ruff-format
+
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0
+    hooks:
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+      - id: check-toml
+      - id: check-yaml
+      - id: check-json
+      - id: check-merge-conflict
+      - id: check-added-large-files
+        # Recordings must never be committed; fixtures are synthesised in-test.
+        args: [--maxkb=256]
+
+  - repo: local
+    hooks:
+      - id: no-audio-files
+        name: no audio files in the repository
+        entry: Audio must never be committed; tests synthesise their fixtures.
+        language: fail
+        files: '\.(wav|flac|aiff|aif|mp3|ogg|m4a)$'

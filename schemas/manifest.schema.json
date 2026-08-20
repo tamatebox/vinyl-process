@@ -1,0 +1,295 @@
+{
+  "$defs": {
+    "DocumentRef": {
+      "additionalProperties": false,
+      "description": "Reference from one document to another, pinned by digest.",
+      "properties": {
+        "path": {
+          "title": "Path",
+          "type": "string"
+        },
+        "sha256": {
+          "title": "Sha256",
+          "type": "string"
+        }
+      },
+      "required": [
+        "path",
+        "sha256"
+      ],
+      "title": "DocumentRef",
+      "type": "object"
+    },
+    "OutputFile": {
+      "additionalProperties": false,
+      "properties": {
+        "bytes": {
+          "minimum": 0,
+          "title": "Bytes",
+          "type": "integer"
+        },
+        "duration_seconds": {
+          "minimum": 0,
+          "title": "Duration Seconds",
+          "type": "number"
+        },
+        "num_samples": {
+          "minimum": 0,
+          "title": "Num Samples",
+          "type": "integer"
+        },
+        "path": {
+          "title": "Path",
+          "type": "string"
+        },
+        "sample_rate": {
+          "exclusiveMinimum": 0,
+          "title": "Sample Rate",
+          "type": "integer"
+        },
+        "sha256": {
+          "title": "Sha256",
+          "type": "string"
+        },
+        "source_end_sample": {
+          "minimum": 0,
+          "title": "Source End Sample",
+          "type": "integer"
+        },
+        "source_start_sample": {
+          "minimum": 0,
+          "title": "Source Start Sample",
+          "type": "integer"
+        },
+        "tagged": {
+          "default": false,
+          "title": "Tagged",
+          "type": "boolean"
+        },
+        "track_index": {
+          "minimum": 1,
+          "title": "Track Index",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "track_index",
+        "path",
+        "sha256",
+        "bytes",
+        "num_samples",
+        "sample_rate",
+        "duration_seconds",
+        "source_start_sample",
+        "source_end_sample"
+      ],
+      "title": "OutputFile",
+      "type": "object"
+    },
+    "SourceInfo": {
+      "additionalProperties": false,
+      "description": "Identity of the source recording a document refers to.\n\n``sha256`` is the anchor of reproducibility: the executor refuses to run a\nplan against audio whose digest does not match.",
+      "properties": {
+        "channels": {
+          "exclusiveMinimum": 0,
+          "title": "Channels",
+          "type": "integer"
+        },
+        "duration_seconds": {
+          "minimum": 0,
+          "title": "Duration Seconds",
+          "type": "number"
+        },
+        "num_samples": {
+          "minimum": 0,
+          "title": "Num Samples",
+          "type": "integer"
+        },
+        "path": {
+          "title": "Path",
+          "type": "string"
+        },
+        "sample_rate": {
+          "exclusiveMinimum": 0,
+          "title": "Sample Rate",
+          "type": "integer"
+        },
+        "sha256": {
+          "title": "Sha256",
+          "type": "string"
+        }
+      },
+      "required": [
+        "path",
+        "sha256",
+        "sample_rate",
+        "channels",
+        "num_samples",
+        "duration_seconds"
+      ],
+      "title": "SourceInfo",
+      "type": "object"
+    },
+    "StageRecord": {
+      "additionalProperties": false,
+      "description": "What actually happened in one stage, including the engine that did it.",
+      "properties": {
+        "detail": {
+          "default": "",
+          "title": "Detail",
+          "type": "string"
+        },
+        "engine": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Engine"
+        },
+        "engine_version": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Engine Version"
+        },
+        "params_digest": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Params Digest"
+        },
+        "stage": {
+          "enum": [
+            "split",
+            "declick",
+            "normalize",
+            "resample",
+            "export",
+            "metadata"
+          ],
+          "title": "Stage",
+          "type": "string"
+        },
+        "status": {
+          "enum": [
+            "applied",
+            "skipped"
+          ],
+          "title": "Status",
+          "type": "string"
+        }
+      },
+      "required": [
+        "stage",
+        "status"
+      ],
+      "title": "StageRecord",
+      "type": "object"
+    }
+  },
+  "$id": "https://vinyl-process.invalid/schemas/manifest.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "applied_gain_db": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Applied Gain Db"
+    },
+    "completed_at": {
+      "title": "Completed At",
+      "type": "string"
+    },
+    "document_type": {
+      "const": "manifest",
+      "default": "manifest",
+      "title": "Document Type",
+      "type": "string"
+    },
+    "environment": {
+      "additionalProperties": {
+        "type": "string"
+      },
+      "title": "Environment",
+      "type": "object"
+    },
+    "generated_by": {
+      "title": "Generated By",
+      "type": "string"
+    },
+    "outputs": {
+      "items": {
+        "$ref": "#/$defs/OutputFile"
+      },
+      "title": "Outputs",
+      "type": "array"
+    },
+    "plan": {
+      "$ref": "#/$defs/DocumentRef"
+    },
+    "run_key": {
+      "title": "Run Key",
+      "type": "string"
+    },
+    "schema_version": {
+      "default": "1.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "source": {
+      "$ref": "#/$defs/SourceInfo"
+    },
+    "stages": {
+      "items": {
+        "$ref": "#/$defs/StageRecord"
+      },
+      "title": "Stages",
+      "type": "array"
+    },
+    "started_at": {
+      "title": "Started At",
+      "type": "string"
+    },
+    "warnings": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Warnings",
+      "type": "array"
+    }
+  },
+  "required": [
+    "generated_by",
+    "run_key",
+    "source",
+    "plan",
+    "started_at",
+    "completed_at"
+  ],
+  "title": "ExecutionManifest",
+  "type": "object"
+}
