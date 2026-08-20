@@ -100,8 +100,8 @@ table anyway. Write a plan carrying this `split` section with **`declick` and
 execute it into a directory of its own:
 
 ```sh
-vinyl-process execute plan-side-a.json --audio <recording> -o split-only \
-  --manifest manifest-side-a.json
+vinyl-process execute plan-side-a.json --audio <recording> \
+  -o review/split --manifest manifest-side-a.json
 ```
 
 Seconds of compute, and it is the only check that works. Two things to get right:

@@ -32,13 +32,41 @@ One directory per record, holding everything about it and nothing else:
   <recording>.flac            the capture, one file per side, name untouched
   analysis-<stem>.json        one per recording, named after it
   plan-<side>.json            one per recording — plan-side-a.json, plan-side-b.json
-  split-only/                 the boundary render for checkpoint 2; throwaway
+  review/                     renders made to answer a checkpoint; throwaway
+    split/                      split only                    → checkpoint 2
+    declick/                    split + declick               → checkpoint 3
+    level/                      split + declick + normalize   → checkpoint 4
   album/                      the finished tracks + manifest-side-<side>.json
 ```
 
-A single-file album collapses this to `analysis.json`, `processing_plan.json` and
-`album/`. Recordings are never committed — keep the job directory out of version
-control (this repository gitignores `jobs/`).
+A single-file album collapses this to `analysis.json`, `processing_plan.json`,
+`review/` and `album/`. Recordings are never committed — keep the job directory
+out of version control (this repository gitignores `jobs/`).
+
+**Each review render adds exactly one stage to the one before it.** That is the
+point of the ladder: every comparison then isolates a single decision, so "is the
+repair an improvement" is answered by `review/declick/` against `review/split/`
+and nothing else differs between them. Build each one by setting `"enabled"` on
+the stages above it to `false` and executing into its own directory:
+
+```sh
+vinyl-process execute plan-side-a.json --audio <recording> \
+  -o review/declick --manifest manifest-side-a.json
+```
+
+Two things this ladder is protecting against:
+
+- **An unfair A/B.** Two renders at different levels cannot be compared by ear —
+  the louder one wins whatever else is true. Keeping `normalize` off until
+  `review/level/` is what makes the declick comparison mean anything.
+- **An unreviewed decision riding along.** A render made to answer one question
+  must not quietly apply the answer to a later one. This is how a level nobody
+  agreed to reaches the person's ears as though it were settled.
+
+`review/level/` is not a quality A/B — the level *is* the change. It answers a
+different question: is this the level you want, and has the surface noise come up
+too far with it. Delete `review/` once `album/` is agreed; on a 35-minute album
+each render is around 175 MB.
 
 **No scripts in the job directory.** A Python file there is the planning layer
 written in Python, which is the one thing this project does not do. The plan is

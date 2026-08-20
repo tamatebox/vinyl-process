@@ -60,6 +60,29 @@ Present:
 - that the exact value appears in `manifest.applied_gain_db` after the run, and
   that keeping the capture's level is `"enabled": false`.
 
+If the answer is yes, **render it before it becomes the album**. Execute into
+`review/level/` — the same plan as `review/declick/` with `normalize` switched on,
+so the level is the only difference:
+
+```sh
+vinyl-process execute plan-side-a.json --audio <recording> \
+  -o review/level --manifest manifest-side-a.json
+```
+
+This is not an A/B: the level *is* the change, and the louder render always sounds
+better, so asking "which do you prefer" is a rigged question. Ask the two things
+that a gain can actually get wrong instead:
+
+- has the surface noise come up too far? The gain lifts the noise floor by exactly
+  as much as the music, so a quiet pressing with a modest floor survives it and a
+  noisy one does not.
+- do the quiet passages and the fades still sit where they should relative to the
+  loud ones? `album_peak` and `album_rms` preserve that by construction;
+  `track_peak` does not, which is why it is discouraged.
+
+Report `manifest.applied_gain_db` from this render against the lower bound you
+predicted, and say so if they differ — they usually do, and by several dB.
+
 ## Rules
 
 - Never precompute the gain value. Declick changes peaks slightly, so the

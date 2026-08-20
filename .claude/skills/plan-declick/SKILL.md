@@ -89,6 +89,27 @@ interpolated audio. Present, before deciding:
 
 `"enabled": false` is a legitimate answer and is often the right one.
 
+Then **render it and let them hear both**. Numbers decide whether a repair is
+plausible; only listening decides whether it helped. Execute the plan with
+`declick` on and `normalize` still off, into `review/declick/`, and compare
+against `review/split/` from the previous checkpoint — the two differ by the
+repair alone:
+
+```sh
+vinyl-process execute plan-side-a.json --audio <recording> \
+  -o review/declick --manifest manifest-side-a.json
+```
+
+Keep `normalize` off for this. A repaired render that is also louder will be
+preferred whatever the repair did, and the level has not been agreed yet.
+
+Repair is easiest to hear where the detector fired hardest, so name the two or
+three tracks with the highest `density_per_minute` and suggest starting there. Ask
+whether the clicks are gone and, more importantly, whether anything else changed —
+dulled transients, a smeared cymbal, a lost attack. Interpolated audio is what
+over-aggressive repair leaves behind, and it is audible long before the numbers
+look wrong.
+
 ## Rules
 
 - Never run repairs yourself; the executor does.
