@@ -6,10 +6,12 @@ import numpy as np
 import pytest
 
 from vinyl_process.signal_ops import (
+    CONTEXT_FLOOR,
     apply_fades,
     click_events,
     db_to_amplitude,
     highpass,
+    local_bounds,
     merge_runs,
     repair_clicks,
     runs_of_true,
@@ -166,3 +168,65 @@ def test_transient_onsets_ignore_steady_tones_and_count_percussion() -> None:
 def test_db_to_amplitude_round_trip() -> None:
     assert db_to_amplitude(0.0) == pytest.approx(1.0)
     assert db_to_amplitude(-6.0206) == pytest.approx(0.5, abs=1e-4)
+
+
+def broadband(seconds: float = 0.5, seed: int = 7) -> np.ndarray:
+    """Dense, noisy material — the case cubic Hermite diverges on.
+
+    The tonal fixture above cannot expose it: a smooth tone has a per-sample
+    slope far smaller than its amplitude, so Hermite's span-scaled tangent term
+    stays small. Broadband content is where the slope rivals the amplitude, and
+    that is what vinyl programme material looks like above 3 kHz.
+    """
+    rng = np.random.default_rng(seed)
+    t = np.arange(int(SAMPLE_RATE * seconds)) / SAMPLE_RATE
+    return (
+        0.05 * np.sin(2 * np.pi * 7000 * t)
+        + 0.05 * np.sin(2 * np.pi * 9500 * t)
+        + rng.normal(0.0, 0.02, t.shape)
+    )
+
+
+@pytest.mark.parametrize("width", [4, 16, 32, 65, 96])
+def test_repair_never_leaves_the_range_of_the_audio_around_it(width: int) -> None:
+    """A repair may not invent a level the neighbouring audio never reaches.
+
+    Regression test for a real failure: on a 16-bit transfer the interpolator
+    bridged a 65-sample gap at 0.892 where the surrounding audio peaked at 0.071
+    — twelve times its neighbourhood, and three times the peak of the whole
+    track. Unbounded, the overshoot grows with the span because Hermite scales
+    its tangent term by it, reaching 16x at 96 samples: that is 2 ms at 48 kHz,
+    which is *within* the width limit a plan would normally set. The width guard
+    is therefore no protection, and the widths here bracket it deliberately.
+
+    The events are constructed rather than detected: this is the contract of
+    ``repair_clicks`` for any event list, not a statement about the detector.
+    """
+    signal = broadband()
+    stereo = np.column_stack([signal, signal * 0.9])
+    events = [(p, p + width, 0.1) for p in range(2000, len(signal) - 2000, 3000)]
+    repaired = repair_clicks(stereo, events, strength=1.0)
+
+    for start, end, _peak in events:
+        lo, hi = start - 1, min(end, len(stereo) - 1)
+        low, high = local_bounds(stereo, lo, hi, max(CONTEXT_FLOOR, 2 * (hi - lo)))
+        patch = repaired[lo + 1 : hi]
+        assert np.all(patch >= low[None, :] - 1e-12), f"span {start}..{end} undershot"
+        assert np.all(patch <= high[None, :] + 1e-12), f"span {start}..{end} overshot"
+
+    # The global statement the bug violated: no repair may raise the peak.
+    assert np.max(np.abs(repaired)) <= np.max(np.abs(stereo)) + 1e-12
+
+
+def test_repair_bound_does_not_flatten_a_click_in_tonal_material() -> None:
+    """The clip must not be doing the repair's job: on smooth material the bridge
+    stays inside the bound, so the fix costs nothing where Hermite was working."""
+    signal = tonal()
+    position = SAMPLE_RATE // 2
+    damaged = signal.copy()
+    damaged[position : position + 3] += np.array([0.6, -0.5, 0.4])
+    stereo_damaged = np.column_stack([damaged, damaged])
+    events = click_events(damaged, SAMPLE_RATE, 6.0, 3.0)
+    repaired = repair_clicks(stereo_damaged, events, strength=1.0)
+    error = np.max(np.abs(repaired[:, 0] - signal))
+    assert error < 0.05, f"repair left {error:.3f} of the click behind"
