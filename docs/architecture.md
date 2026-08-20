@@ -323,4 +323,45 @@ end to end for determinism.
   `plan-normalize` is told to name it in the rationale; nothing removes it. A
   filter would be a new stage, and on the preservation-versus-listening line it
   belongs upstream in `vinyl-archive` at least as much as here.
-- **No de-noise, de-hum, azimuth or speed correction stages.**
+- **De-noise cannot be a post-split stage.** This is a property of the pipeline's
+  shape, not of any pressing. A noise profile has to come from the medium's own
+  unmodulated groove — the lead-in, the run-out, or an inter-track gap — because a
+  profile taken from a quiet *musical* passage models the music too. `plan-split`
+  discards all three by rule, on every record: the lead-in and run-out to keep the
+  stylus drop out of `album_peak`, and the dead middle of every gap because it
+  belongs to neither track. So no stage after `split` can ever see one, and the
+  same applies to anything else that needs a reference to the medium's noise. The
+  measurement side is already there — `silence.regions` carries `mean_rms_db` per
+  gap, and `surface_noise` and `spectral.bands` cover the whole file — but the
+  executor may not read `analysis.json`, so the profile's *region* would have to
+  arrive as sample indices in the plan and be extracted before the cuts. Adding
+  de-noise therefore means giving the executor a pre-split phase, which is also
+  the order practice uses: Audacity's LP workflow reduces hiss at step 10 and
+  places the track labels at step 11.
+- **`declick` is not `decrackle`, and only the first exists.** `block_ratio`
+  makes a *collective* decision — it asks whether a short segment is an outlier
+  against its neighbourhood — and that is the right question for a discrete
+  impulse of a few hundred microseconds. Crackle is a different defect: very
+  short events, one to three samples, repeated densely enough to be heard as a
+  continuous texture rather than as countable ticks. Each one is a weak outlier
+  and there are thousands, so a threshold low enough to catch them starts
+  interpolating the music long before it clears the bed. The tool for it is a
+  per-sample post-process that examines every sample individually, which is why
+  ClickRepair ships DeClick and DeCrackle as separate controls and documents that
+  its click detector "is not particularly attuned" to crackle. Lowering
+  `declick.threshold` is the wrong lever, and reaching for it is how a day gets
+  spent. There is no de-crackle stage here.
+- **The fades run before `declick`.** `native.split()` applies the fades the plan
+  asked for, and the executor's order is `split → declick`, so repair sees ramped
+  material. The energy ratio is invariant to a constant scale but not to a ramp
+  across its 40 ms context window: a fade-in makes the context after the window
+  louder than the context before it, which lowers the ratio and biases the
+  detector *towards missing* clicks. It acts on the head and tail margins, which
+  are bare surface and therefore where a record's clicks are densest — a 250 ms
+  linear fade changes amplitude by about 16 % over 40 ms, so roughly 35 % in
+  energy. Practice repairs before shaping anything. The plan cannot currently
+  express "cut without fades, repair, then fade", because the fades are
+  attributes of `split.tracks[]` rather than a stage of their own.
+- **No de-noise, de-hum, de-crackle, de-clip, azimuth or speed correction
+  stages.** `clipping` measures a clipped transfer but nothing repairs one;
+  `plan-album`'s first checkpoint asks for a re-record instead.
