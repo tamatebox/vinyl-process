@@ -124,6 +124,95 @@ rung from the count alone.
 `analyze --analyzers silence,clicks`; if it will not run, set
 `"enabled": false` and say why.
 
+## How much repair is normal
+
+The sweep tells you what a rung finds; it says nothing about whether the amount of
+repair is reasonable. Without an outside calibration a rung can be picked that
+sounds cautious and is in fact doing almost nothing — that happened here, twice on
+one record, before anyone thought to check the rate.
+
+The practitioner benchmark is a **fraction of samples repaired**, and the
+[ClickRepair 3.9 manual](https://archive.org/stream/manualzilla-id-5804727/5804727_djvu.txt)
+(Brian Davies) states it outright:
+
+> "For a vinyl record, repairing more than **1 in 200 samples** should be viewed
+> with suspicion, although it might lead to results that are more acceptable."
+> "Unless your records are in really good condition, it is unlikely that the
+> repair rate will fall below about **1 in 1000–2000 samples**."
+
+So the working band is roughly **1 in 200 to 1 in 2000**, and *below* that band
+the repair is probably not addressing what a listener hears. Compute the rate from
+the render, not from the plan: the interpolated sample count is the total width of
+the spans where `review/declick/` differs from `review/split/`, over the total
+samples exported. On the record this section was written from, the chosen rung
+came to 90 ms in 40.8 minutes — **1 in 27 200**, fourteen times below the bottom
+of the band — and the owner's verdict was "somewhat better", which is exactly what
+that number predicts. The rung two steps lower measured about 1 in 750, inside the
+band, and had been dismissed as over-repair against nothing at all.
+
+Report the rate at the checkpoint. It is the only figure here with an outside
+reference behind it.
+
+**Sensitivity is a trade-off with no clean answer, and the manual says so:**
+
+> "It is impossible to distinguish music from damage, with absolute certainty."
+> "It is impossible to choose a sensitivity which will see all clicks removed, no
+> matter how small, with no false detections."
+
+The endorsed strategy is **the lowest sensitivity that removes the audible
+clicks** — iterate by ear, which is what the checkpoint is for — with one warning
+worth quoting: "beware of reducing the sensitivity too much. **Half-removed clicks
+may sound like pops.**" Material shifts the answer: heavy damage takes more
+sensitivity, while "some **vocals** are particularly difficult" and percussive
+material harder still, both because they false-detect. A vocal-led record wants
+`confirm_k` on rather than a timid threshold.
+
+Do **not** carry ClickRepair's slider numbers across. Its scale is sensitivity, so
+larger is more aggressive; `block_ratio`'s `threshold` is a ratio of energies, so
+*smaller* is more aggressive. Only the repair-rate band transfers.
+
+**Crackle is a different algorithm, and this pipeline does not have it.** The same
+manual separates its DeClick and DeCrackle controls because:
+
+> "The detection/repair algorithms used for click removal are not particularly
+> attuned to the removal of very short (1–3 sample), rapidly repeated, small
+> clicks, which are usually heard as 'crackle' or 'buzz' (not 'hiss')."
+
+Its DeCrackle is "a post process which examines **every sample individually**",
+against click removal's "more **collective** decision making process".
+`block_ratio` is the collective kind. So when a listener reports crackle rather
+than discrete clicks, lowering `threshold` is the wrong lever — it buys false
+repairs on the music long before it addresses a bed of 1–3 sample events. Say that
+it is out of scope here instead of chasing it, and record it as a limitation.
+
+`params.confirm_k` is this engine's nearest equivalent to ClickRepair's **Pitch
+Protection**, which "avoids periodic false repairs to the hard edge of
+high-energy pitched sound, such as brass instruments and some voice". That is what
+makes a low rung usable on vocal material, so pair them rather than treating
+`confirm_k` as exotic.
+
+**Time-reversed processing does not transfer — do not implement it.** The same
+manual recommends reversing the file, processing, and reversing back, because
+"some percussive sounds have a sharp attack and relatively slower decay, and when
+played backwards, that becomes a slow attack with a sudden end", which its
+detector confuses less often. That benefit is about *false detection* and it
+requires a time-asymmetric detector. `block_ratio` is symmetric by construction:
+both the detect and the context window are centred means, and the high-pass ahead
+of them is zero-phase. Measured on one track at rung 20 — 112 events forward, 112
+with the input reversed and mapped back, 111 of them identical to within two
+samples, the single difference being one sample of rounding on the same event. The
+asymmetry in this engine is all in the *repair* (AR prediction, Hermite's
+one-sided tangents), which is not what the technique addresses.
+
+**Do not measure the residual over a window wide enough to contain music.** Every
+attempt to quantify "is the click gone" over ±30 ms, or against a median taken
+over ±300 ms, reports the track's own high-frequency content: on this record such
+a metric read 37 dB of "residual" where the sample values showed a clean repair,
+and a variant sweep built on it was void. Judge at the detector's own scale — a
+few hundred microseconds against its immediate neighbourhood — keep a control set
+of positions where nothing was detected, and when a figure and the sample values
+disagree, believe the samples.
+
 ## Decision guide
 
 1. **Algorithm** — `native` / `block_ratio`, the only one the native engine has.
@@ -216,6 +305,10 @@ interpolated audio. Present, before deciding:
   Give the in-cut figure in total and per minute, break it down per track so a
   concentration shows, and if you had to re-analyze to get the positions, say the
   figures come from that run;
+- **the repair rate, as a fraction of samples**, measured off the render and
+  placed against the 1-in-200-to-1-in-2000 band from *How much repair is normal*.
+  A rung below that band is doing less than the listener will notice, and saying so
+  is more useful than any count;
 - your recommendation and what it costs if it is wrong.
 
 `"enabled": false` is a legitimate answer and is often the right one.
@@ -249,6 +342,43 @@ whether the clicks are gone and, more importantly, whether anything else changed
 dulled transients, a smeared cymbal, a lost attack. Interpolated audio is what
 over-aggressive repair leaves behind, and it is audible long before the numbers
 look wrong.
+
+**Name the repairs in `mm:ss.ss` within the exported track, or the listening does
+not happen.** A track and a rate is not a place: "3:00 of 爪, 20.97/min" leaves
+someone scrubbing for a defect that lasts under half a millisecond. Take the
+positions from the sample-wise difference between the two renders, not from
+`clicks.positions_sample` — the diff is what the engine actually repaired on the
+split buffer, the positions are the analyzer's guess on the whole file, and they
+disagree by a few events. Merge spans closer than ~5 ms (one click can produce two
+adjacent ones), then give:
+
+- **the loudest three or four corrections**, as position, correction in dB and the
+  click's own peak — these are the ones a person can hear singly. On the pressing
+  this was added for, track 8's were 1:40.41 at −14.1 dB, 1:34.76 at −15.4 dB and
+  0:08.38 at −19.1 dB;
+- **for a periodic defect, the runs where it is densest**, as a time range rather
+  than a list. That record's `revolution_lock` of 19.32 was audible in two
+  stretches — 0:24.5–0:32.0, four ticks at exactly 1.80 s apart, and
+  1:13.1–1:27.6, seven of them — and naming those two settled a 62-event diagnosis
+  in fifteen seconds of listening. Quote the phase too: all 62 sat at 1.15–1.18 s
+  of the 1.8 s revolution, which is the evidence in one line;
+- **the album's peak, if the repair moved it.** A click is often the loudest
+  sample on a side: on that record the peak was a single tick at 0:25.79 of track
+  2, −9.1 dBFS, and removing it dropped the album peak from −9.10 to −10.21 dBFS.
+  Say so here, because it is 1.11 dB of gain that `plan-normalize` will find at
+  the next checkpoint and the two decisions otherwise look unrelated;
+- **where the corrections are all small, say the difference may be inaudible and
+  what follows from that.** Side A of that record had nothing above −26 dB, and
+  the honest framing was: if you hear nothing, either answer is fine; if you hear
+  a dulled attack, this side alone goes off. `enabled` is per plan, so per side.
+
+The A/B copies must share one gain. `review/split-loud/` already carries a flat
+gain from the previous checkpoint; apply **that same figure** to a
+`review/declick-loud/`, computed from the *split* render's peak and deliberately
+not recomputed. Recomputing makes the repaired copy louder by however much the
+repair took off the peak — 1.11 dB on that record — and a louder copy wins an A/B
+whatever the repair did. Say in the README of both that they differ by the repair
+alone.
 
 ## Rules
 
