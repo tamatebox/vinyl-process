@@ -31,11 +31,19 @@ From `analysis.json`:
   `programme_period_seconds` and `programme_peak_prominence` are `null` when no
   window lies wholly inside the programme, and the whole section is absent when
   its analyzer failed or was not selected.
+- `band_profile.bands[]` — `{low_hz, high_hz, floor_db, values_db}`, the level
+  per band over time. The instrument for a **band-limited entrance**, which is
+  what broadband level is blindest to. See *Surface or programme?* below.
 - `silence.regions[]` — `{start_sample, music_end_sample, music_start_sample,
   end_sample, mean_rms_db, duration_seconds, confidence}`.
   **`music_start_sample`, not `end_sample`, is where the next track begins**: the
   latter is a threshold crossing, so on a track that fades in it fires late and a
   cut placed there loses the entrance. The former is a lower bound and safe.
+  It is a lower bound *on the broadband level*, though, which is not the same as
+  the start of the music: where a track opens with a filtered element and the bass
+  arrives seconds later, `music_start_sample` marks the **bass**. On one 12" both
+  sides did exactly that and it cut 3.8 s off one intro and 7.3 s off the other.
+  Check it against `band_profile` before using it as the start of a track.
   **`music_end_sample`, not `start_sample`, is
   where the preceding track stopped**: `start_sample` is a fixed-threshold
   crossing, which on a fading track fires mid-fade (4 s early on one track of a
@@ -54,13 +62,45 @@ ways to answer it both fail.
 **Level fails** because a quiet outro and a run-out groove sit at the same level.
 That is what `lead_out_start_sample` gets wrong.
 
-**Spectrum fails, and fails convincingly.** A scuffed lead-in groove is *bright* —
-on one tested side it ran 25 dB above the run-out in the 3-8 kHz band, above the
-music as well. Brightness reads as programme and it is not. What does mark
-surface is the *absence of bass*: that lead-in sat level with the run-out below
-150 Hz and 13 dB under the quietest confirmed music.
+**Brightness fails, and fails convincingly.** A scuffed lead-in groove is
+*bright* — on one tested side it ran 25 dB above the run-out in the 3-8 kHz band,
+above the music as well; on another it was 20 dB above. Brightness reads as
+programme and it is not: abrasion is impulsive and impulses are broadband. So a
+whole-file `spectral` figure settles nothing, and neither does "is this stretch
+bright".
 
-**Periodicity is what settles it.** A groove defect repeats once per revolution —
+What works is not the *tilt* of the spectrum but a **step in one band while its
+neighbours hold still**, which is `band_profile`, and a **period**, which is
+`periodicity`. Two instruments, for two different questions:
+
+| The stretch in doubt | Read |
+|---|---|
+| level-matched with a quiet outro or a run-out — is it still the track? | `periodicity` |
+| a band-limited entrance the broadband level cannot see | `band_profile` |
+
+**`band_profile` is what finds an entrance.** Surface noise piles its energy into
+one band — on a played LP usually the lowest, because unequalised groove noise
+rises about 3 dB/octave and RIAA playback then boosts the bass and cuts the
+treble — and *that* band sets the broadband level. On one 12" a clean run-out fell
+monotonically from -71 dBFS in 40-150 Hz to -93 dBFS in 3-8 kHz. So an intro
+sitting 20-30 dB above the surface in 400-3000 Hz moves `rms_profile` by a
+fraction of a dB, which is why `silence` misses it. Per band, in one 0.2 s frame:
+
+- the entrance is a **step in a band with its neighbours unmoved** — on that
+  record, 400-1000 Hz up 18.5 dB and 1000-3000 Hz up 14.4 dB while 40-150 Hz and
+  150-400 Hz did not budge. Crackle cannot make that shape: it is broadband, so it
+  lifts several bands at once.
+- compare a band against **its own `floor_db`**, never another band's, and treat
+  `floor_db` as a percentile of the whole file rather than as the level of
+  silence — on a side that is mostly music it *is* a music level, so read steps
+  between frames, not absolute headroom.
+- a **single frame** that lifts one band is a tick, not an entrance. Require the
+  lift to persist.
+- the tilt still tells you *which kind* of surface you are looking at — falling
+  towards the top means smooth groove noise, a lifted top band means abrasion —
+  but never whether the stretch is programme.
+
+**Periodicity is what settles a tail.** A groove defect repeats once per revolution —
 1.8 s at 33 1/3 rpm, 1.333 s at 45 — and never on the beat. For a window in
 `periodicity.windows[]`:
 
@@ -88,10 +128,11 @@ the grid harder than the track does is still that track.
 The section is absent if its analyzer failed (`analyzers[]` says so) and
 `programme_period_seconds` / `programme_peak_prominence` are `null` when no window
 sat wholly inside the programme. Re-run `analyze --analyzers silence,periodicity`
-first — it is cheap. If it still cannot be had, do not fall back on level or
-spectrum, which is what this section exists to rule out: keep the longer cut, drop
-`decision.confidence` accordingly, and say in the rationale that the boundary is
-unconfirmed. Erring long ships fadeable surface noise; erring short truncates a
+first — it is cheap, and so is `analyze --analyzers band_profile` when the doubt
+is an entrance rather than a tail. If neither can be had, do not fall back on
+level or brightness, which is what this section exists to rule out: keep the
+longer cut, drop `decision.confidence` accordingly, and say in the rationale that
+the boundary is unconfirmed. Erring long ships fadeable surface noise; erring short truncates a
 track.
 
 ## Procedure
@@ -124,10 +165,16 @@ track.
 5. **Place each cut from `music_end_sample`, never from `start_sample`.** A
    reasonable shape for a side of separate tracks:
    - `end_sample` = the gap's `music_end_sample` + a tail of 0.3–0.5 s;
-   - `start_sample` = the gap's `music_start_sample` − a margin of about 50 ms.
-     Not a fixed pre-roll off `end_sample`: the margin a track actually needs
-     varies, and across one album it ran from 0.07 s to 0.42 s, so one figure
-     either clips an entrance or ships bare surface ahead of it;
+   - `start_sample` = the entrance − a margin of about 50 ms, where "the
+     entrance" is the gap's `music_start_sample` unless `band_profile` shows a
+     band-limited element starting earlier (see *Surface or programme?*), in
+     which case it is the first frame of that. Not a fixed pre-roll off
+     `end_sample`: the margin a track actually needs varies, and across one album
+     it ran from 0.07 s to 0.42 s, so one figure either clips an entrance or ships
+     bare surface ahead of it. 50 ms is the floor, not the target — asked to
+     judge, one person called 50 ms "stingy" across a whole record and 0.5 s was
+     adopted for all three tracks. It is a listening decision like any other, so
+     put it to them rather than defending the smallest number that works;
    - the dead middle of the gap is simply not exported (the contract allows a gap
      between tracks), and the tail is clamped so it never reaches the next
      track's pre-roll.
@@ -263,8 +310,8 @@ Alongside the audio, a table, one row per track: position, title, the duration y
 cut, the label's duration, and the difference. Then:
 
 - name the evidence each boundary came from (`silence`, `rms_valley`,
-  `periodicity`, or interpolated from durations because nothing was detected
-  there);
+  `band_profile`, `periodicity`, or interpolated from durations because nothing
+  was detected there);
 - explain every difference over ~5 s — the usual causes are a fade the threshold
   cut short and a label duration that does not match the pressing;
 - flag any boundary whose `music_end_sample` had to be overridden, and any place
@@ -315,11 +362,27 @@ still play first.
   album. Likewise the last track ends at its own `music_end_sample` (step 5), not
   at `lead_out_start_sample`. Cut *inside* a silence.
 
-  **When there is no opening region** — `lead_in_end_sample` is `null` and no
-  region starts at 0 — the side simply begins in music: start track 1 at sample 0
-  and say so in the rationale. Do not take the *next* region instead; that one is
-  the gap after track 1, and starting there would open the album at track 2's
-  entrance.
+  **Two ways the "opening region" is not the one you want**, both met on one 12":
+
+  - *The file opens with digital silence.* Side Y's first region ran 0-1.5 s at
+    −88.5 dBFS — the recorder running before the needle landed — and its
+    `music_start_sample` marked where the **lead-in crackle** began, 1.3 s in.
+    Taking it would have opened the track with 12.5 s of crackle.
+    `lead_in_end_sample` sat at the same false edge. Use the region that actually
+    precedes the music, which is the next one along, and confirm with
+    `band_profile` that what follows it is the music.
+  - *There is no region at 0 and `lead_in_end_sample` is `null`.* This rule used
+    to conclude "the side begins in music: start at sample 0". On side X of that
+    same record it does not: the file opens with the needle drop, a −28 dBFS
+    thump, and then 30 s of lead-in groove, and the drop's pop at 8.98 s was the
+    loudest sample of the whole side (−3.17 dBFS against −7.45 for the loudest
+    music). Starting at 0 would have shipped all of it. So check `band_profile`
+    before concluding a side begins in music — every band flat across 20 s, with
+    a step of 30 dB in one frame at the end of it, is a lead-in and not an
+    entrance — and start from the last silence region before that step.
+
+  What has *not* changed: do not reach past the gap that follows track 1 and start
+  there, which would open the album at track 2's entrance.
 - **Whatever margin you keep is bare surface, and that is where the clicks are.**
   Nothing masks them there, and the opening grooves are the most handled part of a
   record: on one album the first half-second of a track carried up to 45 times the
