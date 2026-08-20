@@ -48,7 +48,10 @@ Answers "is this plan executable?" — the questions the schema cannot: unknown 
 incapable engines, cuts past the end of the recording, fades longer than their
 track, a fade at a gapless join, a filename template that fails to render or
 collides, a source digest that no longer matches, an analysis of a different
-recording, normalizing a clipped source. Exits 65 if anything is fatal.
+recording, and the level decisions that end in a clipped album — an RMS target
+without a `peak_ceiling_db`, a ceiling with no headroom left for inter-sample
+peaks, a true peak the gain will push past full scale, and amplifying a source
+that is already clipped. Exits 65 if anything is fatal.
 
 ### execute
 

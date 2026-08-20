@@ -12,8 +12,12 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from vinyl_process.errors import ContractError
 
-SCHEMA_VERSION = "2.2"
-"""``MAJOR.MINOR``. Additive changes bump MINOR; breaking changes bump MAJOR."""
+SCHEMA_VERSION = "3.0"
+"""``MAJOR.MINOR``. Additive changes bump MINOR; breaking changes bump MAJOR.
+
+3.0 because ``silence.regions[].music_start_sample`` is required: a 2.x
+``analysis.json`` no longer validates, so consumers must refuse it rather than
+read a document missing the field the Split skill now cuts from."""
 
 Confidence = Annotated[float, Field(ge=0.0, le=1.0)]
 """How much a measurement can be trusted. 0 = worthless, 1 = certain."""

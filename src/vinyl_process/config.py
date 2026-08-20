@@ -48,8 +48,14 @@ class Preferences(ContractModel):
     dither: Literal["none", "tpdf"] = "none"
     track_filename_template: str = "{index:02d} - {title}"
 
-    normalize_mode: Literal["album_peak", "album_rms", "track_peak", "none"] = "album_peak"
+    normalize_mode: Literal["album_peak", "album_rms", "album_gated_rms", "track_peak", "none"] = (
+        "album_peak"
+    )
     normalize_target_db: float = Field(default=-1.0, le=0.0)
+    normalize_peak_ceiling_db: float | None = Field(default=-1.0, le=0.0)
+    """True-peak ceiling the plan should carry, in dBTP. -1.0 is what a later
+    lossy transcode needs; ``null`` asks for an uncapped gain, which only makes
+    sense on a peak mode whose target is already the ceiling."""
 
     declick_intent: DeclickIntent = "balanced"
     preferred_declick_engine: str = "native"
@@ -152,6 +158,7 @@ export_format = "flac"
 export_bit_depth = 24
 normalize_mode = "album_peak"
 normalize_target_db = -1.0
+normalize_peak_ceiling_db = -1.0
 declick_intent = "balanced"
 track_filename_template = "{index:02d} - {title}"
 """

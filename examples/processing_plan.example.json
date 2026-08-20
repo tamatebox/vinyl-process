@@ -1,5 +1,5 @@
 {
-  "schema_version": "2.2",
+  "schema_version": "3.0",
   "document_type": "processing_plan",
   "created_by": "plan-album",
   "source": {
@@ -75,7 +75,8 @@
     "enabled": true,
     "engine": "native",
     "mode": "album_peak",
-    "target_db": -1.0
+    "target_db": -1.0,
+    "peak_ceiling_db": null
   },
   "metadata": {
     "decision": {

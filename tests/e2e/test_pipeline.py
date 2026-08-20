@@ -129,6 +129,98 @@ def test_track_normalization_flattens_them(tmp_path: Path) -> None:
     assert "track_peak" in next(s for s in manifest.stages if s.stage == "normalize").detail
 
 
+def test_gated_normalization_ignores_the_silence_a_plain_rms_counts(tmp_path: Path) -> None:
+    """One track spanning the whole side — lead-in, gaps, run-out and all, which
+    is what an unsplit rip or a loose cut looks like. The ungated average counts
+    every silent second as programme and asks for a gain the music does not need.
+    """
+    recording = write_recording(tmp_path / "gappy.wav")
+    analysis = run_analysis(recording.path)
+
+    def whole_side(payload: dict[str, Any], mode: str) -> None:
+        payload["split"]["tracks"] = [
+            {"index": 1, "start_sample": 0, "end_sample": recording.num_frames}
+        ]
+        payload["metadata"]["tracks"] = [{"index": 1, "title": "Side A"}]
+        payload["normalize"].update(mode=mode, target_db=-14.0, peak_ceiling_db=-1.0)
+
+    base = build_plan(recording, analysis)
+    gated = run(
+        mutated(base, lambda p: whole_side(p, "album_gated_rms")), recording, tmp_path / "gated"
+    )
+    plain = run(mutated(base, lambda p: whole_side(p, "album_rms")), recording, tmp_path / "plain")
+    assert gated.applied_gain_db is not None
+    assert plain.applied_gain_db is not None
+    assert plain.applied_gain_db > gated.applied_gain_db + 1.0
+
+
+def test_the_peak_ceiling_caps_a_gain_the_level_target_asked_for(tmp_path: Path) -> None:
+    recording = write_recording(tmp_path / "ceiling.wav")
+    analysis = run_analysis(recording.path)
+    plan = mutated(
+        build_plan(recording, analysis),
+        lambda payload: payload["normalize"].update(
+            mode="album_gated_rms", target_db=0.0, peak_ceiling_db=-1.0
+        ),
+    )
+    manifest = run(plan, recording, tmp_path / "album")
+
+    assert manifest.applied_true_peak_db is not None
+    assert manifest.applied_true_peak_db == pytest.approx(-1.0, abs=0.01)
+    assert any("peak_ceiling_db" in warning for warning in manifest.warnings)
+    for output in manifest.outputs:
+        assert peak_db(Path(output.path)) <= -1.0
+
+
+def test_without_a_ceiling_a_clipped_export_still_reaches_the_receipt(tmp_path: Path) -> None:
+    """save_audio clamps, which is right; doing it silently was not."""
+    recording = write_recording(tmp_path / "clipping.wav")
+    analysis = run_analysis(recording.path)
+    plan = mutated(
+        build_plan(recording, analysis),
+        lambda payload: payload["normalize"].update(mode="album_rms", target_db=0.0),
+    )
+    manifest = run(plan, recording, tmp_path / "album")
+
+    assert manifest.applied_true_peak_db is not None
+    assert manifest.applied_true_peak_db > 0.0
+    assert any("clips" in warning for warning in manifest.warnings)
+
+
+def test_the_manifest_records_the_gain_it_actually_applied(
+    plan: ProcessingPlan, recording: SyntheticRecording, tmp_path: Path
+) -> None:
+    """Re-applying applied_gain_db must reproduce the export, so the recorded
+    value has to be the one that ran — not a rounding of it."""
+    manifest = run(plan, recording, tmp_path / "album")
+    assert manifest.applied_gain_db is not None
+    assert manifest.applied_track_gains_db is None
+
+    explicit = mutated(
+        plan,
+        lambda payload: payload["normalize"].update(mode="album_peak", target_db=round(-1.0, 4)),
+    )
+    again = run(explicit, recording, tmp_path / "again")
+    assert again.applied_gain_db == manifest.applied_gain_db
+    assert again.output_digests() == manifest.output_digests()
+
+
+def test_track_peak_records_every_gain_it_applied(tmp_path: Path) -> None:
+    recording = write_recording(tmp_path / "quiet-second.wav", level_scales=(1.0, 0.5))
+    analysis = run_analysis(recording.path)
+    plan = mutated(
+        build_plan(recording, analysis),
+        lambda payload: payload["normalize"].update(mode="track_peak"),
+    )
+    manifest = run(plan, recording, tmp_path / "album")
+
+    gains = manifest.applied_track_gains_db
+    assert gains is not None
+    assert len(gains) == len(manifest.outputs)
+    # The quiet track needed 6 dB more than the loud one to reach the same peak.
+    assert gains[1] - gains[0] == pytest.approx(6.02, abs=0.1)
+
+
 def test_declick_removes_clicks_from_the_exported_audio(
     plan: ProcessingPlan, recording: SyntheticRecording, tmp_path: Path
 ) -> None:

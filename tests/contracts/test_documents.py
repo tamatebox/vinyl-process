@@ -87,9 +87,11 @@ def test_major_version_gate() -> None:
     class Doc(VersionedDocument):
         pass
 
-    check_major_version(Doc(schema_version="2.999"))
-    with pytest.raises(ContractError, match="unsupported schema major version"):
-        check_major_version(Doc(schema_version="1.0"))
+    major = int(SCHEMA_VERSION.split(".")[0])
+    check_major_version(Doc(schema_version=f"{major}.999"))
+    for foreign in (f"{major - 1}.0", f"{major + 1}.0"):
+        with pytest.raises(ContractError, match="unsupported schema major version"):
+            check_major_version(Doc(schema_version=foreign))
 
 
 def test_split_requires_contiguous_non_overlapping_tracks() -> None:

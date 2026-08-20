@@ -63,9 +63,11 @@ SKILLS: tuple[SkillSpec, ...] = (
             "analysis.json#peaks",
             "analysis.json#dynamic_range",
             "analysis.json#clipping",
+            "analysis.json#spectral",
+            "analysis.json#recording_info",
             "vinyl-process.toml#preferences",
         ),
-        summary="Chooses the normalization strategy and target level.",
+        summary="Chooses the normalization strategy, target level and peak ceiling.",
     ),
     SkillSpec(
         name="plan-metadata",

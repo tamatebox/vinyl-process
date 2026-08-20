@@ -14,27 +14,44 @@ from vinyl_process.models.analysis import (
     RmsProfileSection,
 )
 from vinyl_process.models.common import SectionMeta
-from vinyl_process.signal_ops import EPS, amplitude_to_db, runs_of_true
+from vinyl_process.signal_ops import (
+    EPS,
+    TRUE_PEAK_OVERSAMPLE,
+    amplitude_to_db,
+    gated_rms,
+    runs_of_true,
+    true_peak,
+)
 
 
 @analyzer(
     name="peaks",
     version="1.0",
-    description="Sample peak, overall RMS and crest factor.",
+    description="Sample peak, true peak, overall and gated RMS, crest factor.",
+    defaults={"true_peak_oversample": TRUE_PEAK_OVERSAMPLE},
 )
 def analyze_peaks(context: AnalyzerContext) -> PeaksSection:
-    samples = context.audio.samples
+    audio = context.audio
+    samples = audio.samples
     magnitude = np.abs(samples)
     peak_index = int(np.argmax(magnitude.max(axis=1)))
     peak = float(magnitude[peak_index].max())
     rms = float(np.sqrt(np.mean(samples**2) + EPS))
     peak_db = float(amplitude_to_db(peak))
     rms_db = float(amplitude_to_db(rms))
+    oversample = context.integer("true_peak_oversample")
+    # Both extra figures are still direct measurements, so the confidence stays
+    # 1.0 — the true peak is an estimate of a *different* quantity, not a
+    # guess at this one.
+    reconstructed = float(amplitude_to_db(true_peak(samples, oversample)))
+    programme = float(amplitude_to_db(gated_rms(samples, audio.sample_rate)))
     return PeaksSection(
         meta=SectionMeta(confidence=1.0),
         peak_db=round(peak_db, 2),
         peak_sample=peak_index,
+        true_peak_db=round(max(reconstructed, peak_db), 2),
         rms_db=round(rms_db, 2),
+        gated_rms_db=round(programme, 2),
         crest_factor_db=round(peak_db - rms_db, 2),
     )
 

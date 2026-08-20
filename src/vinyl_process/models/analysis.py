@@ -51,6 +51,22 @@ class SilenceRegion(ContractModel):
     the trailing one, where the fade and the run-out sit at the same level).
     """
 
+    music_start_sample: int = Field(ge=0)
+    """Where the music *after* this region actually starts.
+
+    ``end_sample`` is where the level crossed the threshold, which for a track
+    that fades in happens late, so a cut placed there clips the entrance. This is
+    instead the last point at which the level is still on the region's own floor —
+    a lower bound, erring early, because a clipped entrance cannot be recovered.
+
+    Use it rather than a fixed pre-roll. The margin a track actually needs varies:
+    across one album it ran from 0.07 s to 0.42 s, and a single figure applied to
+    every track either clips an entrance or ships bare surface noise ahead of it.
+    That surface is where the clicks are — the first half-second of a track
+    carried up to 45 times the click density of the track itself, unmasked and cut
+    from the most handled part of the record. Equal to ``end_sample`` for a region
+    that runs to the last sample."""
+
     mean_rms_db: float
     duration_seconds: float = Field(ge=0)
     confidence: Confidence
@@ -217,7 +233,18 @@ class ClicksSection(Section):
 class PeaksSection(Section):
     peak_db: float
     peak_sample: int = Field(ge=0)
+    true_peak_db: float | None = None
+    """4x-oversampled estimate of the reconstructed waveform's ceiling, in dBTP.
+    Never below ``peak_db``; a resampler or a lossy encoder can turn the
+    difference into a real, clipping sample. ``None`` when the recording is too
+    short to oversample meaningfully."""
+
     rms_db: float
+    gated_rms_db: float | None = None
+    """RMS of the programme only, on BS.1770-4's gating geometry and without its
+    K-weighting. ``rms_db`` averages the inter-track gaps and the lead-in in
+    too, so the two differ by however much silence the side carries."""
+
     crest_factor_db: float
 
 

@@ -345,6 +345,18 @@
           "title": "Crest Factor Db",
           "type": "number"
         },
+        "gated_rms_db": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Gated Rms Db"
+        },
         "meta": {
           "$ref": "#/$defs/SectionMeta"
         },
@@ -360,6 +372,18 @@
         "rms_db": {
           "title": "Rms Db",
           "type": "number"
+        },
+        "true_peak_db": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "True Peak Db"
         }
       },
       "required": [
@@ -738,6 +762,11 @@
           "title": "Music End Sample",
           "type": "integer"
         },
+        "music_start_sample": {
+          "minimum": 0,
+          "title": "Music Start Sample",
+          "type": "integer"
+        },
         "start_sample": {
           "minimum": 0,
           "title": "Start Sample",
@@ -748,6 +777,7 @@
         "start_sample",
         "end_sample",
         "music_end_sample",
+        "music_start_sample",
         "mean_rms_db",
         "duration_seconds",
         "confidence"
@@ -1144,7 +1174,7 @@
       "default": null
     },
     "schema_version": {
-      "default": "2.2",
+      "default": "3.0",
       "title": "Schema Version",
       "type": "string"
     },

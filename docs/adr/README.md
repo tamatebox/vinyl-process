@@ -12,3 +12,5 @@ edited after acceptance — a reversal is a new record that supersedes the old o
 | [0004](0004-titles-live-in-metadata-only.md) | Track titles live only in the metadata section |
 | [0005](0005-dither-is-seeded.md) | Dither is seeded from the plan |
 | [0006](0006-engines-refuse-what-they-cannot-honour.md) | Engines refuse parameters they cannot honour |
+| [0007](0007-a-level-target-needs-a-true-peak-ceiling.md) | A level target needs a true-peak ceiling |
+| [0008](0008-album-gated-rms-is-a-separate-mode.md) | Gated RMS is a new mode, not a fix to `album_rms` |

@@ -11,10 +11,10 @@ anything outside its context.
 | `recording_info` | — | container subtype and bit depth, DC offset, per-channel peak/RMS, channel balance, stereo correlation |
 | `rms_profile` | — | windowed RMS envelope in dBFS |
 | `surface_noise` | `rms_profile` | noise-floor level and how stable it is |
-| `silence` | `rms_profile`, `surface_noise` | quiet regions relative to the measured floor, and where the music before each one actually stopped (`music_end_sample`) |
+| `silence` | `rms_profile`, `surface_noise` | quiet regions relative to the measured floor, and where the music around each one actually stopped and started (`music_end_sample`, `music_start_sample`) |
 | `boundaries` | `rms_profile`, `silence` | candidate cut points (silence, RMS valleys, spectral change) plus the playable region |
 | `clicks` | `silence` | count, rate, amplitude and width histograms, density per minute, rate in gaps versus under the programme, positions |
-| `peaks` | — | sample peak and its position, overall RMS, crest factor |
+| `peaks` | — | sample peak and its position, 4x-oversampled true peak, overall and gated RMS, crest factor |
 | `dynamic_range` | `rms_profile`, `peaks` | peak-to-loud-RMS estimate and the RMS distribution |
 | `clipping` | — | full-scale sample runs, longest run, ratio |
 | `spectral` | — | centroid, roll-off, rumble, hiss, band energies |

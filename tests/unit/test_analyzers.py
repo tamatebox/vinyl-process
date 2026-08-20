@@ -131,6 +131,74 @@ def test_music_end_follows_a_fade_past_the_silence_threshold(tmp_path) -> None:
     assert settled <= 6.0 + fade_seconds
 
 
+def test_music_start_precedes_a_fade_in_past_the_silence_threshold(tmp_path) -> None:
+    """The mirror case, and the one that ships surface noise rather than clipping.
+
+    A track that fades in crosses the threshold late, so a cut at ``end_sample``
+    loses the entrance. ``music_start_sample`` is where the level was last on the
+    gap's own floor, which is a lower bound and therefore safe. The fixed pre-roll
+    it replaces cannot be right for every track — the margin needed ran from
+    0.07 s to 0.42 s across one album.
+    """
+    import soundfile as sf
+
+    sample_rate = 16000
+    noise_amplitude = 4e-4
+    tone_amplitude = 0.5
+    fade_seconds = 20.0
+
+    def build(with_fade: bool) -> np.ndarray:
+        rng = np.random.default_rng(9)
+
+        def noise(seconds: float) -> np.ndarray:
+            return rng.normal(0.0, noise_amplitude, round(seconds * sample_rate))
+
+        def tone(seconds: float) -> np.ndarray:
+            t = np.arange(round(seconds * sample_rate)) / sample_rate
+            return tone_amplitude * np.sin(2 * np.pi * 220 * t)
+
+        parts = [noise(2.0), tone(4.0), noise(8.0)]
+        if with_fade:
+            decibels = np.linspace(
+                20 * np.log10(noise_amplitude / tone_amplitude),
+                0.0,
+                round(fade_seconds * sample_rate),
+            )
+            parts.append(tone(fade_seconds) * 10.0 ** (decibels / 20.0))
+        parts.append(tone(4.0))
+        return np.concatenate(parts)
+
+    def middle_region(with_fade: bool):
+        mono = build(with_fade)
+        path = tmp_path / f"rise-{with_fade}.wav"
+        sf.write(str(path), np.column_stack([mono, mono]), sample_rate, subtype="PCM_24")
+        document = run_analysis(path, analyzers=["silence"])
+        assert document.silence is not None
+        region = max(document.silence.regions, key=lambda r: r.duration_seconds)
+        return region.end_sample / sample_rate, region.music_start_sample / sample_rate
+
+    crossing, rising = middle_region(with_fade=False)
+    # Nothing to precede: the two agree to within the smoothing window.
+    assert abs(crossing - rising) < 1.0
+
+    crossing, rising = middle_region(with_fade=True)
+    # The threshold fires well into the fade-in, which begins at 14 s.
+    assert rising < crossing
+    assert crossing - rising > 1.0
+    # It does not reach the fade's true beginning, and cannot: a fade rising out
+    # of the noise floor is indistinguishable from the floor until it clears it.
+    # The same limitation the closing measurement has, in the same direction —
+    # what matters is that the answer never lands inside the music.
+    assert 14.0 - 1.0 <= rising <= 14.0 + 3.0
+
+
+def test_music_start_equals_the_end_for_a_trailing_region(analysis: AnalysisDocument) -> None:
+    """There is no music after the run-out, so there is nothing to precede."""
+    assert analysis.silence is not None
+    trailing = analysis.silence.regions[-1]
+    assert trailing.music_start_sample == trailing.end_sample
+
+
 def test_music_end_equals_the_start_for_a_leading_region(analysis: AnalysisDocument) -> None:
     """There is no music before the lead-in, so there is nothing to follow."""
     assert analysis.silence is not None
@@ -269,6 +337,12 @@ def test_peaks_and_dynamic_range(analysis: AnalysisDocument, recording: Syntheti
     assert peaks.peak_db == pytest.approx(20 * np.log10(recording.peak_amplitude), abs=0.05)
     assert 0 <= peaks.peak_sample < recording.num_frames
     assert peaks.crest_factor_db > 0
+    assert peaks.true_peak_db is not None
+    assert peaks.true_peak_db >= peaks.peak_db
+    # The fixture has a silent lead-in and inter-track gaps, which a plain RMS
+    # averages in and the gated measurement does not.
+    assert peaks.gated_rms_db is not None
+    assert peaks.gated_rms_db > peaks.rms_db
     assert dynamic_range.dr_estimate_db > 0
     assert (
         dynamic_range.percentiles.p05_db

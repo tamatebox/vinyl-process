@@ -1,5 +1,5 @@
 {
-  "schema_version": "2.2",
+  "schema_version": "3.0",
   "document_type": "analysis",
   "generated_by": "vinyl-process 0.1.0",
   "source": {
@@ -28,7 +28,7 @@
     },
     {
       "name": "silence",
-      "version": "1.1",
+      "version": "2.0",
       "status": "ok",
       "message": null,
       "duration_ms": null
@@ -142,7 +142,7 @@
   "silence": {
     "meta": {
       "analyzer": "silence",
-      "version": "1.1",
+      "version": "2.0",
       "params": {
         "margin_db": 8.0,
         "min_duration_seconds": 0.5,
@@ -157,6 +157,7 @@
         "start_sample": 0,
         "end_sample": 88200,
         "music_end_sample": 0,
+        "music_start_sample": 70560,
         "mean_rms_db": -68.01,
         "duration_seconds": 2.0,
         "confidence": 1.0
@@ -165,6 +166,7 @@
         "start_sample": 441000,
         "end_sample": 538020,
         "music_end_sample": 463050,
+        "music_start_sample": 520380,
         "mean_rms_db": -68.05,
         "duration_seconds": 2.2,
         "confidence": 1.0
@@ -173,6 +175,7 @@
         "start_sample": 846720,
         "end_sample": 956970,
         "music_end_sample": 868770,
+        "music_start_sample": 956970,
         "mean_rms_db": -68.05,
         "duration_seconds": 2.5,
         "confidence": 1.0
@@ -395,12 +398,16 @@
     "meta": {
       "analyzer": "peaks",
       "version": "1.0",
-      "params": {},
+      "params": {
+        "true_peak_oversample": 4
+      },
       "confidence": 1.0
     },
     "peak_db": -3.96,
     "peak_sample": 540227,
+    "true_peak_db": -3.96,
     "rms_db": -10.87,
+    "gated_rms_db": -9.44,
     "crest_factor_db": 6.91
   },
   "dynamic_range": {

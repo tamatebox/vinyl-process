@@ -28,6 +28,12 @@ Severity = Literal["error", "warning", "info"]
 
 MIN_REASONABLE_TRACK_SECONDS = 5.0
 
+MIN_HEADROOM_DB = 0.5
+
+THIN_TRUE_PEAK_DB = -0.7
+"""A lossy transcode wants 1 dB of true-peak headroom; below 0.3 dB of shortfall
+nobody would act on the difference, so that is where the finding starts."""
+
 
 @dataclass(frozen=True)
 class Finding:
@@ -56,6 +62,7 @@ def validate_plan(
     findings += _check_tracks(plan)
     findings += _check_cuts(plan)
     findings += _check_naming(plan)
+    findings += _check_normalize(plan)
     findings += _check_export(plan)
     if audio_path is not None:
         findings += _check_source(plan, Path(audio_path), check_digest=check_digest)
@@ -279,6 +286,60 @@ def _check_naming(plan: ProcessingPlan) -> list[Finding]:
     return findings
 
 
+def _check_normalize(plan: ProcessingPlan) -> list[Finding]:
+    """What can be said about the level decision from the plan alone.
+
+    The executor runs this too, so an unguarded RMS target reaches the run's own
+    warnings even when nobody linted the plan first.
+    """
+    normalize = plan.normalize
+    if not normalize.enabled or normalize.mode == "none":
+        return []
+
+    findings: list[Finding] = []
+    if normalize.mode in ("album_rms", "album_gated_rms") and normalize.peak_ceiling_db is None:
+        findings.append(
+            Finding(
+                "warning",
+                "rms-without-peak-ceiling",
+                f"{normalize.mode} hits a level target and says nothing about where the peaks "
+                "land; without normalize.peak_ceiling_db the export can clip",
+                "normalize.peak_ceiling_db",
+            )
+        )
+    if normalize.mode == "album_rms":
+        findings.append(
+            Finding(
+                "info",
+                "ungated-rms",
+                "album_rms averages the inter-track gaps and the lead-in in with the music, so "
+                "a side with long gaps measures quiet and normalizes loud; album_gated_rms "
+                "measures the programme only",
+                "normalize.mode",
+            )
+        )
+    # The ceiling is what the peaks actually end up against: an explicit
+    # peak_ceiling_db when there is one, otherwise the target the peak modes aim
+    # the sample peak at. An RMS target is not a ceiling, so it says nothing here.
+    if normalize.peak_ceiling_db is not None:
+        effective, where = normalize.peak_ceiling_db, "normalize.peak_ceiling_db"
+    elif normalize.mode in ("album_peak", "track_peak"):
+        effective, where = normalize.target_db, "normalize.target_db"
+    else:
+        return findings
+    if effective > -MIN_HEADROOM_DB:
+        findings.append(
+            Finding(
+                "warning",
+                "no-headroom",
+                f"a ceiling of {effective:+.2f} dB leaves nothing for inter-sample peaks; "
+                "-1.0 dB is the standard ceiling and is what a later lossy transcode needs",
+                where,
+            )
+        )
+    return findings
+
+
 def _check_export(plan: ProcessingPlan) -> list[Finding]:
     findings: list[Finding] = []
     if plan.export.dither != "none" and plan.export.bit_depth >= 24:
@@ -369,21 +430,7 @@ def _check_against_analysis(
             )
         )
         return findings
-    if (
-        analysis.clipping is not None
-        and analysis.clipping.clipped_region_count > 0
-        and plan.normalize.enabled
-        and plan.normalize.mode != "none"
-    ):
-        findings.append(
-            Finding(
-                "warning",
-                "normalize-clipped-source",
-                f"the source has {analysis.clipping.clipped_region_count} clipped region(s); "
-                "normalizing amplifies the damage instead of repairing it",
-                "normalize",
-            )
-        )
+    findings += _check_normalize_against_analysis(plan, analysis)
     if plan.split.enabled and analysis.boundaries is not None:
         lead_out = analysis.boundaries.lead_out_start_sample
         last = plan.split.tracks[-1].end_sample
@@ -397,4 +444,78 @@ def _check_against_analysis(
                     "split.tracks",
                 )
             )
+    return findings
+
+
+def _predicted_gain_db(plan: ProcessingPlan, analysis: AnalysisDocument) -> float | None:
+    """What the executor's gain will roughly come to, from the analysis.
+
+    Roughly, because the analyzer measured the whole recording while the executor
+    measures the tracks after the split and after declicking: the lead-in's
+    stylus drop and the run-out are in the first figure and not the second. Peak
+    modes therefore tend to under-predict the gain and RMS modes to over-predict
+    it. Good enough to spot a plan that will clip, not good enough to put in a
+    plan's rationale.
+    """
+    peaks = analysis.peaks
+    if peaks is None or not plan.normalize.enabled:
+        return None
+    mode = plan.normalize.mode
+    if mode in ("album_peak", "track_peak"):
+        reference: float = peaks.peak_db
+    elif mode == "album_gated_rms":
+        reference = peaks.gated_rms_db if peaks.gated_rms_db is not None else peaks.rms_db
+    elif mode == "album_rms":
+        reference = peaks.rms_db
+    else:
+        return None
+    return plan.normalize.target_db - reference
+
+
+def _check_normalize_against_analysis(
+    plan: ProcessingPlan, analysis: AnalysisDocument
+) -> list[Finding]:
+    findings: list[Finding] = []
+    gain = _predicted_gain_db(plan, analysis)
+    if gain is None:
+        return findings
+
+    if analysis.clipping is not None and analysis.clipping.clipped_region_count > 0 and gain > 0:
+        findings.append(
+            Finding(
+                "warning",
+                "normalize-clipped-source",
+                f"the source has {analysis.clipping.clipped_region_count} clipped region(s) and "
+                f"this plan turns the level up by about {gain:+.1f} dB; normalizing amplifies the "
+                "damage instead of repairing it",
+                "normalize",
+            )
+        )
+
+    peaks = analysis.peaks
+    if peaks is None or peaks.true_peak_db is None or plan.normalize.peak_ceiling_db is not None:
+        # With a ceiling set the executor caps the gain itself, so there is
+        # nothing here for a warning to add.
+        return findings
+    predicted = peaks.true_peak_db + gain
+    if predicted > 0.0:
+        findings.append(
+            Finding(
+                "warning",
+                "true-peak-over-full-scale",
+                f"the true peak lands near {predicted:+.1f} dBTP, so the export clips; set "
+                "normalize.peak_ceiling_db or lower normalize.target_db",
+                "normalize.target_db",
+            )
+        )
+    elif predicted > THIN_TRUE_PEAK_DB:
+        findings.append(
+            Finding(
+                "info",
+                "thin-true-peak-headroom",
+                f"the true peak lands near {predicted:+.1f} dBTP — under the 1 dB a lossy "
+                "transcode of this album would want, though the FLAC itself is fine",
+                "normalize.target_db",
+            )
+        )
     return findings

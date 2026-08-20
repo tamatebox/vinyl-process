@@ -220,6 +220,33 @@
       "default": null,
       "title": "Applied Gain Db"
     },
+    "applied_track_gains_db": {
+      "anyOf": [
+        {
+          "items": {
+            "type": "number"
+          },
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Applied Track Gains Db"
+    },
+    "applied_true_peak_db": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Applied True Peak Db"
+    },
     "completed_at": {
       "title": "Completed At",
       "type": "string"
@@ -256,7 +283,7 @@
       "type": "string"
     },
     "schema_version": {
-      "default": "2.2",
+      "default": "3.0",
       "title": "Schema Version",
       "type": "string"
     },

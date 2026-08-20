@@ -22,7 +22,7 @@ from vinyl_process.models.common import (
     VersionedDocument,
 )
 
-NormalizeMode = Literal["album_peak", "album_rms", "track_peak", "none"]
+NormalizeMode = Literal["album_peak", "album_rms", "album_gated_rms", "track_peak", "none"]
 ExportFormat = Literal["flac", "wav", "aiff"]
 DitherType = Literal["none", "tpdf"]
 
@@ -123,9 +123,18 @@ class DeclickPlan(EngineSection):
 # --------------------------------------------------------------------------- #
 class NormalizePlan(EngineSection):
     mode: NormalizeMode = "album_peak"
+    """``album_peak`` targets the sample peak, ``album_gated_rms`` the level of
+    the programme with silence gated out, ``album_rms`` the ungated average of
+    everything. ``track_peak`` exists but is discouraged because it destroys the
+    relative dynamics between tracks of one side."""
+
     target_db: float = Field(default=-1.0, le=0.0)
-    """Album-wide by default; ``track_peak`` exists but is discouraged because it
-    destroys the relative dynamics between tracks of one side."""
+    peak_ceiling_db: float | None = Field(default=None, le=0.0)
+    """True-peak ceiling in dBTP. The executor caps the gain so the 4x-oversampled
+    peak lands no higher — the guard an RMS target needs, since hitting a level
+    reference says nothing about where the peaks end up. ``None`` leaves the gain
+    uncapped; the executor still measures the true peak it produced and warns if
+    the export had to clip."""
 
 
 # --------------------------------------------------------------------------- #

@@ -368,11 +368,25 @@
           "enum": [
             "album_peak",
             "album_rms",
+            "album_gated_rms",
             "track_peak",
             "none"
           ],
           "title": "Mode",
           "type": "string"
+        },
+        "peak_ceiling_db": {
+          "anyOf": [
+            {
+              "maximum": 0.0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Peak Ceiling Db"
         },
         "target_db": {
           "default": -1.0,
@@ -645,7 +659,7 @@
       "type": "string"
     },
     "schema_version": {
-      "default": "2.2",
+      "default": "3.0",
       "title": "Schema Version",
       "type": "string"
     },

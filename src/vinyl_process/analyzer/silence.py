@@ -18,8 +18,8 @@ from vinyl_process.signal_ops import runs_of_true
 
 @analyzer(
     name="silence",
-    version="1.1",
-    description="Quiet regions, and where the music before each one stopped.",
+    version="2.0",
+    description="Quiet regions, and where the music around each one stops and starts.",
     requires=("rms_profile", "surface_noise"),
     defaults={
         "margin_db": 8.0,
@@ -77,6 +77,19 @@ def analyze_silence(context: AnalyzerContext) -> SilenceSection:
                     if start_sample == 0
                     else _music_end(smoothed, first, last, settle_margin_db, hop_samples)
                 ),
+                music_start_sample=(
+                    end_sample
+                    if last >= values.size
+                    else _music_start(
+                        smoothed,
+                        first,
+                        last,
+                        settle_margin_db,
+                        hop_samples,
+                        window_samples,
+                        num_frames,
+                    )
+                ),
                 mean_rms_db=round(float(np.mean(segment)), 2),
                 duration_seconds=round(duration_seconds, 3),
                 confidence=round(confidence, 2),
@@ -95,6 +108,53 @@ def _smooth(values: np.ndarray, frames: int) -> np.ndarray:
     if frames <= 1:
         return values
     return np.convolve(values, np.ones(frames) / frames, mode="same")
+
+
+def _music_start(
+    smoothed: np.ndarray,
+    first_frame: int,
+    last_frame: int,
+    settle_margin_db: float,
+    hop_samples: int,
+    window_samples: int,
+    num_frames: int,
+) -> int:
+    """Last sample at which the level is still on this region's own floor.
+
+    The mirror of :func:`_music_end`, and needed for the same reason at the other
+    edge. ``end_sample`` is a crossing of a fixed threshold, so for a track that
+    fades *in* it fires late, and a cut placed there clips the entrance. The
+    Split skill's answer to that was a fixed pre-roll reaching back into the gap,
+    which cannot be right for every track: measured across one album the margin
+    actually needed ran from 0.07 s to 0.42 s, so a single figure either clips an
+    entrance or ships bare surface noise. Bare surface is where the clicks are —
+    on that album the first half-second of a track carried up to 45 times the
+    click density of the track itself, because nothing masks them there and the
+    outer grooves are the most handled part of a record.
+
+    Searched backwards from the end of the region for the last frame still at the
+    surface's own level. The reference is the region's **median** rather than its
+    minimum, which is where this stops being a simple mirror: a fade-out decays
+    monotonically, so the first arrival at the floor means something, but the
+    stretch of bare surface before the next entrance is not monotonic at all. On
+    one measured gap it wandered over 11 dB, and taking the minimum as the
+    reference put the answer 4.6 s early — on a dip in the noise, not on the
+    music. The median is the level the surface actually sits at.
+
+    Erring early is the safe direction, so the answer is a lower bound on where
+    the music starts.
+    """
+    segment = smoothed[first_frame:last_frame]
+    if segment.size == 0:
+        return int(min(num_frames, first_frame * hop_samples))
+    reference = float(np.median(segment)) + settle_margin_db
+
+    for index in range(last_frame - 1, first_frame - 1, -1):
+        if float(smoothed[index]) <= reference:
+            return int(min(num_frames, index * hop_samples + window_samples))
+    # The whole region is already rising: err early, because a clipped entrance
+    # is not recoverable while a little faded surface noise is inaudible.
+    return int(first_frame * hop_samples)
 
 
 def _music_end(

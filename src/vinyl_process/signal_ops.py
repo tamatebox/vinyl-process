@@ -15,7 +15,7 @@ from collections.abc import Sequence
 import numpy as np
 import numpy.typing as npt
 from scipy.linalg import solve_toeplitz
-from scipy.signal import butter, sosfiltfilt
+from scipy.signal import butter, resample_poly, sosfiltfilt
 
 EPS = 1e-12
 """Floor for log/division so silence yields -240 dB instead of -inf."""
@@ -50,6 +50,117 @@ def windowed_rms(
     starts = np.arange(0, len(mono) - window + 1, hop)
     sums = cumulative[starts + window] - cumulative[starts]
     return np.asarray(np.sqrt(sums / window + EPS), dtype=np.float64)
+
+
+TRUE_PEAK_OVERSAMPLE = 4
+"""Oversampling factor ITU-R BS.1770-4 specifies for true-peak metering."""
+
+GATE_BLOCK_SECONDS = 0.4
+GATE_HOP_SECONDS = 0.1
+"""BS.1770-4's gating geometry: 400 ms blocks overlapping by 75 %."""
+
+ABSOLUTE_GATE_DB = -70.0
+RELATIVE_GATE_DB = -10.0
+"""BS.1770-4's two gate thresholds, the second relative to the absolute-gated mean."""
+
+_TRUE_PEAK_CHUNK = 1 << 19
+_TRUE_PEAK_MARGIN = 1 << 12
+
+
+def true_peak(samples: np.ndarray, oversample: int = TRUE_PEAK_OVERSAMPLE) -> float:
+    """Peak of the *reconstructed* waveform, as linear amplitude.
+
+    A sample-peak reading sees only the stored samples, so it misses the
+    inter-sample peaks any reconstruction filter puts back: material reading
+    -0.1 dBFS can reconstruct above 0 dBTP, and a resampler or a lossy encoder
+    then realises that as a real sample. BS.1770-4 estimates the true ceiling by
+    oversampling 4x before taking the maximum, which is what this does — with a
+    polyphase FIR rather than the standard's exact filter, so it is a close
+    estimate and not a certified reading.
+
+    The result is an upper bound on the sample peak of *any* later resampling of
+    the same material, which is what makes it the right quantity to hold a
+    ceiling against.
+
+    Chunked with overlap, because a 20-minute side upsampled 4x in one piece
+    would need gigabytes. Only the interior of each chunk is read, so the
+    zero-padded chunk edges cannot contribute a spurious maximum.
+    """
+    data = np.asarray(samples, dtype=np.float64)
+    if data.ndim == 1:
+        data = data[:, None]
+    if data.size == 0:
+        return 0.0
+    frames = data.shape[0]
+    if oversample <= 1 or frames < 4 * oversample:
+        return float(np.max(np.abs(data)))
+
+    margin = min(_TRUE_PEAK_MARGIN, frames)
+    peak = 0.0
+    for start in range(0, frames, _TRUE_PEAK_CHUNK):
+        stop = min(start + _TRUE_PEAK_CHUNK, frames)
+        left = min(margin, start)
+        right = min(margin, frames - stop)
+        block = resample_poly(data[start - left : stop + right], oversample, 1, axis=0)
+        interior = block[left * oversample : block.shape[0] - right * oversample]
+        peak = max(peak, float(np.max(np.abs(interior))))
+    return peak
+
+
+def rms_blocks(
+    samples: np.ndarray,
+    sample_rate: int,
+    *,
+    block_seconds: float = GATE_BLOCK_SECONDS,
+    hop_seconds: float = GATE_HOP_SECONDS,
+) -> npt.NDArray[np.float64]:
+    """Per-block RMS (linear amplitude) on BS.1770-4's block geometry.
+
+    Channels are averaged, not summed, so a value is directly comparable with
+    the plain ``peaks.rms_db`` of the same material. Kept separate from
+    :func:`gated_rms_of_blocks` so an album-wide measurement can pool the blocks
+    of every track before gating — the same rule ReplayGain's album gain uses.
+    """
+    data = np.asarray(samples, dtype=np.float64)
+    if data.ndim == 1:
+        data = data[:, None]
+    if data.size == 0:
+        return np.zeros(0)
+    mono = np.sqrt(np.mean(data**2, axis=1))
+    return windowed_rms(mono, sample_rate, block_seconds, hop_seconds)
+
+
+def gated_rms_of_blocks(blocks: npt.NDArray[np.float64]) -> float:
+    """Apply BS.1770-4's two gates to pooled blocks and return the RMS of what
+    survives, as linear amplitude.
+
+    An ungated average over a whole side counts the inter-track gaps, the fades
+    and the lead-in as programme, so a side with long gaps measures quieter than
+    it sounds — and after normalization to a fixed RMS target it comes out too
+    loud. The absolute gate drops silence; the relative gate, 10 dB under the
+    mean of what the absolute gate left, drops the quiet tail.
+
+    The gates and the geometry are BS.1770-4's; the K-weighting is *not* applied,
+    so this is a level measurement in dBFS and never loudness in LUFS.
+    """
+    if blocks.size == 0:
+        return 0.0
+    surviving = blocks[np.asarray(amplitude_to_db(blocks)) > ABSOLUTE_GATE_DB]
+    if surviving.size == 0:
+        # Everything is below the absolute gate: the material really is silence,
+        # and reporting its level is more useful than reporting nothing.
+        return float(np.sqrt(np.mean(blocks**2)))
+    ungated = float(np.sqrt(np.mean(surviving**2)))
+    threshold = float(amplitude_to_db(ungated)) + RELATIVE_GATE_DB
+    loud = surviving[np.asarray(amplitude_to_db(surviving)) > threshold]
+    if loud.size == 0:  # pragma: no cover - a flat signal sits exactly on the gate
+        loud = surviving
+    return float(np.sqrt(np.mean(loud**2)))
+
+
+def gated_rms(samples: np.ndarray, sample_rate: int) -> float:
+    """:func:`rms_blocks` followed by :func:`gated_rms_of_blocks`, for one buffer."""
+    return gated_rms_of_blocks(rms_blocks(samples, sample_rate))
 
 
 def runs_of_true(flags: np.ndarray) -> list[tuple[int, int]]:

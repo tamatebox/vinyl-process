@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
+from scipy.signal import resample_poly
 
 from vinyl_process.signal_ops import (
     CONTEXT_FLOOR,
@@ -13,6 +14,8 @@ from vinyl_process.signal_ops import (
     confirm_clicks_sinusoidal,
     correlation_at,
     db_to_amplitude,
+    gated_rms,
+    gated_rms_of_blocks,
     highpass,
     local_bounds,
     merge_runs,
@@ -21,9 +24,11 @@ from vinyl_process.signal_ops import (
     periodicity_peaks,
     phase_concentration,
     repair_clicks,
+    rms_blocks,
     runs_of_true,
     sinusoidal_residual,
     transient_onsets,
+    true_peak,
     windowed_rms,
 )
 
@@ -441,3 +446,110 @@ def test_phase_concentration_separates_a_once_per_revolution_tick_from_scatter()
     # Too few positions is not a figure of zero.
     nan_r, _nan_z = phase_concentration([1, 2], SAMPLE_RATE, period)
     assert nan_r != nan_r
+
+
+# --------------------------------------------------------------------------- #
+# true peak
+# --------------------------------------------------------------------------- #
+def sine(amplitude: float, freq: float, seconds: float, phase: float = 0.0) -> np.ndarray:
+    t = np.arange(int(SAMPLE_RATE * seconds)) / SAMPLE_RATE
+    return amplitude * np.sin(2 * np.pi * freq * t + phase)
+
+
+def test_true_peak_sees_what_falls_between_the_samples() -> None:
+    """At a quarter of the sample rate with a 45 degree phase, no sample lands on
+    a crest: the stored maximum is 3 dB below the waveform's real one."""
+    signal = sine(0.95, SAMPLE_RATE / 4, 0.5, phase=np.pi / 4)
+    stored = float(np.max(np.abs(signal)))
+    assert stored == pytest.approx(0.95 / np.sqrt(2), rel=1e-6)
+    assert true_peak(signal) == pytest.approx(0.95, rel=0.02)
+
+
+def test_true_peak_is_never_below_the_sample_peak() -> None:
+    signal = tonal(1.0)
+    assert true_peak(signal) >= float(np.max(np.abs(signal))) - 1e-9
+
+
+def test_true_peak_bounds_the_sample_peak_of_a_later_resampling() -> None:
+    """The property the peak ceiling relies on: resampling cannot exceed it."""
+    signal = sine(0.9, SAMPLE_RATE / 4, 0.5, phase=np.pi / 4)
+    ceiling = true_peak(signal)
+    for up, down in ((3, 2), (48, 44), (2, 1)):
+        resampled = resample_poly(signal, up, down)
+        assert float(np.max(np.abs(resampled))) <= ceiling * 1.001
+
+
+def test_true_peak_handles_stereo_short_and_empty_input() -> None:
+    stereo = np.stack([sine(0.5, 1000, 0.2), sine(0.25, 1000, 0.2)], axis=1)
+    assert true_peak(stereo) == pytest.approx(0.5, rel=0.02)  # the louder channel wins
+    assert true_peak(np.zeros(0)) == 0.0
+    # Too short to oversample meaningfully: fall back to the stored maximum.
+    short = np.array([0.0, 0.4, -0.2])
+    assert true_peak(short) == pytest.approx(0.4)
+    assert true_peak(stereo, oversample=1) == pytest.approx(float(np.max(np.abs(stereo))))
+
+
+def test_true_peak_is_chunk_boundary_invariant() -> None:
+    """Chunking is an implementation detail, so it must not change the answer."""
+    from vinyl_process import signal_ops
+
+    signal = sine(0.8, 3000, 3.0, phase=0.3)
+    whole = true_peak(signal)
+    original = signal_ops._TRUE_PEAK_CHUNK
+    try:
+        signal_ops._TRUE_PEAK_CHUNK = 4096
+        chunked = true_peak(signal)
+    finally:
+        signal_ops._TRUE_PEAK_CHUNK = original
+    assert chunked == pytest.approx(whole, rel=1e-6)
+
+
+# --------------------------------------------------------------------------- #
+# gated RMS
+# --------------------------------------------------------------------------- #
+def test_gating_ignores_the_silence_a_plain_average_counts() -> None:
+    """Half a side of silence pulls a plain RMS down 3 dB; the gate does not."""
+    loud = sine(0.5, 440, 4.0)
+    side = np.concatenate([loud, np.zeros(loud.size)])
+    plain = float(np.sqrt(np.mean(side**2)))
+    gated = gated_rms(side, SAMPLE_RATE)
+    assert 20 * np.log10(gated / plain) == pytest.approx(3.0, abs=0.3)
+    assert gated == pytest.approx(float(np.sqrt(np.mean(loud**2))), rel=0.05)
+
+
+def test_the_relative_gate_drops_a_quiet_tail_the_absolute_one_keeps() -> None:
+    loud = sine(0.5, 440, 4.0)
+    # -40 dB down: far above the -70 absolute gate, far below the relative one.
+    tail = sine(0.005, 440, 4.0)
+    both = gated_rms(np.concatenate([loud, tail]), SAMPLE_RATE)
+    assert both == pytest.approx(gated_rms(loud, SAMPLE_RATE), rel=0.02)
+
+
+def test_gating_reports_a_level_when_everything_is_below_the_absolute_gate() -> None:
+    """Silence is still worth a number: -240 dB is more useful than nothing."""
+    assert gated_rms(np.zeros(SAMPLE_RATE), SAMPLE_RATE) < db_to_amplitude(-70.0)
+    assert gated_rms_of_blocks(np.zeros(0)) == 0.0
+
+
+def test_pooling_gates_the_album_as_one_piece() -> None:
+    """The album rule: one relative gate for every track's blocks together.
+
+    A quiet track measured on its own sets its own reference and survives; pooled
+    into an album it falls under the album's gate and stops counting. That is the
+    difference between track gain and album gain.
+    """
+    loud, quiet = sine(0.5, 440, 3.0), sine(0.05, 660, 3.0)
+    assert gated_rms(quiet, SAMPLE_RATE) == pytest.approx(
+        float(np.sqrt(np.mean(quiet**2))), rel=0.05
+    )
+    pooled = gated_rms_of_blocks(
+        np.concatenate([rms_blocks(loud, SAMPLE_RATE), rms_blocks(quiet, SAMPLE_RATE)])
+    )
+    assert pooled == pytest.approx(gated_rms(loud, SAMPLE_RATE), rel=0.02)
+
+
+def test_rms_blocks_average_channels_so_the_figure_matches_a_plain_rms() -> None:
+    mono = sine(0.4, 440, 2.0)
+    stereo = np.stack([mono, mono], axis=1)
+    assert gated_rms(stereo, SAMPLE_RATE) == pytest.approx(gated_rms(mono, SAMPLE_RATE), rel=1e-9)
+    assert rms_blocks(np.zeros((0, 2)), SAMPLE_RATE).size == 0

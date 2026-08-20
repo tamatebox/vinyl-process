@@ -1,5 +1,5 @@
 {
-  "schema_version": "2.2",
+  "schema_version": "3.0",
   "document_type": "manifest",
   "generated_by": "vinyl-process 0.1.0",
   "run_key": "0000000000000000000000000000000000000000000000000000000000000000",
@@ -37,7 +37,7 @@
       "status": "applied",
       "engine": "native",
       "engine_version": "…",
-      "params_digest": "72c891c4f3f3812f2234cf471cfe1ac098d7ae725da83a6cb6615a87ea523ac6",
+      "params_digest": "5560a5be1068811b00c22825e23cd2fdf5d3d7efc542eefd8e75100682928abb",
       "detail": "mode=album_peak gain_db=+2.9618"
     },
     {
@@ -66,12 +66,14 @@
     }
   ],
   "applied_gain_db": 2.9618,
+  "applied_track_gains_db": null,
+  "applied_true_peak_db": -0.9944,
   "outputs": [
     {
       "track_index": 1,
       "path": "album/01 - First Movement.flac",
       "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
-      "bytes": 472615,
+      "bytes": 471350,
       "num_samples": 357210,
       "sample_rate": 44100,
       "duration_seconds": 8.1,
@@ -83,7 +85,7 @@
       "track_index": 2,
       "path": "album/02 - Second Movement.flac",
       "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
-      "bytes": 483368,
+      "bytes": 467666,
       "num_samples": 313110,
       "sample_rate": 44100,
       "duration_seconds": 7.1,

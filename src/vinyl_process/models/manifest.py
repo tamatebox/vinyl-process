@@ -55,6 +55,16 @@ class ExecutionManifest(VersionedDocument):
     plan: DocumentRef
     stages: list[StageRecord] = Field(default_factory=list)
     applied_gain_db: float | None = None
+    """The one album-wide gain, exactly as applied. ``None`` for ``track_peak``,
+    which has no single value, and when the stage was skipped."""
+
+    applied_track_gains_db: list[float] | None = None
+    """One gain per output, in ``outputs`` order. Only ``track_peak`` fills this."""
+
+    applied_true_peak_db: float | None = None
+    """True peak of the audio as exported — after gain, after any resampling.
+    Above 0 means the export clipped; the matching warning says which track."""
+
     outputs: list[OutputFile] = Field(default_factory=list)
     environment: dict[str, str] = Field(default_factory=dict)
     started_at: str

@@ -33,7 +33,7 @@ happened.
 
 ```jsonc
 {
-  "schema_version": "2.1",
+  "schema_version": "3.0",
   "document_type": "analysis",
   "generated_by": "vinyl-process 0.1.0",
   "source": { "path": "side-a.wav", "sha256": "…", "sample_rate": 44100,
@@ -58,6 +58,8 @@ happened.
                                     "music_end_sample": 0,   // where the music
                                     // before this region really stopped, which on
                                     // a fading track is well past start_sample
+                                    "music_start_sample": 88200,  // and where the music after it
+                                    // starts, which on a fading-in track is before end_sample
                                     "end_sample": 88200,
                                     "mean_rms_db": -68.0, "duration_seconds": 2.0,
                                     "confidence": 0.93 } ] },
@@ -75,7 +77,11 @@ happened.
                      "density_per_minute": [5.0],
                      "positions_sample": [...], "positions_truncated": false },
   "peaks":         { "peak_db": -3.96, "peak_sample": 123456,
-                     "rms_db": -19.2, "crest_factor_db": 15.3 },
+                     "true_peak_db": -3.71,   // where the waveform goes *between*
+                                              // samples; never below peak_db
+                     "rms_db": -19.2,
+                     "gated_rms_db": -9.44,   // programme only, gaps gated out
+                     "crest_factor_db": 15.3 },
   "dynamic_range": { "dr_estimate_db": 12.8, "loud_rms_db": -16.7,
                      "percentiles": { "p05_db": -68.0, "p50_db": -21.0,
                                       "p95_db": -16.7 } },
@@ -130,6 +136,21 @@ music measures. Do not read `baseline_r` as a mark of surface noise on its own �
 on a tested side the crackling lead-in sat at 0.17 while the run-out groove, a
 far cleaner tick, sat at -0.03.
 
+`peaks.true_peak_db` is a 4x-oversampled estimate of the reconstructed
+waveform's ceiling (ITU-R BS.1770-4's method, a polyphase FIR rather than the
+standard's exact filter). It matters because the executor resamples *after*
+normalizing and because a lossy encoder reconstructs too: material at
+-0.1 dBFS can come back above 0 dBTP. It is the quantity
+`normalize.peak_ceiling_db` is held against.
+
+`peaks.gated_rms_db` measures the programme and not the silence, on BS.1770-4's
+400 ms / 75 %-overlap blocks with its absolute (-70) and relative (-10) gates.
+`rms_db` averages the inter-track gaps, the fades and the lead-in in too, so the
+two differ by however much silence the side carries — which is exactly why a
+plain RMS target normalizes a gappy side too loud. Channels are averaged rather
+than summed as BS.1770 would, so the figure is directly comparable with `rms_db`,
+and it is a level in dBFS, never loudness in LUFS.
+
 `meta.params` records the parameters actually used, so a measurement stays
 explainable years later. `meta.confidence` is `1.0` for direct measurements
 (peaks, channel levels), lower for estimators (0.75 for click statistics, 0.7 for
@@ -144,7 +165,7 @@ block: which skill decided, why, how confident it was, and what it consulted.
 
 ```jsonc
 {
-  "schema_version": "2.1",
+  "schema_version": "3.0",
   "document_type": "processing_plan",
   "created_by": "plan-album",
   "source": { …same shape as analysis.source; sha256 is verified before running… },
@@ -175,10 +196,14 @@ block: which skill decided, why, how confident it was, and what it consulted.
 
   "normalize": {
     "enabled": true, "engine": "native",
-    "mode": "album_peak",             // album_peak | album_rms | track_peak | none
-    "target_db": -1.0
+    "mode": "album_peak",             // album_peak | album_gated_rms | album_rms |
+                                      // track_peak | none
+    "target_db": -1.0,
+    "peak_ceiling_db": -1.0           // dBTP; null leaves the gain uncapped
     // The gain arithmetic is deterministic and runs post-declick in the executor;
-    // the strategy and target are the decision, recorded here.
+    // the strategy, the target and the ceiling are the decision, recorded here.
+    // A level target says nothing about where the peaks land, so an RMS mode
+    // without a ceiling can drive the export into a clip — see adr/0007.
   },
 
   "metadata": {
@@ -223,7 +248,7 @@ Written next to the exported album. This is the receipt.
 
 ```jsonc
 {
-  "schema_version": "2.1",
+  "schema_version": "3.0",
   "document_type": "manifest",
   "generated_by": "vinyl-process 0.1.0",
   "run_key": "…",                    // digest over (source digest, plan digest)
@@ -238,6 +263,8 @@ Written next to the exported album. This is the receipt.
       "detail": "mode=album_peak gain_db=+2.9618" }
   ],
   "applied_gain_db": 2.9618,          // null for track_peak (one gain per track)
+  "applied_track_gains_db": null,     // the per-track gains, when track_peak ran
+  "applied_true_peak_db": -0.9944,    // of the audio as written; above 0 = clipped
   "outputs": [
     { "track_index": 1, "path": "album/01 - Speak to Me.flac", "sha256": "…",
       "bytes": 475509, "num_samples": 357210, "sample_rate": 44100,
@@ -255,6 +282,12 @@ Written next to the exported album. This is the receipt.
 fields allowed to differ between two runs of the same plan. Everything else —
 `run_key`, `applied_gain_db`, every output digest — must match, and
 `vinyl-process verify` proves it.
+
+`applied_true_peak_db` is measured on the audio as exported, after gain and after
+any resampling, so it is where the album really ended up rather than where the
+plan aimed. `warnings` carries the two things a level decision can get wrong: a
+gain the ceiling had to cap (the target level was *not* reached) and a track whose
+samples had to be clamped on write.
 
 ## Metadata sources
 

@@ -154,10 +154,12 @@ rounding, its `adeclick` is its own algorithm. See [dsp-engines.md](dsp-engines.
 validate the plan (engines, ranges, filenames, source digest) — refuse on error
 load source ─▶ split      (sample-exact cuts + the fades the plan asked for)
             ─▶ declick    (per track, engine and parameters from the plan)
-            ─▶ normalize  (strategy and target from the plan; gain measured
-                           post-declick, because repair changes peaks)
+            ─▶ normalize  (strategy, target and ceiling from the plan; gain
+                           measured post-declick, because repair changes peaks,
+                           then capped against the true peak)
             ─▶ resample   (only if the plan asks for a different rate)
-            ─▶ export     (container, bit depth, dither, naming from the plan)
+            ─▶ export     (container, bit depth, dither, naming from the plan;
+                           records the true peak it wrote, warns if it clipped)
             ─▶ metadata   (tags written into the exported files)
             ─▶ manifest.json
 ```
@@ -201,14 +203,32 @@ each other.
 ## Normalization policy
 
 Album-wide gain is the default: one gain value derived from a whole-album
-measurement, preserving the relative dynamics between tracks. `album_peak` and
-`album_rms` are album-wide; `track_peak` exists in the contract but the
-plan-normalize skill is instructed to avoid it except for compilations assembled
-from genuinely mismatched sources.
+measurement, preserving the relative dynamics between tracks. `album_peak`,
+`album_gated_rms` and `album_rms` are album-wide; `track_peak` exists in the
+contract but the plan-normalize skill is instructed to avoid it except for
+compilations assembled from genuinely mismatched sources.
 
 The skill chooses the *strategy and target*; the executor measures after declick
 and computes the gain. That split is deliberate — see
 [adr/0003-normalization-gain-is-computed-at-execution.md](adr/0003-normalization-gain-is-computed-at-execution.md).
+
+The plan carries a second, independent decision: `peak_ceiling_db`, in dBTP. A
+peak mode's `target_db` is its own ceiling, but a level target is not — it says
+how loud, not how high — so an RMS mode without a ceiling used to drive the export
+straight into `save_audio`'s clamp with nothing in the manifest to show it. When a
+ceiling is set the executor caps the gain against the 4x-oversampled peak, which
+bounds the sample peak of any later resampling, and warns that the target level
+was not reached. Either way it measures the true peak of what it writes into
+`applied_true_peak_db` and warns per track when samples had to be clamped, so
+clipping is never silent. See
+[adr/0007-a-level-target-needs-a-true-peak-ceiling.md](adr/0007-a-level-target-needs-a-true-peak-ceiling.md).
+
+Which measurement a mode uses is part of the mode id, not a parameter:
+`album_gated_rms` measures over BS.1770-4's blocks with its two gates and pools
+every track's blocks first, so the inter-track gaps stop counting as programme,
+while `album_rms` keeps its ungated average for the case where that is genuinely
+what someone quoted —
+[adr/0008-album-gated-rms-is-a-separate-mode.md](adr/0008-album-gated-rms-is-a-separate-mode.md).
 
 ## Configuration
 
@@ -272,6 +292,17 @@ end to end for determinism.
 - **`mad_interpolate` is a short-gap repairer.** It removes clicks up to a few
   milliseconds and leaves seams around −60 dBFS; wider damage needs a predictive
   (LPC/Janssen) interpolator, which would be a new algorithm id in the same engine.
-- **No loudness (LUFS) normalization.** `album_rms` is a plain RMS target; EBU R128
-  would be a new `NormalizeMode` plus a loudness analyzer.
+- **No loudness (LUFS) normalization.** `album_gated_rms` has BS.1770-4's block
+  geometry, its two gates and ReplayGain's album pooling, so it measures the
+  programme rather than the silence — but no K-weighting, which is what separates
+  a level in dBFS from loudness in LUFS. `album_lufs` would be that filter plus
+  conformance tests against the EBU Tech 3341 vectors, and is deliberately absent
+  until both exist.
+- **No subsonic filter and no DC blocking.** Warp rumble at 0.5–8 Hz and a DC
+  offset both inflate the peak a peak mode normalizes against, so an affected
+  transfer comes out quieter than the music warrants for reasons nobody can hear.
+  `spectral.rumble_db` and `recording_info.dc_offset` measure it and
+  `plan-normalize` is told to name it in the rationale; nothing removes it. A
+  filter would be a new stage, and on the preservation-versus-listening line it
+  belongs upstream in `vinyl-archive` at least as much as here.
 - **No de-noise, de-hum, azimuth or speed correction stages.**

@@ -187,18 +187,123 @@ def test_analysis_digest_drift_warns(plan: ProcessingPlan, analysis: AnalysisDoc
     assert "analysis-digest-drift" in codes(findings)
 
 
-def test_normalizing_a_clipped_source_warns(
-    plan: ProcessingPlan, analysis: AnalysisDocument
-) -> None:
+def clipped_analysis(analysis: AnalysisDocument) -> AnalysisDocument:
     assert analysis.clipping is not None
-    clipped = analysis.model_copy(
+    return analysis.model_copy(
         update={
             "clipping": analysis.clipping.model_copy(
                 update={"clipped_region_count": 3, "clipped_sample_count": 30}
             )
         }
     )
+
+
+def test_normalizing_a_clipped_source_warns(
+    plan: ProcessingPlan, analysis: AnalysisDocument
+) -> None:
+    clipped = clipped_analysis(analysis)
     assert "normalize-clipped-source" in codes(validate_plan(plan, analysis=clipped))
+
+
+def test_a_clipped_source_is_not_flagged_when_the_gain_is_negative(
+    plan: ProcessingPlan, analysis: AnalysisDocument
+) -> None:
+    """Turning a clipped capture *down* amplifies nothing, so there is nothing to
+    warn about — the old check fired on the mode alone and was simply wrong."""
+    assert analysis.peaks is not None
+    target = analysis.peaks.peak_db - 6.0
+    quieter = mutated(plan, lambda payload: payload["normalize"].update(target_db=target))
+    findings = codes(validate_plan(quieter, analysis=clipped_analysis(analysis)))
+    assert "normalize-clipped-source" not in findings
+
+
+@pytest.mark.parametrize("mode", ["album_rms", "album_gated_rms"])
+def test_an_rms_target_without_a_peak_ceiling_warns(plan: ProcessingPlan, mode: str) -> None:
+    uncapped = mutated(plan, lambda payload: payload["normalize"].update(mode=mode))
+    assert "rms-without-peak-ceiling" in codes(validate_plan(uncapped))
+
+
+def test_an_rms_target_with_a_peak_ceiling_is_accepted(plan: ProcessingPlan) -> None:
+    with_ceiling = mutated(
+        plan,
+        lambda payload: payload["normalize"].update(
+            mode="album_gated_rms", target_db=-18.0, peak_ceiling_db=-1.0
+        ),
+    )
+    assert "rms-without-peak-ceiling" not in codes(validate_plan(with_ceiling))
+
+
+def test_the_ungated_rms_mode_says_what_it_measures(plan: ProcessingPlan) -> None:
+    ungated = mutated(
+        plan,
+        lambda payload: payload["normalize"].update(mode="album_rms", peak_ceiling_db=-1.0),
+    )
+    assert "ungated-rms" in codes(validate_plan(ungated))
+    gated = mutated(
+        plan,
+        lambda payload: payload["normalize"].update(mode="album_gated_rms", peak_ceiling_db=-1.0),
+    )
+    assert "ungated-rms" not in codes(validate_plan(gated))
+
+
+def test_a_ceiling_at_full_scale_warns_about_headroom(plan: ProcessingPlan) -> None:
+    at_zero = mutated(plan, lambda payload: payload["normalize"].update(target_db=0.0))
+    findings = [f for f in validate_plan(at_zero) if f.code == "no-headroom"]
+    assert [f.location for f in findings] == ["normalize.target_db"]
+
+    explicit = mutated(
+        plan,
+        lambda payload: payload["normalize"].update(
+            mode="album_gated_rms", target_db=-18.0, peak_ceiling_db=0.0
+        ),
+    )
+    findings = [f for f in validate_plan(explicit) if f.code == "no-headroom"]
+    assert [f.location for f in findings] == ["normalize.peak_ceiling_db"]
+
+    # An RMS target is a level, not a ceiling, so it says nothing about headroom.
+    quiet_target = mutated(
+        plan,
+        lambda payload: payload["normalize"].update(
+            mode="album_gated_rms", target_db=0.0, peak_ceiling_db=-1.0
+        ),
+    )
+    assert "no-headroom" not in codes(validate_plan(quiet_target))
+
+
+def test_a_gain_that_pushes_the_true_peak_past_full_scale_warns(
+    plan: ProcessingPlan, analysis: AnalysisDocument
+) -> None:
+    assert analysis.peaks is not None
+    loud = mutated(
+        plan,
+        lambda payload: payload["normalize"].update(mode="album_rms", target_db=0.0),
+    )
+    assert "true-peak-over-full-scale" in codes(validate_plan(loud, analysis=analysis))
+    # A ceiling makes the executor cap the gain, so the warning has nothing to add.
+    guarded = mutated(
+        plan,
+        lambda payload: payload["normalize"].update(
+            mode="album_rms", target_db=0.0, peak_ceiling_db=-1.0
+        ),
+    )
+    assert "true-peak-over-full-scale" not in codes(validate_plan(guarded, analysis=analysis))
+
+
+def test_thin_true_peak_headroom_is_informational(
+    plan: ProcessingPlan, analysis: AnalysisDocument
+) -> None:
+    assert analysis.peaks is not None
+    # Force a wide inter-sample margin: the sample peak target is then met while
+    # the reconstructed waveform lands well above it.
+    wide = analysis.model_copy(
+        update={
+            "peaks": analysis.peaks.model_copy(
+                update={"true_peak_db": analysis.peaks.peak_db + 0.8}
+            )
+        }
+    )
+    findings = {f.code: f.severity for f in validate_plan(plan, analysis=wide)}
+    assert findings.get("thin-true-peak-headroom") == "info"
 
 
 def test_a_track_reaching_into_the_run_out_is_informational(

@@ -25,8 +25,12 @@ From `analysis.json`:
   `periodicity` before trusting either.
 - `periodicity.windows[]` — the answer to "is this stretch music or surface?",
   which level and spectrum cannot give. See *Surface or programme?* below.
-- `silence.regions[]` — `{start_sample, music_end_sample, end_sample, mean_rms_db,
-  duration_seconds, confidence}`. **`music_end_sample`, not `start_sample`, is
+- `silence.regions[]` — `{start_sample, music_end_sample, music_start_sample,
+  end_sample, mean_rms_db, duration_seconds, confidence}`.
+  **`music_start_sample`, not `end_sample`, is where the next track begins**: the
+  latter is a threshold crossing, so on a track that fades in it fires late and a
+  cut placed there loses the entrance. The former is a lower bound and safe.
+  **`music_end_sample`, not `start_sample`, is
   where the preceding track stopped**: `start_sample` is a fixed-threshold
   crossing, which on a fading track fires mid-fade (4 s early on one track of a
   tested pressing, 22 s on another).
@@ -101,7 +105,10 @@ the grid harder than the track does is still that track.
 5. **Place each cut from `music_end_sample`, never from `start_sample`.** A
    reasonable shape for a side of separate tracks:
    - `end_sample` = the gap's `music_end_sample` + a tail of 0.3–0.5 s;
-   - `start_sample` = the gap's `end_sample` − a pre-roll of 0.3–0.5 s;
+   - `start_sample` = the gap's `music_start_sample` − a margin of about 50 ms.
+     Not a fixed pre-roll off `end_sample`: the margin a track actually needs
+     varies, and across one album it ran from 0.07 s to 0.42 s, so one figure
+     either clips an entrance or ships bare surface ahead of it;
    - the dead middle of the gap is simply not exported (the contract allows a gap
      between tracks), and the tail is clamped so it never reaches the next
      track's pre-roll.
@@ -236,8 +243,8 @@ gain cannot change the shape of an edge, only whether it is loud enough to notic
   continues where side A stopped (6, 7, …) so both sides export into one directory
   with correct filenames and tags. Indices must be contiguous and ascending;
   tracks must not overlap; the dead middle of a gap stays in neither track.
-- Start the first track from the first silence region's `end_sample`, less the
-  same pre-roll every other track gets — **not** from `lead_in_end_sample`. That
+- Start the first track from the first silence region's `music_start_sample`, less
+  the same margin every other track gets — **not** from `lead_in_end_sample`. That
   marker is where the lead-in groove stops, and the needle drop lands *after* it:
   on both sides of a tested pressing the loudest sample of the whole side was the
   drop itself, at −3.4 dBFS between `lead_in_end_sample` and the first gap, against
@@ -245,6 +252,14 @@ gain cannot change the shape of an edge, only whether it is loud enough to notic
   1 and then hands it to `album_peak`, which costs 5.6 dB of gain across the whole
   album. Likewise the last track ends at its own `music_end_sample` (step 5), not
   at `lead_out_start_sample`. Cut *inside* a silence.
+- **Whatever margin you keep is bare surface, and that is where the clicks are.**
+  Nothing masks them there, and the opening grooves are the most handled part of a
+  record: on one album the first half-second of a track carried up to 45 times the
+  click density of the track itself. Keep the margin because a clipped entrance
+  cannot be recovered, but do not expect trimming it to fix a click a listener
+  complains about — measured on that album, the audible one was 23 dB louder than
+  anything in the margin and sat *after* the music had started. Reaching for a
+  longer fade-in instead is worse: it shapes the signal to hide the symptom.
 - Titles do not belong here — they live in the `metadata` section. The plan must
   not carry the same string twice.
 - Both edges need a fade, and a short one is what is needed. A vinyl cut lands in

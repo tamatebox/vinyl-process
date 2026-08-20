@@ -18,6 +18,7 @@ import platform
 import sys
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import assert_never
 
 import numpy as np
 from scipy.signal import resample_poly
@@ -41,7 +42,13 @@ from vinyl_process.models.manifest import (
 )
 from vinyl_process.models.plan import ProcessingPlan, TrackBoundary
 from vinyl_process.planning.validation import raise_for_errors, validate_plan
-from vinyl_process.signal_ops import EPS, amplitude_to_db
+from vinyl_process.signal_ops import (
+    EPS,
+    amplitude_to_db,
+    gated_rms_of_blocks,
+    rms_blocks,
+    true_peak,
+)
 
 logger = get_logger(__name__)
 MANIFEST_NAME = "manifest.json"
@@ -101,6 +108,8 @@ class _Execution:
         self.stages: list[StageRecord] = []
         self.warnings: list[str] = []
         self.applied_gain_db: float | None = None
+        self.applied_track_gains_db: list[float] | None = None
+        self.applied_true_peak_db: float | None = None
 
     # ------------------------------------------------------------------ #
     def run(self) -> ExecutionManifest:
@@ -135,6 +144,8 @@ class _Execution:
             ),
             stages=self.stages,
             applied_gain_db=self.applied_gain_db,
+            applied_track_gains_db=self.applied_track_gains_db,
+            applied_true_peak_db=self.applied_true_peak_db,
             outputs=outputs,
             environment=_environment(),
             started_at=started_at,
@@ -187,46 +198,89 @@ class _Execution:
 
         engine = self._engine(normalize.engine, "gain")
         target = normalize.target_db
+        mode = normalize.mode
 
-        if normalize.mode == "album_peak":
-            peak = max(float(np.max(np.abs(buffer.samples))) for buffer in buffers)
+        if mode == "track_peak":
+            # Permitted by the contract, discouraged by the skill, because it
+            # destroys the relative dynamics the pressing was mastered with.
+            gains = [
+                round(
+                    self._capped(
+                        target - float(amplitude_to_db(np.max(np.abs(buffer.samples)))), [buffer]
+                    ),
+                    4,
+                )
+                for buffer in buffers
+            ]
+            self.applied_track_gains_db = gains
+            self._record(
+                "normalize",
+                "applied",
+                engine=engine,
+                section=normalize,
+                detail="mode=track_peak gains_db=" + ", ".join(f"{gain:+.4f}" for gain in gains),
+            )
+            return [
+                engine.apply_gain(buffer, gain) for buffer, gain in zip(buffers, gains, strict=True)
+            ]
+
+        if mode == "album_peak":
+            peak = max((float(np.max(np.abs(b.samples))) for b in buffers), default=0.0)
             gain = target - float(amplitude_to_db(peak))
-            return self._apply_album_gain(engine, buffers, gain, "album_peak")
-
-        if normalize.mode == "album_rms":
+        elif mode == "album_gated_rms":
+            # Pooling every track's blocks before gating is ReplayGain's album
+            # rule: the album is measured as one continuous piece of programme.
+            blocks = [rms_blocks(b.samples, b.sample_rate) for b in buffers]
+            pooled = np.concatenate(blocks) if blocks else np.zeros(0)
+            gain = target - float(amplitude_to_db(gated_rms_of_blocks(pooled)))
+        elif mode == "album_rms":
             energy = sum(float(np.sum(buffer.samples**2)) for buffer in buffers)
             count = sum(buffer.samples.size for buffer in buffers)
-            rms_db = float(amplitude_to_db(np.sqrt(energy / max(count, 1) + EPS)))
-            return self._apply_album_gain(engine, buffers, target - rms_db, "album_rms")
+            gain = target - float(amplitude_to_db(np.sqrt(energy / max(count, 1) + EPS)))
+        else:
+            # A new mode is a new measurement, never a fall-through into this
+            # one: mypy fails the build until the branch exists.
+            assert_never(mode)
 
-        # track_peak: permitted by the contract, discouraged by the skill, because
-        # it destroys the relative dynamics the pressing was mastered with.
-        gains = [
-            target - float(amplitude_to_db(np.max(np.abs(buffer.samples)))) for buffer in buffers
-        ]
-        self._record(
-            "normalize",
-            "applied",
-            engine=engine,
-            section=normalize,
-            detail="mode=track_peak gains_db=" + ", ".join(f"{gain:+.3f}" for gain in gains),
+        return self._apply_album_gain(engine, buffers, self._capped(gain, buffers), mode)
+
+    def _capped(self, gain_db: float, buffers: list[AudioBuffer]) -> float:
+        """``gain_db``, reduced if it would carry the true peak past the ceiling.
+
+        Hitting a level target says nothing about where the peaks land, so an RMS
+        mode without this guard can drive the export straight into
+        ``save_audio``'s clip. The ceiling holds against the *true* peak because
+        that bounds the sample peak of any later resampling too.
+        """
+        ceiling = self.plan.normalize.peak_ceiling_db
+        if ceiling is None or not buffers:
+            return gain_db
+        reconstructed = max(true_peak(buffer.samples) for buffer in buffers)
+        headroom = ceiling - float(amplitude_to_db(reconstructed))
+        if gain_db <= headroom:
+            return gain_db
+        self.warnings.append(
+            f"normalize: {self.plan.normalize.mode} asked for {gain_db:+.4f} dB but "
+            f"peak_ceiling_db {ceiling:+.2f} dBTP allows only {headroom:+.4f} dB; "
+            "the gain was capped and the target level was not reached"
         )
-        return [
-            engine.apply_gain(buffer, gain) for buffer, gain in zip(buffers, gains, strict=True)
-        ]
+        return headroom
 
     def _apply_album_gain(
         self, engine: DspEngine, buffers: list[AudioBuffer], gain_db: float, mode: str
     ) -> list[AudioBuffer]:
-        self.applied_gain_db = round(gain_db, 4)
+        # Record and apply the *same* rounded value, so the manifest describes
+        # exactly what was done rather than something 1e-15 away from it.
+        gain = round(gain_db, 4)
+        self.applied_gain_db = gain
         self._record(
             "normalize",
             "applied",
             engine=engine,
             section=self.plan.normalize,
-            detail=f"mode={mode} gain_db={self.applied_gain_db:+.4f}",
+            detail=f"mode={mode} gain_db={gain:+.4f}",
         )
-        return [engine.apply_gain(buffer, gain_db) for buffer in buffers]
+        return [engine.apply_gain(buffer, gain) for buffer in buffers]
 
     def _resample(self, buffers: list[AudioBuffer]) -> list[AudioBuffer]:
         target = self.plan.export.sample_rate
@@ -251,6 +305,32 @@ class _Execution:
             for buffer in buffers
         ]
 
+    def _measure_export(self, track: TrackBoundary, buffer: AudioBuffer) -> None:
+        """Record the true peak of what is about to be written, and say so if it
+        will not fit.
+
+        ``save_audio`` clamps to full scale, which is the right thing for it to
+        do and the wrong thing to do silently: without this the album could come
+        out clipped with nothing in the receipt to show it. Measured here rather
+        than in ``_normalize`` because resampling comes in between and turns
+        inter-sample peaks into real ones.
+        """
+        reconstructed = round(float(amplitude_to_db(true_peak(buffer.samples))), 4)
+        self.applied_true_peak_db = (
+            reconstructed
+            if self.applied_true_peak_db is None
+            else max(self.applied_true_peak_db, reconstructed)
+        )
+        over = int(np.count_nonzero(np.abs(buffer.samples) > 1.0))
+        if over:
+            peak_db = float(amplitude_to_db(np.max(np.abs(buffer.samples))))
+            ceiling = self.plan.normalize.peak_ceiling_db
+            self.warnings.append(
+                f"track {track.index} clips: {over} sample(s) past full scale, peaking at "
+                f"{peak_db:+.2f} dBFS, clamped on write; normalize.peak_ceiling_db "
+                + ("is not set" if ceiling is None else f"is {ceiling:+.2f} dBTP")
+            )
+
     def _export(self, tracks: list[TrackBoundary], buffers: list[AudioBuffer]) -> list[OutputFile]:
         export = self.plan.export
         self.output_dir.mkdir(parents=True, exist_ok=True)
@@ -263,6 +343,7 @@ class _Execution:
                 raise ExecutionError(
                     f"{path} already exists; pass overwrite=True (CLI: --overwrite) to replace it"
                 )
+            self._measure_export(track, buffer)
             save_audio(
                 path,
                 buffer,
