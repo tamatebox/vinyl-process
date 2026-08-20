@@ -54,6 +54,12 @@ conclude must be *in* the plan.
    `styles`, `label`, `catalog_number`, and the resolved `discogs_release_id`
    and/or `musicbrainz_release_id`.
 
+   Apply `preferences.album_suffix` to `album` if it is set — `" [Vinyl Ripping]"`
+   and the like, appended verbatim, so a rip stays distinguishable from a digital
+   edition of the same album sitting next to it. It goes in the tag only: the
+   filenames come from `tracks[].title`. Write the combined string into the plan
+   rather than the rule, the same way the comment is composed.
+
    **A resolved field is not a wanted field.** A Discogs release will fill more of
    this section than most people want written into their library, and the tag set
    is theirs to choose: on the album this note comes from, four of the fields that

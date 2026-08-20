@@ -154,3 +154,11 @@ def test_a_named_environment_path_is_refused_rather_than_skipped(
     write(tmp_path / "vinyl-process.toml", '[preferences]\nexport_format = "wav"\n')
     with pytest.raises(ConfigError, match="not found"):
         load_config()
+
+
+def test_the_album_suffix_is_a_preference_with_no_default(tmp_path: Path) -> None:
+    """Appending anything to an album tag is the user's convention, so nothing is
+    appended until they say so."""
+    assert default_config().preferences.album_suffix is None
+    path = write(tmp_path / "suffix.toml", '[preferences]\nalbum_suffix = " [Vinyl Ripping]"\n')
+    assert load_config(path).preferences.album_suffix == " [Vinyl Ripping]"

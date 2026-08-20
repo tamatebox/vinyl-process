@@ -73,6 +73,15 @@ class Preferences(ContractModel):
     prefer_original_release_year: bool = True
     title_style: TitleStyle = "as_printed"
 
+    album_suffix: str | None = None
+    """Appended to the album tag, e.g. ``" [Vinyl Ripping]"``, to keep a rip
+    distinguishable from a digital edition of the same album in one library.
+    Include the leading space; it is concatenated verbatim. Like every preference
+    it is read by planning skills only — plan-metadata applies it and the plan
+    carries the finished string, so the executor never sees the rule, only the
+    result. It touches the tag and not the filenames, which are rendered from
+    ``metadata.tracks[].title``."""
+
 
 class RipChain(ContractModel):
     """The equipment the transfer came through. Every field is optional, because

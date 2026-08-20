@@ -115,8 +115,19 @@ too far with it.
 `review/split-loud/` is not a rung on the ladder at all. It is `review/split/`
 with one flat gain applied outside the plan, so that a tail is loud enough to
 judge; nothing is ever compared against it and it carries no manifest. See
-[plan-split](../plan-split/SKILL.md). Delete `review/` once `album/` is agreed; on a 35-minute album
-each render is around 175 MB.
+[plan-split](../plan-split/SKILL.md). Delete `review/` once `album/` is agreed — on a 35-minute
+album the renders and their figures came to 972 MB against 217 MB for the album:
+
+```sh
+python scripts/clean_job.py jobs/<record>            # what would go
+python scripts/clean_job.py jobs/<record> --delete
+```
+
+It lists rather than deletes unless told, removes from an allow-list so anything
+it does not recognise is reported and left alone, and refuses while `album/`
+cannot stand in for what is being deleted — every manifest's outputs must exist
+and still match their recorded digests. Nothing makes it touch a recording, a
+plan or an analysis.
 
 ## Looking at the render
 
