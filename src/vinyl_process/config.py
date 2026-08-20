@@ -142,6 +142,10 @@ threshold_ladder = [10.0, 20.0, 35.0, 50.0, 75.0, 100.0, 150.0, 250.0, 400.0]
 # Which rung is promoted to the top-level count and rates. A reporting choice.
 threshold_ratio = 50.0
 max_width_ms = 2.0
+# One turn of the platter: 1.8 at 33 1/3 rpm, 1.3333 at 45. Detections that
+# fold onto one phase of it are a defect crossing the groove spiral — surface
+# damage, and the audible kind, so those must be kept rather than discarded.
+revolution_seconds = 1.8
 
 [preferences]
 export_format = "flac"

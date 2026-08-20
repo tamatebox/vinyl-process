@@ -149,6 +149,21 @@ class ThresholdPoint(ContractModel):
     silence_rate_per_minute: float | None = Field(default=None, ge=0)
     programme_rate_per_minute: float | None = Field(default=None, ge=0)
 
+    revolution_r: float | None = None
+    """Phase concentration of this rung's detections on the platter's period —
+    ``[analyzer.clicks] revolution_seconds``. 0 is evenly spread, 1 is all struck
+    at the same point of the turn."""
+
+    revolution_lock: float | None = None
+    """Rayleigh's ``n*r**2`` for the same figure. Its null distribution is
+    exponential with mean 1 regardless of how many detections there are, so rungs
+    are comparable: 3 is suggestive, 5 strong.
+
+    A high value means a defect crossing the groove spiral, struck once per
+    revolution. That is surface damage of the most audible kind and the one case
+    where periodic detections must be *kept* — reading "periodic" as "musical"
+    would discard exactly the clicks a listener notices most."""
+
     onset_coincidence: float | None = None
     """How much more often than chance this rung's detections sit on a rising
     edge. 1.0 means the detector is indifferent to note attacks; large means it is

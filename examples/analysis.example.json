@@ -1,5 +1,5 @@
 {
-  "schema_version": "2.1",
+  "schema_version": "2.2",
   "document_type": "analysis",
   "generated_by": "vinyl-process 0.1.0",
   "source": {
@@ -275,6 +275,7 @@
         "detect_ms": 0.2,
         "context_ms": 40.0,
         "max_width_ms": 2.0,
+        "revolution_seconds": 1.8,
         "highpass_hz": 3000.0,
         "max_positions": 5000
       },
@@ -302,6 +303,8 @@
         "rate_per_minute": 19.35,
         "silence_rate_per_minute": 0.0,
         "programme_rate_per_minute": 28.0,
+        "revolution_r": 0.6053,
+        "revolution_lock": 2.56,
         "onset_coincidence": 0.0
       },
       {
@@ -310,6 +313,8 @@
         "rate_per_minute": 19.35,
         "silence_rate_per_minute": 0.0,
         "programme_rate_per_minute": 28.0,
+        "revolution_r": 0.6053,
+        "revolution_lock": 2.56,
         "onset_coincidence": 0.0
       },
       {
@@ -318,6 +323,8 @@
         "rate_per_minute": 19.35,
         "silence_rate_per_minute": 0.0,
         "programme_rate_per_minute": 28.0,
+        "revolution_r": 0.6053,
+        "revolution_lock": 2.56,
         "onset_coincidence": 0.0
       },
       {
@@ -326,6 +333,8 @@
         "rate_per_minute": 19.35,
         "silence_rate_per_minute": 0.0,
         "programme_rate_per_minute": 28.0,
+        "revolution_r": 0.6053,
+        "revolution_lock": 2.57,
         "onset_coincidence": 0.0
       },
       {
@@ -334,6 +343,8 @@
         "rate_per_minute": 19.35,
         "silence_rate_per_minute": 0.0,
         "programme_rate_per_minute": 28.0,
+        "revolution_r": 0.6053,
+        "revolution_lock": 2.57,
         "onset_coincidence": 0.0
       },
       {
@@ -342,6 +353,8 @@
         "rate_per_minute": 19.35,
         "silence_rate_per_minute": 0.0,
         "programme_rate_per_minute": 28.0,
+        "revolution_r": 0.6053,
+        "revolution_lock": 2.57,
         "onset_coincidence": 0.0
       },
       {
@@ -350,6 +363,8 @@
         "rate_per_minute": 19.35,
         "silence_rate_per_minute": 0.0,
         "programme_rate_per_minute": 28.0,
+        "revolution_r": 0.6054,
+        "revolution_lock": 2.57,
         "onset_coincidence": 0.0
       },
       {
@@ -358,6 +373,8 @@
         "rate_per_minute": 0.0,
         "silence_rate_per_minute": 0.0,
         "programme_rate_per_minute": 0.0,
+        "revolution_r": null,
+        "revolution_lock": null,
         "onset_coincidence": null
       },
       {
@@ -366,6 +383,8 @@
         "rate_per_minute": 0.0,
         "silence_rate_per_minute": 0.0,
         "programme_rate_per_minute": 0.0,
+        "revolution_r": null,
+        "revolution_lock": null,
         "onset_coincidence": null
       }
     ],

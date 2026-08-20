@@ -56,8 +56,29 @@ because a gap is unmasked. The programme rate falls below it by however much the
 music masks — which is a feature, not a loss: a click you cannot hear under the
 programme does not need interpolating.
 
-Pick the lowest rung whose silence rate clearly dominates the programme rate, then
-**verify it by ear before trusting it**. Cut two seconds around the loudest few of
+**The two rates are not enough on their own.** Two more figures come with each
+rung and both have overturned a choice made on the rates alone:
+
+- `onset_coincidence` — how much more often than chance the rung's detections land
+  on a rising edge. Near 1 means the detector is indifferent to note attacks;
+  several times that means it is following them, and the repair would interpolate
+  over the attacks. On the pressing this was written against, a rung whose silence
+  rate beat its programme rate 43.8 to 1 still read 7.8, and a lower rung the same
+  ratio had accepted produced detections spaced at the beat rather than at the
+  platter. Every rung of that record read above 2, which is itself the answer: no
+  threshold was safe on it, and repair stayed off.
+- `revolution_lock` — Rayleigh's statistic for the detections folded onto the
+  platter's period. Its null is exponential with mean 1 whatever the count, so
+  rungs are comparable; 3 is suggestive and 5 strong. **A high value argues for
+  repair, not against it.** A defect crossing the groove spiral is struck at the
+  same phase of every turn, and that tick is the most audible damage a record can
+  have. Reading "periodic" as "musical" would throw away exactly the clicks a
+  listener notices most.
+
+So: reject rungs where the rates are at parity, reject rungs whose
+`onset_coincidence` sits well above 1 unless `revolution_lock` explains them, and
+among what survives pick the lowest. Then **verify it by ear before trusting it**.
+Cut two seconds around the loudest few of
 its gap detections, amplify so the surface is audible at all, and listen for the
 click at the position it claims. This is the only positive evidence available: a
 gap holds no programme material, so anything impulsive there is damage by

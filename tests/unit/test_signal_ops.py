@@ -19,6 +19,7 @@ from vinyl_process.signal_ops import (
     onset_coincidence,
     onset_flux,
     periodicity_peaks,
+    phase_concentration,
     repair_clicks,
     runs_of_true,
     sinusoidal_residual,
@@ -408,3 +409,35 @@ def test_sinusoidal_confirmation_keeps_a_click_and_needs_its_k_stated() -> None:
     assert len(kept) == 1, "the candidate over undamaged tone should not survive"
     # A high enough k rejects everything, which is why it cannot have a default.
     assert confirm_clicks_sinusoidal(signal, candidates, k=100.0) == []
+
+
+def test_phase_concentration_separates_a_once_per_revolution_tick_from_scatter() -> None:
+    """The check for the one kind of periodic damage that must be kept.
+
+    A defect crossing the groove spiral is struck at the same phase of every turn,
+    so its detections fold onto a single point of the period; dust and pressing
+    pits do not. Rayleigh's z is used rather than r because its null does not
+    depend on how many detections there are, which is what makes rungs of the
+    sweep with wildly different counts comparable.
+    """
+    period = 1.8
+    turns = np.arange(30)
+    locked = [round((turn * period + 0.41) * SAMPLE_RATE) for turn in turns]
+    r_locked, z_locked = phase_concentration(locked, SAMPLE_RATE, period)
+    assert r_locked > 0.95
+    assert z_locked > 20.0
+
+    rng = np.random.default_rng(11)
+    scattered = sorted(int(v) for v in rng.integers(0, int(60 * SAMPLE_RATE), turns.size))
+    _r, z_scattered = phase_concentration(scattered, SAMPLE_RATE, period)
+    assert z_scattered < 6.0, "unlocked positions must not look locked"
+    assert z_locked > 4 * z_scattered
+
+    # Locking to a *different* period must not register at this one.
+    beat = [round((turn * 0.3 + 0.05) * SAMPLE_RATE) for turn in range(60)]
+    _r, z_beat = phase_concentration(beat, SAMPLE_RATE, period)
+    assert z_beat < z_locked
+
+    # Too few positions is not a figure of zero.
+    nan_r, _nan_z = phase_concentration([1, 2], SAMPLE_RATE, period)
+    assert nan_r != nan_r

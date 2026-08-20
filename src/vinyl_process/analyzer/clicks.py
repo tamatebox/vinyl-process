@@ -28,6 +28,7 @@ from vinyl_process.signal_ops import (
     amplitude_to_db,
     click_events_block_sweep,
     onset_coincidence,
+    phase_concentration,
 )
 
 AMPLITUDE_BINS_DB: tuple[float, ...] = (-90.0, -60.0, -50.0, -40.0, -30.0, -20.0, -10.0, 0.0)
@@ -63,6 +64,9 @@ def _histogram(values: np.ndarray, edges: tuple[float, ...], unit: str) -> Histo
         "detect_ms": 0.2,
         "context_ms": 40.0,
         "max_width_ms": 2.0,
+        # One turn of the platter, in seconds: 1.8 at 33 1/3 rpm, 1.3333 at 45.
+        # A property of how the record was played, not of the audio.
+        "revolution_seconds": 1.8,
         "highpass_hz": 3000.0,
         "max_positions": 5000,
     },
@@ -88,6 +92,9 @@ def analyze_clicks(context: AnalyzerContext) -> ClicksSection:
         positions_at = [s for s, _e, _p in found]
         at_silence, at_programme = _rates_by_region(context, positions_at)
         coincidence = onset_coincidence(audio.mono(), positions_at, audio.sample_rate)
+        r, lock = phase_concentration(
+            positions_at, audio.sample_rate, context.number("revolution_seconds")
+        )
         sweep.append(
             ThresholdPoint(
                 threshold=threshold,
@@ -96,6 +103,8 @@ def analyze_clicks(context: AnalyzerContext) -> ClicksSection:
                 silence_rate_per_minute=at_silence,
                 programme_rate_per_minute=at_programme,
                 onset_coincidence=None if coincidence != coincidence else coincidence,
+                revolution_r=None if r != r else r,
+                revolution_lock=None if lock != lock else lock,
             )
         )
     events = by_threshold[promoted]

@@ -12,7 +12,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from vinyl_process.errors import ContractError
 
-SCHEMA_VERSION = "2.1"
+SCHEMA_VERSION = "2.2"
 """``MAJOR.MINOR``. Additive changes bump MINOR; breaking changes bump MAJOR."""
 
 Confidence = Annotated[float, Field(ge=0.0, le=1.0)]

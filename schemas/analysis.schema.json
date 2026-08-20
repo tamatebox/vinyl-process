@@ -931,6 +931,30 @@
           "title": "Rate Per Minute",
           "type": "number"
         },
+        "revolution_lock": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Revolution Lock"
+        },
+        "revolution_r": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Revolution R"
+        },
         "silence_rate_per_minute": {
           "anyOf": [
             {
@@ -1120,7 +1144,7 @@
       "default": null
     },
     "schema_version": {
-      "default": "2.1",
+      "default": "2.2",
       "title": "Schema Version",
       "type": "string"
     },

@@ -261,6 +261,32 @@ def onset_coincidence(
     return round(float((rise_db(found) > 6.0).mean()) / control, 2)
 
 
+def phase_concentration(
+    positions: Sequence[int], sample_rate: int, period_seconds: float
+) -> tuple[float, float]:
+    """How tightly these positions cluster at one phase of a repeating period.
+
+    Returns ``(r, z)``. ``r`` is the mean resultant length of the positions folded
+    onto the period — 0 for phases spread evenly, 1 for all at the same phase.
+    ``z = n * r**2`` is Rayleigh's statistic, whose null distribution is
+    exponential with mean 1 whatever ``n`` is, so rungs with different counts are
+    directly comparable: 3 is suggestive, 5 strong, and 1 is what chance gives.
+
+    The period this matters for is the platter's, because a defect that crosses
+    the groove spiral is struck once per revolution — 1.8 s at 33 1/3 rpm, 1.333 s
+    at 45. That is the one kind of surface damage a naive "periodic means music"
+    rule would throw away, and it is the most audible kind: a tick you can set a
+    watch by. Unlike the beat, the period is known in advance from the speed the
+    record was played at, so nothing has to be estimated.
+    """
+    found = np.asarray(list(positions), dtype=np.float64)
+    if found.size < 4 or period_seconds <= 0 or sample_rate <= 0:
+        return float("nan"), float("nan")
+    phase = 2.0 * np.pi * ((found / sample_rate) % period_seconds) / period_seconds
+    r = float(np.abs(np.exp(1j * phase).mean()))
+    return round(r, 4), round(found.size * r * r, 2)
+
+
 def sinusoidal_residual(segment: np.ndarray, components: int = 5) -> npt.NDArray[np.float64]:
     """``segment`` windowed, minus a reconstruction from its strongest partials.
 
