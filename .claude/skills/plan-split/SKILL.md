@@ -46,7 +46,7 @@ have none, ask the user for the track count before guessing.
      duration-derived position, snapped to the nearest `rms_valley`.
 5. **Place each cut from `music_end_sample`, never from `start_sample`.** A
    reasonable shape for a side of separate tracks:
-   - `end_sample` = the gap's `music_end_sample` + a tail of 1.5–2.5 s;
+   - `end_sample` = the gap's `music_end_sample` + a tail of 0.3–0.5 s;
    - `start_sample` = the gap's `end_sample` − a pre-roll of 0.3–0.5 s;
    - the dead middle of the gap is simply not exported (the contract allows a gap
      between tracks), and the tail is clamped so it never reaches the next
@@ -85,14 +85,14 @@ have none, ask the user for the track count before guessing.
   `lead_out_start_sample` (or the final sample). Cut *inside* a silence.
 - Titles do not belong here — they live in the `metadata` section. The plan must
   not carry the same string twice.
-- Fade in and fade out are not symmetric. A vinyl cut lands in surface noise, not
-  silence, so both edges need a fade — but the head only needs to hide a step
-  (**10–30 ms**), while the tail is a transition from the record's noise into
-  digital silence and wants to be **gentle: 1–2 s**. Keep the fade shorter than
-  the tail you added, so the fade begins after the music has already stopped and
-  nothing musical is shaped by it. (Measured on one pressing: raising the tail
-  from 1.2 s to 2.0 s and the fade from 400 ms to 1.5 s dropped the final quarter
-  second by 14–25 dB and removed an audible edge at −40 dBFS.)
+- Both edges need a fade, and a short one is what is needed. A vinyl cut lands in
+  surface noise rather than silence, so a hard edge is a step discontinuity and
+  therefore an audible click; anything under 100 ms removes it, and **20 ms in
+  with 50–80 ms out** is enough. Do not go longer: a fade of a second or more
+  shapes seconds of the record's own noise, which is a change to the source rather
+  than a repair, and it buys nothing — the click was already gone at 80 ms. Keep
+  the fade shorter than the tail, so it starts after the music has stopped and
+  nothing musical is shaped by it.
 - **A side that plays continuously is the opposite case.** Make the boundaries
   contiguous (`end_sample` == the next `start_sample`), set every fade to 0, and
   drop nothing: the tracks must concatenate back into the recording sample for
