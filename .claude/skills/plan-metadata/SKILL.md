@@ -12,7 +12,23 @@ conclude must be *in* the plan.
 ## Inputs
 
 - User-provided identity: artist/album, or a Discogs/MusicBrainz release ID or
-  URL. Prefer an explicit ID.
+  URL. Prefer an explicit ID, and ask for one at **checkpoint 1** rather than here:
+  the tracklist is needed from the split checkpoint onward, and the titles go
+  straight into the review filenames the person is about to listen to.
+
+  Fetch it with the script — do not try to read the page:
+
+  ```sh
+  python scripts/discogs_release.py https://www.discogs.com/release/28396297
+  python scripts/discogs_release.py 714555 --versions   # no id yet: list the pressings
+  ```
+
+  `www.discogs.com` answers a plain fetch with **403**; `api.discogs.com` answers
+  the same release unauthenticated, but only if the request carries a User-Agent.
+  The script does both and prints exactly what this checkpoint has to show. Its
+  `--versions` mode is the tool for "several candidates survive" below: it lists a
+  master's pressings with their catalogue numbers, which the person can match
+  against the sleeve in seconds.
 - The `split` section: track count and per-track durations, which disambiguate
   pressings.
 - `analysis.json#source` (duration) and `analysis.json#recording_info` (channel
@@ -108,6 +124,14 @@ Never present titles taken from memory as if they were looked up.
   `preferences.title_style` is `transliterate`.
 - Never fill titles from memory for an obscure release. Verify against a source,
   or ask.
+- **A discography site is not the pressing.** It gives you the album, and the tags
+  follow the record in the room. On the release this rule was written from, a
+  Wikipedia tracklist had 墮落 where the sleeve prints 墜落 — one character, a
+  different word — and a duration 6 s out. Nine of ten titles were right, which is
+  what makes this failure quiet: nothing looks wrong until the release id arrives.
+  Where you have had to work from one anyway, mark every title provisional in the
+  message that shows them, and re-check all of them once the pressing is settled
+  rather than only the ones you doubted.
 - Write titles as the release prints them, punctuation included. Filename safety is
   the executor's job — `/` and `:` become `_` in the filename only — so
   pre-sanitising here would push that damage into the tags as well.

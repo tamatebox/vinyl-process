@@ -197,12 +197,25 @@ interpolated audio. Present, before deciding:
 
 - `clicks.silence_rate_per_minute` against `clicks.programme_rate_per_minute` —
   and say which of the two readings this is (worn pressing, or detector
-  over-triggering on the material);
+  over-triggering on the material). Present the silence rate as what it is: a
+  **detector diagnostic**, not a measure of the album's damage. It pools every
+  detected silence, and most of those are the lead-in and the run-out, which the
+  split discards whole. On the pressing that exposed this, side B's rung read
+  29.52/min pooled — 92.31/min in the lead-in alone, against **0.57/min inside the
+  exported tracks**, a factor of 162. Quote the pooled figure to argue the detector
+  is finding damage rather than music; never quote it as how worn the album is;
 - the amplitude histogram in one line: how many events are above −30 dBFS, which
   is the audible band, against how many sit near the noise floor;
-- which rung you chose and its `count`, i.e. how many spans the repair would
-  interpolate, in total and per minute — and, if you had to re-analyze to get its
-  positions, say that the figures come from that run;
+- which rung you chose, and **how many of its detections fall inside the exported
+  cuts** — that, not `count`, is how many spans the repair would interpolate.
+  Declick runs after the split, per track, so a detection in the lead-in, the
+  run-out or the dead middle of a gap is never repaired and never heard. `count` is
+  the whole recording and overstates the work by however worn the unplayed parts
+  are: 57 against 27 on one side of the pressing this was written from, 44 against
+  11 on the other, so 53 % and 75 % of the ladder's detections were already gone.
+  Give the in-cut figure in total and per minute, break it down per track so a
+  concentration shows, and if you had to re-analyze to get the positions, say the
+  figures come from that run;
 - your recommendation and what it costs if it is wrong.
 
 `"enabled": false` is a legitimate answer and is often the right one.
@@ -220,6 +233,15 @@ vinyl-process execute plan-side-a.json --audio <recording> \
 
 Keep `normalize` off for this. A repaired render that is also louder will be
 preferred whatever the repair did, and the level has not been agreed yet.
+
+Plot it — `python scripts/plot_review.py review/declick` — and compare each track
+against the same track in `review/split/plots/`. The two renders differ by the
+repair alone, so anything visible between them *is* the repair. A dB panel that
+has lost its tallest peak spikes is the interpolation showing up; use it to check
+that what disappeared is what you meant to remove, on the tracks with the highest
+in-cut density. It will not show you a dulled attack — that is audible long before
+it is visible, which is why this checkpoint is a listening one. See
+[plan-album](../plan-album/SKILL.md#looking-at-the-render).
 
 Repair is easiest to hear where the detector fired hardest, so name the two or
 three tracks with the highest `density_per_minute` and suggest starting there. Ask

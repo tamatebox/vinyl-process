@@ -23,6 +23,13 @@ A checkpoint that dumps data is not a checkpoint. Show a small table and the one
 question that matters. Where the checkpoint is about audio, the audio is part of
 the checkpoint — see plan-split, whose boundaries cannot be judged from a table.
 
+**Where the checkpoint is about audio, end it by naming what to listen to.** Not
+"here are ten files" — three or four lines, each giving the file, which copy to
+play it from, roughly where in it, and the doubt it settles. Handing over a whole
+album and asking "does this sound right" gets it skimmed, and the one edge that
+needed an ear is the one that gets skimmed past. You already know which decisions
+were close; those are the list. Say that the rest can be spot-checked.
+
 ## Where the files live
 
 One directory per record, holding everything about it and nothing else:
@@ -36,6 +43,7 @@ One directory per record, holding everything about it and nothing else:
     split/                      split only                    → checkpoint 2
     declick/                    split + declick               → checkpoint 3
     level/                      split + declick + normalize   → checkpoint 4
+      plots/                      the figures for that render (see below)
   album/                      the finished tracks + manifest-side-<side>.json
 ```
 
@@ -86,6 +94,60 @@ judge; nothing is ever compared against it and it carries no manifest. See
 [plan-split](../plan-split/SKILL.md). Delete `review/` once `album/` is agreed; on a 35-minute album
 each render is around 175 MB.
 
+## Looking at the render
+
+**Plot every render, as you make it.** One command per rendered directory, no
+dependency to install, a few seconds:
+
+```sh
+python scripts/plot_review.py review/level
+```
+
+It writes `<render>/plots/`: one `side-<x>.png` per recording — every track of that
+side stacked — and one image per track named after the track. Each image is a
+linear waveform (full scale, so clipping and squashing show) over a dB panel
+(0 to −80 dBFS, peak and RMS as lines, so the noise floor, the fades and the tails
+show).
+
+**Read both views; they answer different questions.** The side figure is for the
+side as a whole — are the cuts where they should be, does one track stand out, do
+the two sides sit at the same level. The per-track figure has five times the
+vertical resolution and is for one boundary or one tail. This is not a preference:
+on the album this was written from, the stacked view reduced a 2.2 s run-out tail
+to a hairline and could not show whether a long fade descended smoothly or
+stepped. Both were obvious per track.
+
+**Plot the render, not the step.** Do not take a figure before and after each of
+the five stages. `metadata` changes no samples, so its pair would be identical;
+`export` changes them only if it resamples or dithers. More to the point the
+review ladder already does this job better: each rung adds exactly one stage, so
+`review/split/plots/` against `review/declick/plots/` isolates the repair and
+nothing else, and `declick` against `level` isolates the gain. That is the
+property to protect, and a before/after pair inside one step only duplicates it.
+So: `review/split/`, `review/declick/` when repair is on, `review/level/`, and
+`album/` after the final run — three or four sets, each attached to a render.
+
+Which to lead with, per checkpoint:
+
+| Checkpoint | Lead with | Compare against |
+|---|---|---|
+| 2 split | `side-*.png` | — |
+| 3 declick | per-track | the same track in `review/split/plots/` |
+| 4 level | per-track | the same track in `review/declick/plots/` (or `split/`) |
+| 7 the album | per-track of `album/` | `review/level/plots/` — they should match unless export resampled or dithered; if they differ, say what did it |
+
+**What a figure settles, and what it does not.** It settles: whether anything
+clipped or got squashed against the rail; whether the level relationships between
+tracks survived (a `track_peak` plan makes every panel the same height, which is
+the mistake made visible); whether every fade is intact and no entrance is
+missing; where a tail sits in dB and how far below the programme; whether the two
+sides landed at the same level. It settles none of: whether surface noise is
+*objectionable*, whether a click is audible, whether a repair dulled an attack,
+whether the record sounds right. Those need ears, and a figure that looks clean is
+not a reason to skip the listening the checkpoint asks for. Say which of the two
+you are reporting — "nothing a figure can detect went wrong" is an honest and
+useful sentence; "it looks fine" pretending to cover both is not.
+
 **No scripts in the job directory.** A Python file there is the planning layer
 written in Python, which is the one thing this project does not do. The plan is
 the record of the decisions and `decision.rationale` is where the reasoning goes;
@@ -115,6 +177,22 @@ decision below must cope with that rather than assume a field exists.
 > on a mono one — report `null` as `null`, never as a number you inferred.
 > Ask before planning anything: a clipped or mis-wired transfer should be
 > re-recorded, not processed.
+>
+> **Ask for the Discogs or MusicBrainz release in the same breath.** Not at
+> checkpoint 5 — here, at the first exchange, because everything from checkpoint 2
+> onward needs the tracklist and the person holding the record can read the
+> catalogue number off the sleeve in seconds. Say what you need it for and what you
+> cannot get without it: the pressing's label, catalogue number, country and year,
+> and the titles **as this pressing prints them**.
+>
+> Do not proceed on a tracklist from anywhere else. A discography site gives you
+> the album, never the pressing, and the difference is not academic: on the record
+> this instruction was added for, a Wikipedia tracklist got nine titles right and
+> the tenth wrong by one character — 墮落 for the printed 墜落, a different word —
+> and one duration wrong by 6 s. Both were already burnt into the review
+> filenames the person had been listening to for two checkpoints. If they cannot
+> supply an ID, say the tracklist is provisional every time you show it, and keep
+> `metadata.decision.confidence` low until it is settled.
 
 ### 2. Gather context
 
@@ -133,6 +211,16 @@ decision below must cope with that rather than assume a field exists.
 | 3 | `normalize` | [plan-normalize](../plan-normalize/SKILL.md) |
 | 4 | `metadata` | [plan-metadata](../plan-metadata/SKILL.md) |
 | 5 | `export` | [plan-export](../plan-export/SKILL.md) |
+
+**Everything after `split` is about the audio that survives the cuts, and
+`analysis.json` measures the whole recording.** The two are not the same file, and
+the gap is not small: a side's loudest sample is usually the stylus drop, and its
+densest crackle is the lead-in and the run-out — none of which reach the album.
+Reading a whole-file figure as though it described the album has produced a
+predicted gain 5.6 dB wrong and a repair workload overstated fourfold, both on the
+same pressing, both from numbers these skills asked for by name. Before quoting any
+measurement at a checkpoint, ask whether it describes what will be exported; where
+it does not, either restrict it to the cuts or say plainly which one it is.
 
 Each stage skill states what its own checkpoint must show. In short:
 

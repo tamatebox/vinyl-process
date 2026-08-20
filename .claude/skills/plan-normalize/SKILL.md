@@ -139,16 +139,34 @@ afterwards. Never carry the default through silently.
 
 Present:
 
-- `peaks.peak_db`, `peaks.true_peak_db`, and the target and ceiling you propose;
-- the gain as a *lower bound*: `target - peak_db`. The real value is usually
-  larger, because the side's loudest sample is often the stylus drop in the
-  lead-in, which the split excludes — on one tested pressing the bound was
-  +2.4 dB and the executor applied +8.0 dB;
+- **the peak of the audio the gain will actually be measured from**, which is the
+  split (and declicked) tracks, not the recording. `review/` already holds that
+  render by the time this checkpoint runs, so read the peak off it; the executor
+  measures the same buffers and never opens `analysis.json`
+  ([executor.py](../../../src/vinyl_process/executor.py), `_normalize`);
+- the gain that implies: `target - that peak`. With `declick` off it is the value,
+  to within rounding, not an estimate;
+- `peaks.peak_db` and `peaks.true_peak_db` **only to explain the difference**, and
+  only if there is one worth explaining. They describe the whole recording,
+  including the lead-in, and on a record the loudest sample of the file is
+  routinely the stylus drop — which the split throws away. This section used to ask
+  for `target - peak_db` as a "lower bound" and to lead with it: on the pressing
+  that exposed it the bound read +2.40 dB against an actual +8.03 dB, and the whole
+  5.6 dB gap was a needle drop that never reaches the album. A number that wrong,
+  presented first, is what the person anchors on. The correction is not a caveat
+  underneath it — it is not showing it first.
+
+  Where the review render does not exist yet, say that the figure is a bound from
+  the whole file and that the real gain will be larger by however loud the stylus
+  drop was. Do not present it as the expected gain.
+- the target and ceiling you propose;
 - for an RMS mode, the same bound from `gated_rms_db` — or from `rms_db`, named as
   such, when it is `null` — and a warning that the ceiling may cap it, in which
   case the target level will not be reached;
-- for a two-sided album, both sides' `peak_db`, since each plan is normalized on
-  its own and the sides can end up at different gains;
+- for a two-sided album, both sides' post-split peaks, since each plan is
+  normalized on its own and the sides can end up at different gains. Compare those,
+  not the two `peak_db` values: those are two stylus drops, and how hard the needle
+  landed on each side says nothing about the music;
 - that the exact value appears in `manifest.applied_gain_db` after the run,
   alongside `manifest.applied_true_peak_db`, and that keeping the capture's level
   is `"enabled": false`.
@@ -161,6 +179,15 @@ so the level is the only difference:
 vinyl-process execute plan-side-a.json --audio <recording> \
   -o review/level --manifest manifest-side-a.json
 ```
+
+Plot it — `python scripts/plot_review.py review/level` — and lead with the
+per-track images, not the stacked side one: on the album this was written from the
+stacked view could not show where a tail sat in dB or whether a fade stepped, and
+both mattered. The figure answers the second question below outright, and half of
+the first: peaks per track show whether anything squashed, and a `track_peak` plan
+is visible as every panel reaching the same height. Keep the side figure for
+checking that the two sides landed level with each other. See
+[plan-album](../plan-album/SKILL.md#looking-at-the-render).
 
 This is not an A/B: the level *is* the change, and the louder render always sounds
 better, so asking "which do you prefer" is a rigged question. Ask the two things

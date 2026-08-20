@@ -201,6 +201,14 @@ Both sides into the *same* directory — the track indices are album-wide, so th
 is where the numbering comes out right, and the loud copy below needs to see the
 whole album at once.
 
+Then plot it — `python scripts/plot_review.py review/split` — and lead the
+checkpoint with `side-a.png` / `side-b.png`, because where the cuts fell is a
+question about the whole side. Reach for the per-track image for the boundaries
+you flagged; the tails in particular are a hairline in the stacked view. See
+[plan-album](../plan-album/SKILL.md#looking-at-the-render) for what the figure
+settles and what it cannot — it does not replace the listening this checkpoint is
+for, and a clean-looking figure is not an answer to "does it run on too long".
+
 Seconds of compute, and it is the only check that works. Three things to get
 right:
 
@@ -267,6 +275,27 @@ can answer in: for each track, is the beginning clipped, does it end early, does
 run on too long. Never in samples. Say that the last of those is easiest to hear in
 `review/split-loud/`, and that the first two read the same in either copy — a flat
 gain cannot change the shape of an edge, only whether it is loud enough to notice.
+
+**End with a short list of the specific places to listen to, and why.** Ten tracks
+is around 35 minutes, and asking for all of it back gets the whole thing skimmed —
+including the two edges that actually needed an ear. You already know which
+boundaries are weak: the ones you flagged above. Turn each into one line naming the
+file, the copy to play it from, roughly where in it to listen, and the doubt it
+settles:
+
+> - `review/split-loud/05 - 不安.flac`, the last 5 seconds — the cut sits 1.8 s
+>   past where the level says the music stopped, so there may be audible run-out
+>   noise before the fade. Is there?
+> - `review/split/03 - 想像.flac`, the first 2 seconds — this entrance was the
+>   quietest on the side and the margin ahead of it is the shortest. Is anything
+>   missing from the start?
+
+Three or four such lines, ordered by how much the answer would change. Say plainly
+that the rest of the album can be spot-checked, and that this list is where the
+decision actually rests. Do not pad it with boundaries you are confident about: a
+list that includes everything says nothing, which is the failure it exists to
+avoid. If genuinely every boundary is strong, say that and name the one you would
+still play first.
 
 ## Rules
 
