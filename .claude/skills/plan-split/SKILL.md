@@ -189,7 +189,8 @@ right:
   sides are rendered**, so a single gain covers the whole album:
 
   ```python
-  # scratch, not part of the pipeline
+  # Run inline (python - <<'PY'). Do not save this into the job directory:
+  # plan-album forbids scripts there, and this is not part of the pipeline.
   import glob, os, numpy as np, soundfile as sf
 
   files = sorted(glob.glob("review/split/*.flac"))

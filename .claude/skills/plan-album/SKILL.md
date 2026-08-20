@@ -65,7 +65,12 @@ Two things this ladder is protecting against:
 
 `review/level/` is not a quality A/B — the level *is* the change. It answers a
 different question: is this the level you want, and has the surface noise come up
-too far with it. Delete `review/` once `album/` is agreed; on a 35-minute album
+too far with it.
+
+`review/split-loud/` is not a rung on the ladder at all. It is `review/split/`
+with one flat gain applied outside the plan, so that a tail is loud enough to
+judge; nothing is ever compared against it and it carries no manifest. See
+[plan-split](../plan-split/SKILL.md). Delete `review/` once `album/` is agreed; on a 35-minute album
 each render is around 175 MB.
 
 **No scripts in the job directory.** A Python file there is the planning layer
