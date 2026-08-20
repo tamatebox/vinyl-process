@@ -76,6 +76,11 @@ class FfmpegEngine(DspEngine):
                 f"engine 'ffmpeg' does not implement algorithm {plan.algorithm!r}; "
                 f"available: {sorted(ALGORITHMS)}"
             )
+        if plan.threshold is None:
+            raise ExecutionError(
+                "declick is enabled but no threshold is set. It is a decision, not a "
+                "default; for adeclick it is on its own 1..100 scale"
+            )
         if plan.strength < 1.0:
             raise ExecutionError(
                 "engine 'ffmpeg' cannot honour declick.strength < 1.0 (adeclick has no "

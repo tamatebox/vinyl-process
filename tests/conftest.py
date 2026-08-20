@@ -60,7 +60,7 @@ def build_plan(
                 for index, (start, end) in enumerate(recording.programme)
             ],
         },
-        "declick": {"engine": "native", "algorithm": "mad_interpolate"},
+        "declick": {"engine": "native", "algorithm": "block_ratio", "threshold": 20.0},
         "normalize": {"engine": "native", "mode": "album_peak", "target_db": -1.0},
         "metadata": {
             "album": "Test Pressing",

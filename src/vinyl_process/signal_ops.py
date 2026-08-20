@@ -10,10 +10,11 @@ Every function here is deterministic: no randomness, no wall clock.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
+
 import numpy as np
 import numpy.typing as npt
 from scipy.linalg import solve_toeplitz
-from scipy.ndimage import median_filter
 from scipy.signal import butter, sosfiltfilt
 
 EPS = 1e-12
@@ -89,61 +90,6 @@ def merge_runs(runs: list[tuple[int, int]], gap: int) -> list[tuple[int, int]]:
     return merged
 
 
-def click_events(
-    mono: np.ndarray,
-    sample_rate: int,
-    threshold_mad: float,
-    max_width_ms: float,
-    highpass_hz: float = 3000.0,
-) -> list[ClickEvent]:
-    """Detect impulsive clicks.
-
-    Two stages, because either alone gives false positives on real music:
-
-    1. high-pass at ``highpass_hz`` — vinyl clicks are broadband impulses while
-       programme material is concentrated lower, so this suppresses the music
-       without suppressing the damage;
-    2. subtract a median-filtered copy (kernel scaled to ``max_width_ms``) to
-       remove *sustained* high-frequency content (hiss, cymbals), leaving
-       transient spikes.
-
-    Samples whose residual exceeds ``threshold_mad`` robust sigmas are click
-    samples; runs wider than ``max_width_ms`` are programme material, not damage.
-    """
-    if mono.size == 0:
-        return []
-    max_width = max(1, round(max_width_ms / 1000.0 * sample_rate))
-    detection = highpass(mono, sample_rate, highpass_hz)
-    kernel = max(3, (2 * max_width + 1) | 1)
-    residual = detection - median_filter(detection, size=kernel, mode="nearest")
-    # The filters are unreliable within one kernel of each edge (padding, not
-    # signal), so that region is declared undetectable rather than reported.
-    guard = min(kernel, residual.size // 2)
-    if guard:
-        residual[:guard] = 0.0
-        residual[-guard:] = 0.0
-    sigma = 1.4826 * float(np.median(np.abs(residual - np.median(residual))))
-    if sigma < EPS:
-        return []
-    hot = np.abs(residual) > threshold_mad * sigma
-    curvature = second_difference(mono)
-    curvature_sigma = 1.4826 * float(np.median(np.abs(curvature - np.median(curvature))))
-    events: list[ClickEvent] = []
-    for start, end in merge_runs(runs_of_true(hot), gap=max_width):
-        peak = float(np.max(np.abs(residual[start:end])))
-        span_start, span_end = _localise(
-            curvature, start, end, threshold_mad * curvature_sigma, max_width
-        )
-        # The width test belongs on the *localised* span, which is the physical
-        # extent of the damage. The detection run is not a width measurement: on
-        # a quiet pressing the threshold sits so low that filter ringing stretches
-        # the run far past the impulse, and testing that would reject every click.
-        if span_end - span_start > max_width:
-            continue
-        events.append((span_start, span_end, peak))
-    return events
-
-
 def block_ratio(
     mono: np.ndarray, sample_rate: int, detect_ms: float, context_ms: float
 ) -> npt.NDArray[np.float64]:
@@ -174,6 +120,47 @@ def block_ratio(
     return centred_mean(detect) / (centred_mean(context) + EPS)
 
 
+def click_events_block_sweep(
+    mono: np.ndarray,
+    sample_rate: int,
+    thresholds: Sequence[float],
+    max_width_ms: float,
+    detect_ms: float = 0.2,
+    context_ms: float = 40.0,
+    highpass_hz: float = 3000.0,
+) -> dict[float, list[ClickEvent]]:
+    """The detector run at several thresholds, sharing one pass of the arithmetic.
+
+    Everything expensive — the high-pass, the two running means, the curvature —
+    is independent of the threshold, so a whole ladder costs barely more than a
+    single point. That matters because **no single threshold is right for every
+    pressing**: on one album measured here the two sides wanted different values,
+    and a collection spans conditions from near-mint to heavily worn. Reporting
+    the ladder lets the choice be made per record, from evidence, by whoever owns
+    it — which is where a threshold belongs. A constant compiled in here would be
+    a decision taken on behalf of every record the code will ever see.
+    """
+    if mono.size == 0:
+        return {float(t): [] for t in thresholds}
+    max_width = max(1, round(max_width_ms / 1000.0 * sample_rate))
+    detection = highpass(mono, sample_rate, highpass_hz)
+    ratio = block_ratio(detection, sample_rate, detect_ms, context_ms)
+    # Within half a context window of either edge the neighbourhood is padding
+    # rather than signal, so that region is declared undetectable.
+    guard = min(round(context_ms / 1000.0 * sample_rate) // 2, ratio.size // 2)
+    if guard:
+        ratio[:guard] = 0.0
+        ratio[-guard:] = 0.0
+    curvature = second_difference(mono)
+    curvature_sigma = 1.4826 * float(np.median(np.abs(curvature - np.median(curvature))))
+    return {
+        float(threshold): _localised_events(
+            ratio > threshold, detection, curvature, curvature_sigma, max_width
+        )
+        for threshold in thresholds
+    }
+
+
 def click_events_block(
     mono: np.ndarray,
     sample_rate: int,
@@ -185,33 +172,47 @@ def click_events_block(
 ) -> list[ClickEvent]:
     """Detect impulsive clicks by local-to-neighbourhood energy ratio.
 
-    Same shape of answer as :func:`click_events`, different statistic:
-    ``threshold_ratio`` is how many times the energy in a click-width window must
-    exceed the energy of the surrounding ``context_ms`` to count as damage. It is
-    **not** a sigma count — do not carry a ``mad_interpolate`` threshold across.
+    ``threshold_ratio`` is how many times the energy in a click-width window
+    must exceed the energy of the surrounding ``context_ms`` to count as damage.
+    It is **not** a sigma count, and no one value suits two pressings; see
+    :func:`click_events_block_sweep`.
 
-    The high-pass still runs first: a click is broadband while programme material
-    is concentrated lower, and the ratio alone would fire on any percussive
-    attack. The localisation and width rejection are shared with the MAD
-    detector, so the two differ only in how they decide *whether* a sample is
-    damaged, not in how the damage is bounded.
+    This replaced a detector that thresholded a robust sigma taken over the whole
+    input. That statistic is not local: handed the same 60 s in different chunk
+    sizes it moved its answer by up to 7.8x, so the analyzer (a side) and the
+    engine (a track) described different events. On a near-clean pressing it also
+    claimed 1082 events a minute while finding none at all in the inter-track
+    gaps, where the surface is unmasked — over-detecting and missing at once.
+
+    The high-pass runs first: a click is broadband while programme material is
+    concentrated lower, and the ratio alone would fire on any percussive attack.
+    It fires on some anyway — see the caveat in ``docs/dsp-engines.md``.
+
+    ``detect_ms`` and ``context_ms`` are carried over from Audacity's detector,
+    whose surrounding window is about 2048 samples. They have not been tested
+    against anything here; only the *shape* of the statistic has.
     """
-    if mono.size == 0:
-        return []
-    max_width = max(1, round(max_width_ms / 1000.0 * sample_rate))
-    detection = highpass(mono, sample_rate, highpass_hz)
-    ratio = block_ratio(detection, sample_rate, detect_ms, context_ms)
-    # Within half a context window of either edge the neighbourhood is padding
-    # rather than signal, so that region is declared undetectable.
-    guard = min(round(context_ms / 1000.0 * sample_rate) // 2, ratio.size // 2)
-    if guard:
-        ratio[:guard] = 0.0
-        ratio[-guard:] = 0.0
-    hot = ratio > threshold_ratio
+    return click_events_block_sweep(
+        mono,
+        sample_rate,
+        [threshold_ratio],
+        max_width_ms,
+        detect_ms=detect_ms,
+        context_ms=context_ms,
+        highpass_hz=highpass_hz,
+    )[float(threshold_ratio)]
+
+
+def _localised_events(
+    hot: np.ndarray,
+    detection: np.ndarray,
+    curvature: np.ndarray,
+    curvature_sigma: float,
+    max_width: int,
+) -> list[ClickEvent]:
+    """Thresholded samples to localised, width-checked spans."""
     if not hot.any():
         return []
-    curvature = second_difference(mono)
-    curvature_sigma = 1.4826 * float(np.median(np.abs(curvature - np.median(curvature))))
     events: list[ClickEvent] = []
     for start, end in merge_runs(runs_of_true(hot), gap=max_width):
         span_start, span_end = _localise(curvature, start, end, 6.0 * curvature_sigma, max_width)
@@ -292,6 +293,34 @@ def _ar_fill(
             break
         segment[gap] = solution
     return np.asarray(segment[gap], dtype=np.float64)
+
+
+def repair_clicks_linear(
+    samples: np.ndarray, events: list[ClickEvent], strength: float
+) -> np.ndarray:
+    """Bridge each click with a straight line, blended by ``strength``.
+
+    What Audacity's click removal does, and the reason to keep it available: a
+    line between two samples cannot leave the range they span, so it cannot
+    diverge for any gap width or any material. It is the crude option and it wins
+    where the cubic fails — measured against damage injected into a real transfer,
+    it beat the bounded cubic at 65-sample gaps while losing to it at 4-sample
+    ones. No parameters at all, which is worth something on its own.
+    """
+    out = np.array(samples, dtype=np.float64, copy=True)
+    n = out.shape[0]
+    if n == 0 or strength <= 0.0:
+        return out
+    for start, end, _peak in events:
+        lo = start - 1
+        hi = min(end, n - 1)
+        gap = hi - lo - 1
+        if lo < 0 or gap <= 0:
+            continue
+        t = (np.arange(1, gap + 1, dtype=np.float64) / (gap + 1))[:, None]
+        patch = (1.0 - t) * out[lo][None, :] + t * out[hi][None, :]
+        out[lo + 1 : hi] = (1.0 - strength) * out[lo + 1 : hi] + strength * patch
+    return out
 
 
 def repair_clicks_ar(

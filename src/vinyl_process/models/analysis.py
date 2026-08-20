@@ -140,6 +140,16 @@ class BoundariesSection(Section):
     lead_out_start_sample: int | None = None
 
 
+class ThresholdPoint(ContractModel):
+    """One rung of the detector's threshold ladder."""
+
+    threshold: float = Field(gt=0)
+    count: int = Field(ge=0)
+    rate_per_minute: float = Field(ge=0)
+    silence_rate_per_minute: float | None = Field(default=None, ge=0)
+    programme_rate_per_minute: float | None = Field(default=None, ge=0)
+
+
 class ClicksSection(Section):
     count: int = Field(ge=0)
     rate_per_minute: float = Field(ge=0)
@@ -158,6 +168,22 @@ class ClicksSection(Section):
     pressing (both rates high) from a detector over-triggering on the material
     (only the programme rate high) — a distinction the count alone cannot make,
     and one that decides whether declicking helps or dulls the record.
+    """
+
+    threshold_sweep: list[ThresholdPoint] = Field(default_factory=list)
+    """The same detector run across a ladder of thresholds.
+
+    No single threshold suits every pressing — on one album measured here the two
+    sides wanted different values, and a collection spans near-mint to heavily
+    worn. So the threshold is not fixed by the analyzer: the ladder is reported as
+    the fact, and the plan-declick skill picks the rung, per record, with whoever
+    owns it. Read the curve rather than the headline `count`, which is only the
+    rung named by ``meta.params.threshold_ratio``.
+
+    What the curve shows: at a threshold too low the programme rate swamps the
+    silence rate, which means the detector is following the music; at one too high
+    nothing is found even in the inter-track gaps, where there is no music to
+    find. The operating point is between, and it is legible per side.
     """
 
     positions_sample: list[int]

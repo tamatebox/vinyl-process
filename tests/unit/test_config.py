@@ -34,7 +34,11 @@ def test_example_config_is_valid_and_covers_both_halves() -> None:
     raw = tomllib.loads(EXAMPLE_CONFIG)
     config = Config.model_validate(raw)
     assert config.preferences.declick_intent == "balanced"
-    assert config.analyzer_params("clicks")["threshold_mad"] == 6.0
+    clicks = config.analyzer_params("clicks")
+    # The ladder is a measurement grid; which rung to run at is a decision and
+    # lives in the plan, so the config must not look like it settles that.
+    assert clicks["threshold_ladder"][0] < clicks["threshold_ratio"]
+    assert clicks["threshold_ratio"] < clicks["threshold_ladder"][-1]
 
 
 def test_explicit_path_wins_over_environment_and_cwd(

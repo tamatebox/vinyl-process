@@ -156,12 +156,13 @@ def test_declick_repairs_and_is_deterministic() -> None:
     damaged[20_000:20_003] += 0.5
     buffer = AudioBuffer(damaged, SAMPLE_RATE)
 
-    repaired = engine.declick(buffer, DeclickPlan())
+    plan = DeclickPlan(threshold=20.0)
+    repaired = engine.declick(buffer, plan)
     window = slice(19_950, 20_060)
     assert np.max(np.abs(repaired.samples[window] - audio.samples[window])) < np.max(
         np.abs(damaged[window] - audio.samples[window])
     )
-    again = engine.declick(buffer, DeclickPlan())
+    again = engine.declick(buffer, plan)
     assert np.array_equal(repaired.samples, again.samples)
 
 
@@ -173,21 +174,31 @@ def test_declick_passes_plan_parameters_through_to_the_detector(
 
     seen: dict[str, object] = {}
 
-    def spy(mono, sample_rate, threshold_mad, max_width_ms, highpass_hz=3000.0):
-        seen.update(threshold_mad=threshold_mad, max_width_ms=max_width_ms, highpass_hz=highpass_hz)
+    def spy(mono, sample_rate, threshold_ratio, max_width_ms, **kwargs):
+        seen.update(threshold_ratio=threshold_ratio, max_width_ms=max_width_ms, **kwargs)
         return []
 
-    monkeypatch.setattr(native_module, "click_events", spy)
+    monkeypatch.setattr(native_module, "click_events_block", spy)
     NativeEngine().declick(
         tone(),
-        DeclickPlan(threshold=4.5, max_click_width_ms=1.5, params={"highpass_hz": 8000.0}),
+        DeclickPlan(
+            threshold=45.0,
+            max_click_width_ms=1.5,
+            params={"highpass_hz": 8000.0, "context_ms": 25.0},
+        ),
     )
-    assert seen == {"threshold_mad": 4.5, "max_width_ms": 1.5, "highpass_hz": 8000.0}
+    assert seen == {
+        "threshold_ratio": 45.0,
+        "max_width_ms": 1.5,
+        "detect_ms": 0.2,
+        "context_ms": 25.0,
+        "highpass_hz": 8000.0,
+    }
 
 
 def test_unknown_declick_algorithm_is_rejected() -> None:
     with pytest.raises(ExecutionError, match="does not implement algorithm"):
-        NativeEngine().declick(tone(), DeclickPlan(algorithm="magic"))
+        NativeEngine().declick(tone(), DeclickPlan(algorithm="magic", threshold=20.0))
 
 
 # --------------------------------------------------------------------------- #
@@ -211,7 +222,8 @@ def test_ffmpeg_declick_runs_and_reports_its_version() -> None:
     damaged = audio.samples.copy()
     damaged[20_000:20_003] += 0.5
     result = engine.declick(
-        AudioBuffer(damaged, SAMPLE_RATE), DeclickPlan(engine="ffmpeg", algorithm="adeclick")
+        AudioBuffer(damaged, SAMPLE_RATE),
+        DeclickPlan(engine="ffmpeg", algorithm="adeclick", threshold=25.0),
     )
     assert result.num_frames == audio.num_frames
     assert "ffmpeg" in engine.version()
@@ -222,14 +234,14 @@ def test_ffmpeg_refuses_a_plan_decision_it_cannot_honour() -> None:
     """Silently dropping ``strength`` would break the plan's completeness."""
     with pytest.raises(ExecutionError, match="strength"):
         get_engine("ffmpeg").declick(
-            tone(), DeclickPlan(engine="ffmpeg", algorithm="adeclick", strength=0.5)
+            tone(), DeclickPlan(engine="ffmpeg", algorithm="adeclick", threshold=25.0, strength=0.5)
         )
 
 
 @pytest.mark.skipif(not HAVE_FFMPEG, reason="ffmpeg is not installed")
 def test_ffmpeg_rejects_a_native_algorithm_name() -> None:
     with pytest.raises(ExecutionError, match="does not implement algorithm"):
-        get_engine("ffmpeg").declick(tone(), DeclickPlan(algorithm="mad_interpolate"))
+        get_engine("ffmpeg").declick(tone(), DeclickPlan(algorithm="block_ratio", threshold=20.0))
 
 
 # --------------------------------------------------------------------------- #
@@ -306,3 +318,14 @@ def test_a_broken_plugin_does_not_break_the_builtins(
     assert names == {"native", "ffmpeg"}
     assert "test-exploding" in caplog.text
     assert "test-not-an-engine" in caplog.text
+
+
+def test_declick_refuses_to_invent_a_threshold() -> None:
+    """A threshold is a decision, so the engine must not supply one.
+
+    No value suits two pressings — the two sides of one album measured here wanted
+    different rungs of the sweep — so a default would be a choice made on behalf
+    of every record the code ever sees. Refusing is the only honest option.
+    """
+    with pytest.raises(ExecutionError, match="not a default"):
+        NativeEngine().declick(tone(), DeclickPlan())

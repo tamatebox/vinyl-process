@@ -1,5 +1,5 @@
 {
-  "schema_version": "1.0",
+  "schema_version": "2.0",
   "document_type": "analysis",
   "generated_by": "vinyl-process 0.1.0",
   "source": {
@@ -42,9 +42,9 @@
     },
     {
       "name": "clicks",
-      "version": "1.1",
-      "status": "ok",
-      "message": null,
+      "version": "2.0",
+      "status": "failed",
+      "message": "parameter 'threshold_ladder' must be a list of numbers: 'threshold_ladder'",
       "duration_ms": null
     },
     {
@@ -257,37 +257,7 @@
     "lead_in_end_sample": 88200,
     "lead_out_start_sample": 846720
   },
-  "clicks": {
-    "meta": {
-      "analyzer": "clicks",
-      "version": "1.1",
-      "params": {
-        "silence_min_seconds": 2.0,
-        "threshold_mad": 6.0,
-        "max_width_ms": 3.0,
-        "highpass_hz": 3000.0,
-        "max_positions": 5000
-      },
-      "confidence": 0.75
-    },
-    "count": 7,
-    "rate_per_minute": 19.35,
-    "amplitude_histogram": {
-      "unit": "dBFS",
-      "bin_edges": [-90.0, -60.0, -50.0, -40.0, -30.0, -20.0, -10.0, 0.0],
-      "counts": [2, 0, 0, 0, 0, 5, 0]
-    },
-    "width_histogram": {
-      "unit": "ms",
-      "bin_edges": [0.0, 0.1, 0.25, 0.5, 1.0, 2.0, 4.0, 8.0],
-      "counts": [0, 5, 0, 2, 0, 0, 0]
-    },
-    "density_per_minute": [7.0],
-    "silence_rate_per_minute": 0.0,
-    "programme_rate_per_minute": 28.0,
-    "positions_sample": [145527, 224907, 348387, 540210, 626217, 707802, 844500],
-    "positions_truncated": false
-  },
+  "clicks": null,
   "peaks": {
     "meta": {
       "analyzer": "peaks",
@@ -396,5 +366,7 @@
     "mean_per_second": 0.091,
     "peak_per_second": 1.0
   },
-  "warnings": []
+  "warnings": [
+    "clicks: failed (parameter 'threshold_ladder' must be a list of numbers: 'threshold_ladder')"
+  ]
 }

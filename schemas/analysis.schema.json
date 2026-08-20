@@ -222,6 +222,13 @@
           "default": null,
           "title": "Silence Rate Per Minute"
         },
+        "threshold_sweep": {
+          "items": {
+            "$ref": "#/$defs/ThresholdPoint"
+          },
+          "title": "Threshold Sweep",
+          "type": "array"
+        },
         "width_histogram": {
           "$ref": "#/$defs/Histogram"
         }
@@ -719,6 +726,60 @@
       "title": "SurfaceNoiseSection",
       "type": "object"
     },
+    "ThresholdPoint": {
+      "additionalProperties": false,
+      "description": "One rung of the detector's threshold ladder.",
+      "properties": {
+        "count": {
+          "minimum": 0,
+          "title": "Count",
+          "type": "integer"
+        },
+        "programme_rate_per_minute": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Programme Rate Per Minute"
+        },
+        "rate_per_minute": {
+          "minimum": 0,
+          "title": "Rate Per Minute",
+          "type": "number"
+        },
+        "silence_rate_per_minute": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Silence Rate Per Minute"
+        },
+        "threshold": {
+          "exclusiveMinimum": 0,
+          "title": "Threshold",
+          "type": "number"
+        }
+      },
+      "required": [
+        "threshold",
+        "count",
+        "rate_per_minute"
+      ],
+      "title": "ThresholdPoint",
+      "type": "object"
+    },
     "TransientsSection": {
       "additionalProperties": false,
       "description": "Transient density over time \u2014 how percussive the material is, which\ntells the Declick skill how much false-positive risk a threshold carries.",
@@ -870,7 +931,7 @@
       "default": null
     },
     "schema_version": {
-      "default": "1.0",
+      "default": "2.0",
       "title": "Schema Version",
       "type": "string"
     },

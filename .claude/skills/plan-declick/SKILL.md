@@ -13,12 +13,18 @@ is interpolated audio.
 
 From `analysis.json`:
 
-- `clicks.silence_rate_per_minute` versus `clicks.programme_rate_per_minute` —
-  **read these first.** A worn pressing crackles in the inter-track gaps as much
-  as under the music; a detector over-triggering on the material fires only under
-  the programme. On one bass-heavy pressing the split was 9/min against 1100/min,
-  and declicking would have interpolated 17 000 musical transients.
-- `clicks.count`, `clicks.rate_per_minute`
+- `clicks.threshold_sweep[]` — **read this first, and read it instead of the
+  headline count.** Each rung gives `threshold`, `count` and the two rates below.
+  Choosing the rung is this skill's main decision; see *Reading the sweep*.
+- `clicks.silence_rate_per_minute` versus `clicks.programme_rate_per_minute` — the
+  pair that makes the sweep legible. A worn pressing crackles in the inter-track
+  gaps as much as under the music; a detector over-triggering on the material
+  fires only under the programme. On one bass-heavy pressing the split was 9/min
+  against 1100/min, and declicking would have interpolated 17 000 musical
+  transients.
+- `clicks.count`, `clicks.rate_per_minute` — the rung named by
+  `meta.params.threshold_ratio`, promoted for convenience. A reporting choice, not
+  a recommendation: do not treat it as the answer.
 - `clicks.amplitude_histogram` — `bin_edges` in dBFS; the tail tells you whether
   the damage is loud or merely present
 - `clicks.width_histogram` — `bin_edges` in ms; loud clicks tend to be wider
@@ -30,31 +36,80 @@ From `analysis.json`:
 
 Plus `preferences.declick_intent` (`conservative` / `balanced` / `aggressive`).
 
+## Reading the sweep
+
+There is no threshold that suits every pressing, and none that even suits both
+sides of every album — on the one this procedure was written against, side A and
+side B wanted different rungs. So the analyzer reports the curve and you pick the
+point, per recording, from what the curve says about *that* recording.
+
+The curve has two ends and both are wrong:
+
+- **Too low.** The programme rate approaches or passes the silence rate. Surface
+  damage is on the surface, so it must appear in the gaps too; a detector firing
+  mostly under the music is following the music. Reject these rungs outright.
+- **Too high.** Nothing is found even in the gaps, where there is no music to be
+  confused by. Real damage is being missed.
+
+Between them, the **silence rate is your estimate of the surface damage density**,
+because a gap is unmasked. The programme rate falls below it by however much the
+music masks — which is a feature, not a loss: a click you cannot hear under the
+programme does not need interpolating.
+
+Pick the lowest rung whose silence rate clearly dominates the programme rate, then
+**verify it by ear before trusting it**. Cut two seconds around the loudest few of
+its gap detections, amplify so the surface is audible at all, and listen for the
+click at the position it claims. This is the only positive evidence available: a
+gap holds no programme material, so anything impulsive there is damage by
+definition. On the record this was written against, twelve of twelve were real.
+
+Then say how much of it reaches the album. Detections in the dead middle of a gap,
+the lead-in and the run-out are dropped by the split and cost nothing to ignore;
+only the ones inside the exported cuts matter. On that record it was 163 of 259,
+and 86 of those sat in the fade-in and fade-out of a single quiet track — the
+surface was uniform, the visibility was not.
+
+**No gaps, no calibration.** A continuous side, a live recording or a gapless
+album gives the sweep nothing unmasked to measure, and both rates collapse into
+one number. Say so, and either borrow a threshold from another side of the same
+pressing or leave repair off; do not pick a rung from the count alone.
+
 ## Decision guide
 
-1. **Engine** — `native` (`mad_interpolate`) is the default and the
-   reproducibility baseline: it detects robust-statistics outliers and bridges
-   each click with cubic Hermite interpolation. Choose `ffmpeg` (`adeclick`) for
-   heavily damaged sides (rate > 100/min) where its overlap-add repair is gentler
-   at scale. Check availability with `vinyl-process engines`.
-2. **Skip entirely** (`"enabled": false`) when `rate_per_minute < 2` and the
-   amplitude histogram is empty above −30 dBFS: the repair risk exceeds the
-   benefit. Skip it too when the programme rate dwarfs the silence rate — that is
-   the detector firing on the music, and no threshold in the plan will fix a
-   threshold that is global by construction.
-3. **Threshold** — engine-specific scale. For `native` it is robust-sigma (MAD)
-   multiples: 6.0 default; 4.5–5.0 for noisy pressings (rate > 50/min with a hot
-   histogram tail); 7.0–8.0 for quiet pressings, or when
-   `transients.mean_per_second` is high (brushed drums, harpsichord) and softened
-   attacks would be worse than the clicks.
+1. **Algorithm** — `native` / `block_ratio`, the only one the native engine has.
+   Its detector is the one the sweep was measured with, and its answer does not
+   change with how much audio it is handed, so the analyzer's statistics describe
+   what the engine will actually repair. A robust-sigma detector used to sit
+   beside it and was removed: its threshold was one sigma over the whole input,
+   which drifted by up to 7.8x across chunk sizes on real audio and fired 348 to
+   1611 times more under the programme than in the inter-track gaps. `ffmpeg`
+   (`adeclick`) remains an option for heavily damaged sides; check availability
+   with `vinyl-process engines`.
+2. **Skip entirely** (`"enabled": false`) when no rung of the sweep has a silence
+   rate that dominates its programme rate, or when the rungs that do are empty:
+   there is either nothing to repair or nothing you can distinguish from the
+   music. Skip it too when the amplitude histogram is empty above −30 dBFS and the
+   surviving count is small — the repair risk exceeds the benefit.
+3. **Threshold** — for `block_ratio` this is a **ratio of energies, not a sigma
+   count**, and it comes from the sweep (see *Reading the sweep*), not from a
+   default. Do not carry a value across pressings, across algorithms, or even
+   between the two sides of one record. State in the rationale which rung you
+   chose, what its two rates were, and that you verified its gap detections by
+   ear.
 4. **max_click_width_ms** — 2.0 default. Go up to 4.0 only when the width
    histogram is populated above 1 ms. This value is also the rejection rule:
    anything wider is treated as programme material, not damage.
 5. **Strength** — 1.0 for obvious damage; 0.6–0.8 for `conservative` intent or
    sparse damage on precious material.
 6. **params** — the escape hatch for engine-specific knobs, recorded in the plan
-   so the run stays reproducible. `native` accepts `highpass_hz` (default 3000);
-   `ffmpeg` accepts `window_ms`, `overlap`, `ar_order`, `burst_fusion`, `method`.
+   so the run stays reproducible. `block_ratio` accepts `interpolator`
+   (`ar` | `hermite` | `linear`, default `ar`), `detect_ms`, `context_ms` and
+   `highpass_hz`; the AR order and window are derived from `max_click_width_ms` by
+   the published rule and should be left alone. **Which interpolator is best is
+   not settled** — comparisons by SNR against self-injected damage were discarded
+   as circular, and there is no public benchmark with clean references to appeal
+   to. If it matters for a record, render two and listen. `ffmpeg` accepts
+   `window_ms`, `overlap`, `ar_order`, `burst_fusion`, `method`.
 
 ## Output
 
@@ -62,8 +117,8 @@ Plus `preferences.declick_intent` (`conservative` / `balanced` / `aggressive`).
 "declick": {
   "enabled": true,
   "engine": "native",
-  "algorithm": "mad_interpolate",   // 'adeclick' for the ffmpeg engine
-  "threshold": 6.0,
+  "algorithm": "block_ratio",       // 'adeclick' for the ffmpeg engine
+  "threshold": 50.0,               // a rung of clicks.threshold_sweep; no default
   "max_click_width_ms": 2.0,
   "strength": 1.0,
   "preset": null,

@@ -43,6 +43,13 @@ class AnalyzerContext:
     def integer(self, key: str) -> int:
         return int(self.number(key))
 
+    def numbers(self, key: str) -> list[float]:
+        """A list-of-numbers parameter — a measurement grid, not a choice."""
+        try:
+            return [float(value) for value in self.params[key]]
+        except (KeyError, TypeError, ValueError) as exc:
+            raise AnalysisError(f"parameter {key!r} must be a list of numbers: {exc}") from exc
+
     def section(self, name: str) -> Section:
         """A dependency's section, or :class:`AnalysisError` if it is missing.
 

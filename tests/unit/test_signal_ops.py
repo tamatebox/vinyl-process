@@ -8,7 +8,8 @@ import pytest
 from vinyl_process.signal_ops import (
     CONTEXT_FLOOR,
     apply_fades,
-    click_events,
+    click_events_block,
+    click_events_block_sweep,
     db_to_amplitude,
     highpass,
     local_bounds,
@@ -60,44 +61,6 @@ def test_highpass_removes_low_frequency_and_is_a_noop_below_nyquist() -> None:
     assert np.array_equal(highpass(low, 4000, 3000.0), highpass(low, 4000, 3000.0))
 
 
-def test_click_detection_finds_injected_clicks_without_false_positives() -> None:
-    clean = tonal()
-    positions = [10_000, 30_000, 50_000, 77_777]
-    damaged = clean.copy()
-    for position in positions:
-        damaged[position : position + 4] += 0.6
-
-    events = click_events(damaged, SAMPLE_RATE, threshold_mad=6.0, max_width_ms=3.0)
-    assert len(events) == len(positions)
-    for (start, end, _peak), position in zip(events, positions, strict=True):
-        assert start <= position < end
-        assert end - start <= int(0.003 * SAMPLE_RATE)
-
-    assert click_events(clean, SAMPLE_RATE, 6.0, 3.0) == []
-
-
-def test_click_detection_ignores_percussive_attacks() -> None:
-    """A drum hit is wide-band but wide; the width test must reject it."""
-    signal = np.zeros(SAMPLE_RATE)
-    for onset in range(0, SAMPLE_RATE - 400, SAMPLE_RATE // 8):
-        signal[onset : onset + 300] += np.hanning(300) * 0.8
-    assert click_events(signal, SAMPLE_RATE, 6.0, 3.0) == []
-
-
-def test_click_detection_survives_a_near_silent_noise_floor() -> None:
-    """With almost no noise the threshold collapses; detection must still work.
-
-    Regression test: measuring width on the raw detection run (which filter
-    ringing stretches) rejected every click on quiet pressings.
-    """
-    t = np.arange(SAMPLE_RATE) / SAMPLE_RATE
-    signal = 0.4 * np.sin(2 * np.pi * 220 * t)
-    signal[20_000:20_003] += 0.5
-    events = click_events(signal, SAMPLE_RATE, 6.0, 3.0)
-    assert len(events) == 1
-    assert events[0][0] <= 20_000 < events[0][1]
-
-
 def test_repair_reduces_click_error_and_leaves_the_rest_untouched() -> None:
     clean = tonal()
     positions = [10_000, 30_000, 50_000]
@@ -107,7 +70,7 @@ def test_repair_reduces_click_error_and_leaves_the_rest_untouched() -> None:
 
     stereo_clean = np.column_stack([clean, clean])
     stereo_damaged = np.column_stack([damaged, damaged])
-    events = click_events(damaged, SAMPLE_RATE, 6.0, 3.0)
+    events = click_events_block(damaged, SAMPLE_RATE, 20.0, 3.0)
     repaired = repair_clicks(stereo_damaged, events, strength=1.0)
 
     for position in positions:
@@ -124,7 +87,7 @@ def test_repair_strength_scales_the_correction() -> None:
     signal = tonal(1.0)
     signal[20_000:20_004] += 0.6
     stereo = np.column_stack([signal, signal])
-    events = click_events(signal, SAMPLE_RATE, 6.0, 3.0)
+    events = click_events_block(signal, SAMPLE_RATE, 20.0, 3.0)
 
     assert np.array_equal(repair_clicks(stereo, events, 0.0), stereo)
     half = np.max(np.abs(repair_clicks(stereo, events, 0.5) - stereo))
@@ -136,7 +99,7 @@ def test_repair_is_deterministic() -> None:
     signal = tonal(1.0)
     signal[20_000:20_004] += 0.6
     stereo = np.column_stack([signal, signal])
-    events = click_events(signal, SAMPLE_RATE, 6.0, 3.0)
+    events = click_events_block(signal, SAMPLE_RATE, 20.0, 3.0)
     first = repair_clicks(stereo, events, 0.8)
     second = repair_clicks(stereo, events, 0.8)
     assert np.array_equal(first, second)
@@ -226,7 +189,101 @@ def test_repair_bound_does_not_flatten_a_click_in_tonal_material() -> None:
     damaged = signal.copy()
     damaged[position : position + 3] += np.array([0.6, -0.5, 0.4])
     stereo_damaged = np.column_stack([damaged, damaged])
-    events = click_events(damaged, SAMPLE_RATE, 6.0, 3.0)
+    events = click_events_block(damaged, SAMPLE_RATE, 20.0, 3.0)
     repaired = repair_clicks(stereo_damaged, events, strength=1.0)
     error = np.max(np.abs(repaired[:, 0] - signal))
     assert error < 0.05, f"repair left {error:.3f} of the click behind"
+
+
+LADDER = [5.0, 10.0, 20.0, 35.0, 50.0, 75.0, 100.0]
+
+
+def clicky(seconds: float = 2.0, spacing: int = 7000) -> tuple[np.ndarray, list[int]]:
+    """Tonal material with unmistakable clicks at known positions."""
+    signal = tonal(seconds)
+    positions = list(range(4000, signal.size - 4000, spacing))
+    for position in positions:
+        signal[position : position + 3] += np.array([0.5, -0.45, 0.4])
+    return signal, positions
+
+
+def usable_threshold(signal: np.ndarray, positions: list[int]) -> float:
+    """The rung of the ladder that finds these clicks without inventing others.
+
+    Deliberately not a constant. The ratio a click reaches depends on the
+    material around it — on this fixture it tops out near 50 because the 3.1 kHz
+    tone passes the detector's high-pass, while on a real transfer the same
+    detector saw ratios past 400. A test that hard-coded one number would be
+    asserting the very thing this design refuses to claim.
+    """
+    for threshold in LADDER:
+        found = [start for start, _e, _p in click_events_block(signal, SAMPLE_RATE, threshold, 2.0)]
+        hit = sum(any(abs(f - p) <= 32 for f in found) for p in positions)
+        if hit >= 0.9 * len(positions) and len(found) <= 1.5 * len(positions):
+            return threshold
+    raise AssertionError("no rung of the ladder both finds the clicks and stays quiet")
+
+
+@pytest.mark.parametrize("chunk_seconds", [0.5, 1.0, 2.0])
+def test_block_detector_answer_does_not_depend_on_how_much_audio_it_was_given(
+    chunk_seconds: float,
+) -> None:
+    """The property the analyzer and the DSP engine need in order to agree.
+
+    The analyzer measures a whole side; the engine repairs one track at a time.
+    If the detector's threshold is derived from whatever it was handed, the two
+    describe different events and the plan's statistics stop describing the run.
+    Measured on a real transfer, ``click_events`` drifted by up to 7.8x across
+    chunk sizes; this pins the ratio detector's behaviour instead of trusting it.
+    """
+    signal, positions = clicky(4.0, spacing=5000)
+    threshold = usable_threshold(signal, positions)
+
+    def rate(chunk: float | None) -> float:
+        step = int(chunk * SAMPLE_RATE) if chunk else signal.size
+        # Just past the detector's own edge guard (half a context window, 20 ms),
+        # so that filter warm-up is excluded without excluding the whole chunk.
+        margin = int(0.05 * SAMPLE_RATE)
+        found = measured = 0
+        for start in range(0, signal.size, step):
+            piece = signal[start : start + step]
+            if piece.size < 4 * margin:
+                continue
+            events = click_events_block(piece, SAMPLE_RATE, threshold, 2.0)
+            found += sum(1 for a, _b, _p in events if margin <= a < piece.size - margin)
+            measured += piece.size - 2 * margin
+        return found / max(measured, 1) * SAMPLE_RATE
+
+    whole = rate(None)
+    chunked = rate(chunk_seconds)
+    assert whole > 0, "the fixture must produce detections"
+    assert 0.8 <= chunked / whole <= 1.25, (
+        f"detection rate moved from {whole:.2f}/s to {chunked:.2f}/s when the same audio "
+        f"was handed over in {chunk_seconds}s pieces"
+    )
+
+
+def test_block_detector_finds_obvious_clicks_and_leaves_clean_audio_alone() -> None:
+    """A regression guard, not evidence that this detector beats another.
+
+    Precision and recall here are measured against damage this test injected, so
+    they say only that the detector still does the obvious thing: find a click
+    that is plainly there, and stay quiet on material that has none. Ranking two
+    detectors this way would be circular — the same hand chooses the click model
+    and the algorithm. For that, the inter-track gaps of a real record are the
+    evidence, because a gap holds no programme material to be confused by.
+    """
+    signal, positions = clicky()
+    threshold = usable_threshold(signal, positions)
+    assert click_events_block(tonal(2.0), SAMPLE_RATE, threshold, 2.0) == []
+
+
+def test_threshold_sweep_is_monotone_and_matches_a_single_call() -> None:
+    """The ladder is one pass of the arithmetic, so it must agree with the
+    single-threshold path, and raising a threshold can only remove detections."""
+    signal, _positions = clicky()
+    sweep = click_events_block_sweep(signal, SAMPLE_RATE, LADDER, 2.0)
+    counts = [len(sweep[threshold]) for threshold in LADDER]
+    assert counts == sorted(counts, reverse=True), counts
+    for threshold in LADDER:
+        assert sweep[threshold] == click_events_block(signal, SAMPLE_RATE, threshold, 2.0)

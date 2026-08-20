@@ -82,15 +82,15 @@ def build_plan(recording, analysis, analysis_digest: str) -> ProcessingPlan:
             },
             "declick": {
                 "engine": "native",
-                "algorithm": "mad_interpolate",
-                "threshold": 6.0,
+                "algorithm": "block_ratio",
+                "threshold": 50.0,
                 "max_click_width_ms": 2.0,
                 "strength": 1.0,
                 "decision": {
                     "skill": "plan-declick",
                     "rationale": (
-                        "Moderate click rate, no loud clicks in the histogram and sparse "
-                        "transients: default threshold at full strength."
+                        "Rung 50 of clicks.threshold_sweep: the lowest whose silence rate "
+                        "dominates its programme rate, verified by ear in the gaps."
                     ),
                     "confidence": 0.85,
                     "inputs": ["analysis.json#clicks", "analysis.json#transients"],

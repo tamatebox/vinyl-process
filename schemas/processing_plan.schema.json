@@ -4,7 +4,7 @@
       "additionalProperties": false,
       "properties": {
         "algorithm": {
-          "default": "mad_interpolate",
+          "default": "block_ratio",
           "title": "Algorithm",
           "type": "string"
         },
@@ -60,10 +60,17 @@
           "type": "number"
         },
         "threshold": {
-          "default": 6.0,
-          "exclusiveMinimum": 0,
-          "title": "Threshold",
-          "type": "number"
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Threshold"
         }
       },
       "title": "DeclickPlan",
@@ -638,7 +645,7 @@
       "type": "string"
     },
     "schema_version": {
-      "default": "1.0",
+      "default": "2.0",
       "title": "Schema Version",
       "type": "string"
     },

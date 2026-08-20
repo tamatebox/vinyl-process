@@ -101,10 +101,17 @@ class SplitPlan(EngineSection):
 # declick
 # --------------------------------------------------------------------------- #
 class DeclickPlan(EngineSection):
-    algorithm: str = "mad_interpolate"
+    algorithm: str = "block_ratio"
     """Engine-defined algorithm id; validated by the engine, not the schema."""
 
-    threshold: float = Field(default=6.0, gt=0)
+    threshold: float | None = Field(default=None, gt=0)
+    """Engine-defined scale, and deliberately without a default.
+
+    For ``block_ratio`` it is a ratio of energies read off
+    ``clicks.threshold_sweep`` for *this* pressing: two sides of one album wanted
+    different rungs, and a collection spans near-mint to heavily worn. A default
+    here would be a decision taken on behalf of every record, which is the one
+    thing this layer must not do. The engine refuses to run without it."""
     max_click_width_ms: float = Field(default=2.0, gt=0)
     strength: float = Field(default=1.0, ge=0.0, le=1.0)
     preset: str | None = None

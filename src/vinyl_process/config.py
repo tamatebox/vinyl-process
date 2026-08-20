@@ -131,8 +131,17 @@ margin_db = 8.0
 min_duration_seconds = 0.5
 
 [analyzer.clicks]
-threshold_mad = 6.0
-max_width_ms = 3.0
+# The detector compares the energy of a click-width window with the energy of its
+# neighbourhood, which makes it independent both of how loud the passage is and of
+# how much audio it was handed — the latter is why the analyzer, which sees a side,
+# and the engine, which sees one track, describe the same events.
+# The ladder reported as clicks.threshold_sweep. Which rung to *run* at is a
+# decision and lives in processing_plan.json, chosen per pressing: no single
+# value suits a collection spanning near-mint to heavily worn.
+threshold_ladder = [10.0, 20.0, 35.0, 50.0, 75.0, 100.0, 150.0, 250.0, 400.0]
+# Which rung is promoted to the top-level count and rates. A reporting choice.
+threshold_ratio = 50.0
+max_width_ms = 2.0
 
 [preferences]
 export_format = "flac"

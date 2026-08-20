@@ -1,8 +1,14 @@
 """Click statistics — measurement only; repair lives in the DSP layer.
 
 Detection is shared with the native declick engine through
-:mod:`vinyl_process.signal_ops`, so the statistics a skill reasons about and the
-damage the engine repairs are the same events by construction.
+:mod:`vinyl_process.signal_ops`. Sharing the *function* is not enough for the
+statistics to describe what the engine will repair: with a data-dependent
+threshold the answer also depends on how much audio the caller passed, and this
+analyzer sees a whole side while the engine sees one track at a time. Measured on
+one record, that gap was 38 693 clicks reported against 58 355 spans repaired.
+The default detector is therefore the one whose statistic is local — an energy
+ratio against a fixed-length neighbourhood — which makes the two agree by
+construction rather than by coincidence.
 """
 
 from __future__ import annotations
@@ -11,9 +17,14 @@ import numpy as np
 
 from vinyl_process.analyzer.base import AnalyzerContext
 from vinyl_process.analyzer.registry import analyzer
-from vinyl_process.models.analysis import ClicksSection, Histogram, SilenceSection
+from vinyl_process.models.analysis import (
+    ClicksSection,
+    Histogram,
+    SilenceSection,
+    ThresholdPoint,
+)
 from vinyl_process.models.common import SectionMeta
-from vinyl_process.signal_ops import amplitude_to_db, click_events
+from vinyl_process.signal_ops import amplitude_to_db, click_events_block_sweep
 
 AMPLITUDE_BINS_DB: tuple[float, ...] = (-90.0, -60.0, -50.0, -40.0, -30.0, -20.0, -10.0, 0.0)
 WIDTH_BINS_MS: tuple[float, ...] = (0.0, 0.1, 0.25, 0.5, 1.0, 2.0, 4.0, 8.0)
@@ -33,13 +44,21 @@ def _histogram(values: np.ndarray, edges: tuple[float, ...], unit: str) -> Histo
 
 @analyzer(
     name="clicks",
-    version="1.1",
+    version="2.0",
     description="Click count, rate, histograms, and where the clicks are.",
     requires=("silence",),
     defaults={
         "silence_min_seconds": 2.0,
-        "threshold_mad": 6.0,
-        "max_width_ms": 3.0,
+        # The ladder reported as `threshold_sweep`. A measurement grid, not a
+        # recommendation: which rung to *run* at is a decision and belongs to the
+        # plan, chosen per pressing.
+        "threshold_ladder": [10.0, 20.0, 35.0, 50.0, 75.0, 100.0, 150.0, 250.0, 400.0],
+        # Which rung is promoted to the top-level count and rates. Mid-ladder, so
+        # the headline is not an extreme of the curve. A reporting choice only.
+        "threshold_ratio": 50.0,
+        "detect_ms": 0.2,
+        "context_ms": 40.0,
+        "max_width_ms": 2.0,
         "highpass_hz": 3000.0,
         "max_positions": 5000,
     },
@@ -47,13 +66,32 @@ def _histogram(values: np.ndarray, edges: tuple[float, ...], unit: str) -> Histo
 def analyze_clicks(context: AnalyzerContext) -> ClicksSection:
     audio = context.audio
     max_width_ms = context.number("max_width_ms")
-    events = click_events(
+    sweep: list[ThresholdPoint] = []
+    promoted = context.number("threshold_ratio")
+    ladder = sorted({*context.numbers("threshold_ladder"), promoted})
+    by_threshold = click_events_block_sweep(
         audio.mono(),
         audio.sample_rate,
-        context.number("threshold_mad"),
+        ladder,
         max_width_ms,
+        detect_ms=context.number("detect_ms"),
+        context_ms=context.number("context_ms"),
         highpass_hz=context.number("highpass_hz"),
     )
+    minutes_all = max(audio.duration_seconds / 60.0, 1e-9)
+    for threshold in ladder:
+        found = by_threshold[threshold]
+        at_silence, at_programme = _rates_by_region(context, [s for s, _e, _p in found])
+        sweep.append(
+            ThresholdPoint(
+                threshold=threshold,
+                count=len(found),
+                rate_per_minute=round(len(found) / minutes_all, 2),
+                silence_rate_per_minute=at_silence,
+                programme_rate_per_minute=at_programme,
+            )
+        )
+    events = by_threshold[promoted]
 
     peaks_db = np.asarray([amplitude_to_db(peak) for _s, _e, peak in events], dtype=np.float64)
     widths_ms = np.asarray(
@@ -76,6 +114,7 @@ def analyze_clicks(context: AnalyzerContext) -> ClicksSection:
         density_per_minute=_density_per_minute(positions, audio.sample_rate, audio.num_frames),
         silence_rate_per_minute=silence_rate,
         programme_rate_per_minute=programme_rate,
+        threshold_sweep=sweep,
         positions_sample=positions[:limit],
         positions_truncated=len(positions) > limit,
     )
