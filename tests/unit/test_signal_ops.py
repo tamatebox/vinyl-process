@@ -10,12 +10,18 @@ from vinyl_process.signal_ops import (
     apply_fades,
     click_events_block,
     click_events_block_sweep,
+    confirm_clicks_sinusoidal,
+    correlation_at,
     db_to_amplitude,
     highpass,
     local_bounds,
     merge_runs,
+    onset_coincidence,
+    onset_flux,
+    periodicity_peaks,
     repair_clicks,
     runs_of_true,
+    sinusoidal_residual,
     transient_onsets,
     windowed_rms,
 )
@@ -287,3 +293,118 @@ def test_threshold_sweep_is_monotone_and_matches_a_single_call() -> None:
     assert counts == sorted(counts, reverse=True), counts
     for threshold in LADDER:
         assert sweep[threshold] == click_events_block(signal, SAMPLE_RATE, threshold, 2.0)
+
+
+def _pulse_train(period_seconds: float, duration_seconds: float, amplitude: float) -> np.ndarray:
+    """Clicks at a fixed period on a bed of quiet noise, deterministically."""
+    samples = np.zeros(int(duration_seconds * SAMPLE_RATE))
+    samples += np.sin(np.arange(samples.size) * 0.0001) * 1e-4
+    step = period_seconds * SAMPLE_RATE
+    for index in range(int(duration_seconds / period_seconds)):
+        start = int(index * step)
+        samples[start : start + 30] += amplitude
+    return samples
+
+
+def test_onset_flux_length_and_mean() -> None:
+    signal = _pulse_train(0.5, 4.0, 0.4)
+    flux = onset_flux(signal, SAMPLE_RATE, window_seconds=0.02, hop_seconds=0.005)
+    window = round(0.02 * SAMPLE_RATE)
+    hop = round(0.005 * SAMPLE_RATE)
+    assert flux.size == (signal.size - window) // hop
+    assert flux.mean() == pytest.approx(0.0, abs=1e-9)
+    # Too short to yield a single frame pair.
+    assert onset_flux(np.zeros(10), SAMPLE_RATE).size == 0
+
+
+def test_periodicity_peaks_find_the_period_and_its_multiples() -> None:
+    flux = onset_flux(_pulse_train(0.8, 20.0, 0.4), SAMPLE_RATE)
+    frame_rate = SAMPLE_RATE / round(0.005 * SAMPLE_RATE)
+    peaks, baseline = periodicity_peaks(flux, frame_rate, 0.25, 4.0, top_k=3)
+    periods = sorted(period for period, _ in peaks)
+    assert periods[0] == pytest.approx(0.8, abs=0.02)
+    assert all(r > 0.4 for _, r in peaks)
+    # Multiples of the period are peaks too, so the top three are 0.8, 1.6, 2.4.
+    assert periods == pytest.approx([0.8, 1.6, 2.4], abs=0.02)
+    # A clean tick train spikes only at those multiples and leaves the rest of
+    # the curve flat, so the median stays near zero. Dense crackle does not —
+    # which is why the baseline is reported rather than assumed.
+    assert baseline == pytest.approx(0.0, abs=0.05)
+
+
+def test_periodicity_peaks_are_empty_when_the_envelope_is_too_short_or_flat() -> None:
+    frame_rate = SAMPLE_RATE / round(0.005 * SAMPLE_RATE)
+    assert periodicity_peaks(np.zeros(100), frame_rate, 0.25, 4.0) == ([], 0.0)
+    assert periodicity_peaks(np.zeros(4000), frame_rate, 0.25, 4.0) == ([], 0.0)
+
+
+def test_correlation_at_matches_the_period_it_is_asked_about() -> None:
+    flux = onset_flux(_pulse_train(1.3333, 24.0, 0.4), SAMPLE_RATE)
+    frame_rate = SAMPLE_RATE / round(0.005 * SAMPLE_RATE)
+    on_period = correlation_at(flux, round(1.3333 * frame_rate))
+    off_period = correlation_at(flux, round(0.9 * frame_rate))
+    assert on_period > 0.5
+    assert on_period > off_period + 0.4
+    assert correlation_at(flux, 0) == 0.0
+    assert correlation_at(flux, flux.size + 1) == 0.0
+
+
+def test_onset_coincidence_is_one_for_indifferent_positions_and_large_on_attacks() -> None:
+    """The diagnostic the gap-versus-programme rates cannot supply.
+
+    On the record this was written against, a rung whose silence rate beat its
+    programme rate 43.8 to 1 was still landing on note attacks 7.8 times more
+    often than chance. So the figure is checked against both ends: positions
+    chosen without regard to the signal must score about 1, and positions placed
+    on attacks must score well above it.
+    """
+    rng = np.random.default_rng(5)
+    signal = 0.02 * rng.normal(size=SAMPLE_RATE * 4)
+    attacks = list(range(SAMPLE_RATE // 2, signal.size - SAMPLE_RATE // 2, 7000))
+    for position in attacks:
+        signal[position : position + 400] += 0.4 * np.exp(-np.arange(400) / 90)
+
+    # Densely sampled, so the estimate converges: a sparse set of positions lands
+    # on an attack often enough by luck to read as a bias that is not there.
+    indifferent = list(range(SAMPLE_RATE // 3, signal.size - SAMPLE_RATE // 3, 97))
+    assert onset_coincidence(signal, indifferent, SAMPLE_RATE) < 1.5
+    assert onset_coincidence(signal, attacks, SAMPLE_RATE) > 5.0
+    # No positions, or a signal too short to hold a control, is not a figure of 0.
+    assert onset_coincidence(signal, [], SAMPLE_RATE) != onset_coincidence(signal, [], SAMPLE_RATE)
+
+
+def test_sinusoidal_residual_keeps_an_impulse_and_removes_a_tone() -> None:
+    """The property the confirmation stage rests on: a few partials can represent
+    tonal material but not an impulse, so what survives is the impulse."""
+    time = np.arange(512) / SAMPLE_RATE
+    tone = 0.3 * np.sin(2 * np.pi * 440 * time) + 0.1 * np.sin(2 * np.pi * 1320 * time)
+    residual_tone = sinusoidal_residual(tone)
+    assert np.max(np.abs(residual_tone)) < 0.3 * np.max(np.abs(tone))
+
+    with_click = tone.copy()
+    with_click[256] += 0.5
+    residual_click = sinusoidal_residual(with_click)
+    assert np.max(np.abs(residual_click)) > 3 * np.max(np.abs(residual_tone))
+
+
+def test_sinusoidal_confirmation_keeps_a_click_and_needs_its_k_stated() -> None:
+    """Confirmation discards candidates the model already explains — and this is
+    the limit of what is claimed for it.
+
+    On a real pressing no single ``k`` both rejected the musical transients and
+    kept the clicks that had been confirmed by ear: the paper's 3 left the onset
+    bias almost untouched, and 5 threw away five of six verified clicks. So the
+    test pins the mechanism on an unambiguous case and nothing more. There is no
+    default for ``k`` in the engine for the same reason.
+    """
+    time = np.arange(SAMPLE_RATE) / SAMPLE_RATE
+    signal = 0.3 * np.sin(2 * np.pi * 440 * time)
+    position = SAMPLE_RATE // 2
+    signal[position : position + 3] += np.array([0.5, -0.45, 0.4])
+    candidates = [(position, position + 3, 0.5), (position + 20_000, position + 20_003, 0.0)]
+
+    kept = confirm_clicks_sinusoidal(signal, candidates, k=3.0)
+    assert (position, position + 3, 0.5) in kept
+    assert len(kept) == 1, "the candidate over undamaged tone should not survive"
+    # A high enough k rejects everything, which is why it cannot have a default.
+    assert confirm_clicks_sinusoidal(signal, candidates, k=100.0) == []

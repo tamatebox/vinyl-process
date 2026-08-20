@@ -17,6 +17,7 @@ from vinyl_process.models.plan import DeclickPlan, TrackBoundary
 from vinyl_process.signal_ops import (
     apply_fades,
     click_events_block,
+    confirm_clicks_sinusoidal,
     repair_clicks,
     repair_clicks_ar,
     repair_clicks_linear,
@@ -107,6 +108,20 @@ class NativeEngine(DspEngine):
             context_ms=float(plan.params.get("context_ms", 40.0)),
             highpass_hz=float(plan.params.get("highpass_hz", 3000.0)),
         )
+        # Alvarez, Mendez & Langwagen (DAFx 2004): discard candidates that a few
+        # sinusoids already explain. Opt-in, because `confirm_k` is a decision and
+        # a default here would be one taken for every record. With it the detector
+        # can stay sensitive: raising a threshold until it stops firing on the
+        # music also stops it finding quiet clicks, and this separates the two.
+        confirm_k = plan.params.get("confirm_k")
+        if confirm_k is not None:
+            events = confirm_clicks_sinusoidal(
+                audio.mono(),
+                events,
+                float(confirm_k),
+                components=int(plan.params.get("confirm_components", 5)),
+                margin=int(plan.params.get("confirm_margin", 50)),
+            )
         interpolator = str(plan.params.get("interpolator", "ar"))
         if interpolator == "linear":
             return audio.with_samples(repair_clicks_linear(audio.samples, events, plan.strength))

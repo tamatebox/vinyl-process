@@ -149,6 +149,15 @@ class ThresholdPoint(ContractModel):
     silence_rate_per_minute: float | None = Field(default=None, ge=0)
     programme_rate_per_minute: float | None = Field(default=None, ge=0)
 
+    onset_coincidence: float | None = None
+    """How much more often than chance this rung's detections sit on a rising
+    edge. 1.0 means the detector is indifferent to note attacks; large means it is
+    following the music, and the repair would interpolate over the attacks.
+
+    Read it beside the two rates, because they do not catch this. On one pressing
+    a rung whose silence rate beat its programme rate 43.8 to 1 still landed on
+    onsets 7.8 times more often than chance."""
+
 
 class ClicksSection(Section):
     count: int = Field(ge=0)
@@ -229,6 +238,85 @@ class TransientsSection(Section):
     peak_per_second: float = Field(ge=0)
 
 
+class PeriodPeak(ContractModel):
+    """One autocorrelation peak of the onset-strength envelope."""
+
+    period_seconds: float = Field(gt=0)
+    r: float
+
+
+class RevolutionCorrelation(ContractModel):
+    """Correlation at one turntable speed's revolution period.
+
+    Named speeds rather than discovered ones, in the same spirit as
+    ``spectral.bands``: how strongly this window repeats at exactly one turn of
+    the disc is a fact about the recording, and which speed the record actually
+    is remains the reader's to conclude.
+    """
+
+    rpm: float = Field(gt=0)
+    period_seconds: float = Field(gt=0)
+    r: float
+
+
+class PeriodicityWindow(ContractModel):
+    """One probe window. Positions are inclusive-exclusive."""
+
+    start_sample: int = Field(ge=0)
+    end_sample: int = Field(ge=0)
+
+    peaks: list[PeriodPeak]
+    """Strongest autocorrelation peaks, ordered by ``r``."""
+
+    baseline_r: float
+    """Median correlation across the search range — the floor the peaks stand on.
+
+    Subtract it before comparing peaks between windows. It is not itself a mark
+    of surface noise: on a tested side the crackling lead-in sat at 0.17-0.23
+    while the run-out groove, whose tick is far cleaner, sat at -0.03, and quiet
+    programme reached 0.24."""
+
+    revolution: list[RevolutionCorrelation]
+    """Correlation at each configured revolution period."""
+
+
+class PeriodicitySection(Section):
+    """How periodic the material is, window by window.
+
+    Answers one question the level envelope cannot: is a quiet stretch faint
+    music or the record's own surface? A groove defect repeats once per
+    revolution — 1.8 s at 33 1/3 rpm, 1.333 s at 45 — and never on the beat, so a
+    window topped by the revolution period is the pressing rather than the
+    performance, however loud or bright it is. This reports the correlations; the
+    reading is the caller's.
+
+    Compare a window's own top peak against its ``revolution`` entries: where a
+    revolution correlation rivals the top peak, the window is surface. Two things
+    that look like they should work do not. A single correlation taken at
+    ``programme_period_seconds`` does not — on a tested side the whole-programme
+    estimate landed on the bar while individual windows expressed the sub-beat,
+    so the comparison separated nothing. Nor does ``baseline_r`` alone; see there.
+    """
+
+    onset_hop_seconds: float = Field(gt=0)
+    window_seconds: float = Field(gt=0)
+    window_hop_seconds: float = Field(gt=0)
+    min_period_seconds: float = Field(gt=0)
+    max_period_seconds: float = Field(gt=0)
+
+    programme_period_seconds: float | None = None
+    """Dominant onset period over everything the silence detector did not claim —
+    the beat, or a multiple of it. Falls back to the whole recording when the
+    detector claims all of it. Context, not a threshold."""
+
+    programme_peak_prominence: float | None = None
+    """Median ``top peak r - baseline_r`` across windows lying wholly inside the
+    programme: what a window of this record's music looks like, measured the same
+    way as every window below, so the two are comparable."""
+
+    windows: list[PeriodicityWindow]
+
+
 # --------------------------------------------------------------------------- #
 # document
 # --------------------------------------------------------------------------- #
@@ -250,6 +338,7 @@ class AnalysisDocument(VersionedDocument):
     clipping: ClippingSection | None = None
     spectral: SpectralSection | None = None
     transients: TransientsSection | None = None
+    periodicity: PeriodicitySection | None = None
 
     warnings: list[str] = Field(default_factory=list)
 

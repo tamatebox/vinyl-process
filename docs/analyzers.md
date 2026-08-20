@@ -19,6 +19,7 @@ anything outside its context.
 | `clipping` | — | full-scale sample runs, longest run, ratio |
 | `spectral` | — | centroid, roll-off, rumble, hiss, band energies |
 | `transients` | — | onset density per second |
+| `periodicity` | `silence` | onset-envelope autocorrelation per window: the strongest periods, the baseline they stand on, and the correlation at each turntable speed's revolution period |
 
 `vinyl-process analyzers --json` prints this with each analyzer's version and
 default parameters.

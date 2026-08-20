@@ -225,6 +225,110 @@ def _localised_events(
     return events
 
 
+def onset_coincidence(
+    mono: np.ndarray, positions: Sequence[int], sample_rate: int, window_ms: float = 10.0
+) -> float:
+    """How much more often than chance these positions sit on a rising edge.
+
+    A detection that lands where the signal jumps is probably the thing that made
+    it jump. Comparing the share of detections on a rise against the share of *all*
+    positions on a rise turns that into a number: 1.0 means the detector is
+    indifferent to onsets, and large means it is following the music.
+
+    This is the check that a gap-versus-programme rate cannot make. On one
+    pressing a threshold whose silence rate beat its programme rate 43.8 to 1 was
+    still landing on onsets 7.8 times more often than chance, and a lower rung
+    accepted by the same ratio produced detections spaced at the beat rather than
+    at the platter's revolution. The control is a fixed stride rather than random
+    samples, so the figure is reproducible.
+    """
+    x = np.asarray(mono, dtype=np.float64)
+    window = max(2, round(window_ms / 1000.0 * sample_rate))
+    if x.size < 4 * window or not len(positions):
+        return float("nan")
+    cumulative = np.concatenate([[0.0], np.cumsum(x**2)])
+
+    def rise_db(index: npt.NDArray[np.int64]) -> npt.NDArray[np.float64]:
+        before = cumulative[index] - cumulative[index - window]
+        after = cumulative[index + window] - cumulative[index]
+        return np.asarray(10.0 * np.log10((after + EPS) / (before + EPS)), dtype=np.float64)
+
+    grid = np.arange(window, x.size - window, 64, dtype=np.int64)
+    found = np.asarray([p for p in positions if window <= p < x.size - window], dtype=np.int64)
+    if grid.size == 0 or found.size == 0:
+        return float("nan")
+    control = max(float((rise_db(grid) > 6.0).mean()), 1.0 / grid.size)
+    return round(float((rise_db(found) > 6.0).mean()) / control, 2)
+
+
+def sinusoidal_residual(segment: np.ndarray, components: int = 5) -> npt.NDArray[np.float64]:
+    """``segment`` windowed, minus a reconstruction from its strongest partials.
+
+    Few components on purpose: a handful of sinusoids can represent tonal
+    material but not an impulse, so what survives the subtraction at a real click
+    is the click. Both sides are windowed, which is why no deconvolution is
+    needed and why the taper keeps the edges from dominating — the candidate sits
+    at the centre by construction.
+    """
+    n = segment.size
+    if n < 16:
+        return np.zeros(n, dtype=np.float64)
+    windowed = np.asarray(segment, dtype=np.float64) * np.hanning(n)
+    spectrum = np.fft.rfft(windowed)
+    magnitude = np.abs(spectrum)
+    interior = np.arange(1, magnitude.size - 1)
+    peaks = interior[(magnitude[1:-1] > magnitude[:-2]) & (magnitude[1:-1] >= magnitude[2:])]
+    if peaks.size == 0:
+        peaks = np.array([int(np.argmax(magnitude))])
+    chosen = peaks[np.argsort(magnitude[peaks])[::-1][:components]]
+    keep = np.zeros(magnitude.size, dtype=bool)
+    for index in chosen:
+        # a windowed sinusoid occupies a lobe, not a bin
+        keep[max(0, index - 1) : min(magnitude.size, index + 2)] = True
+    model = np.fft.irfft(np.where(keep, spectrum, 0.0), n=n)
+    return np.asarray(windowed - model, dtype=np.float64)
+
+
+def confirm_clicks_sinusoidal(
+    mono: np.ndarray,
+    events: list[ClickEvent],
+    k: float,
+    components: int = 5,
+    margin: int = 50,
+) -> list[ClickEvent]:
+    """Discard candidates a few sinusoids can already explain.
+
+    After Alvarez, Mendez & Langwagen (DAFx 2004). For each candidate, model the
+    audio from ``margin`` samples before it to ``margin`` after with
+    ``components`` partials, and keep it only if the residual inside its span
+    exceeds ``k`` standard deviations of that residual over the window.
+
+    The point is that it lets the *detector* be sensitive. Raising a detection
+    threshold until it stops firing on the music also stops it firing on quiet
+    clicks; a confirmation stage separates the two decisions. Measured on one
+    pressing, a rung whose detections landed on onsets 13.3 times more often than
+    chance came down to indifference under this test while keeping its detections
+    in the inter-track gaps.
+
+    ``k`` is a decision and has no default here: the paper's 3 left the onset bias
+    almost untouched on the pressing measured, which needed 5. Choose it by
+    raising it until :func:`onset_coincidence` stops exceeding 1, and record the
+    value in the plan.
+    """
+    kept: list[ClickEvent] = []
+    for start, end, peak in events:
+        lo = max(0, start - margin)
+        hi = min(mono.size, end + margin)
+        if hi - lo < 32:
+            continue
+        residual = sinusoidal_residual(mono[lo:hi], components)
+        threshold = k * float(np.std(residual))
+        span = residual[start - lo : max(start - lo + 1, end - lo)]
+        if float(np.max(np.abs(span))) > threshold:
+            kept.append((start, end, peak))
+    return kept
+
+
 def ar_coefficients(segment: np.ndarray, order: int) -> npt.NDArray[np.float64]:
     """Yule-Walker AR coefficients, so ``x[n] ~ sum a[k] * x[n-k-1]``."""
     x = np.asarray(segment, dtype=np.float64)
@@ -561,3 +665,104 @@ def transient_onsets(
     sigma = 1.4826 * float(np.median(np.abs(positive - np.median(positive))))
     hot = positive > max(threshold_mad * sigma, min_rise_db)
     return np.asarray([start for start, _end in runs_of_true(hot)], dtype=np.int64)
+
+
+def onset_flux(
+    mono: np.ndarray,
+    sample_rate: int,
+    window_seconds: float = 0.02,
+    hop_seconds: float = 0.005,
+) -> npt.NDArray[np.float64]:
+    """Spectral-flux onset strength per frame, mean removed.
+
+    The positive part of the frame-to-frame change in magnitude spectrum, summed
+    over bins. Unlike :func:`transient_onsets` this keeps a continuous strength
+    rather than thresholding to onset positions, because what it feeds —
+    :func:`periodicity_peaks` — needs to see a *weak but regular* pulse train
+    that no threshold would keep.
+
+    Computed in chunks so a full album side does not materialise its own STFT.
+    """
+    window = max(4, round(window_seconds * sample_rate))
+    hop = max(1, round(hop_seconds * sample_rate))
+    samples = np.asarray(mono, dtype=np.float64)
+    if samples.size < window + hop:
+        return np.zeros(0, dtype=np.float64)
+
+    taper = np.hanning(window)
+    frames = (samples.size - window) // hop + 1
+    flux = np.zeros(frames - 1, dtype=np.float64)
+    previous: npt.NDArray[np.float64] | None = None
+    chunk = max(1, (1 << 20) // max(1, window))
+    for start in range(0, frames, chunk):
+        stop = min(frames, start + chunk)
+        offsets = np.arange(start, stop) * hop
+        block = samples[offsets[:, None] + np.arange(window)[None, :]] * taper
+        magnitude = np.abs(np.fft.rfft(block, axis=1))
+        if previous is not None:
+            flux[start - 1] = float(np.maximum(magnitude[0] - previous, 0.0).sum())
+        rise = np.maximum(np.diff(magnitude, axis=0), 0.0).sum(axis=1)
+        flux[start : start + rise.size] = rise
+        previous = magnitude[-1]
+    return np.asarray(flux - flux.mean(), dtype=np.float64)
+
+
+def periodicity_peaks(
+    flux: np.ndarray,
+    frame_rate: float,
+    min_period_seconds: float,
+    max_period_seconds: float,
+    top_k: int = 3,
+) -> tuple[list[tuple[float, float]], float]:
+    """Autocorrelation peaks of an onset-strength envelope, with its baseline.
+
+    Returns ``([(period_seconds, r), ...], baseline_r)`` — up to ``top_k`` peaks
+    ordered by correlation, and the median correlation across the search range.
+
+    The baseline is reported because a peak means nothing without the floor it
+    stands on. A broad, slowly modulated envelope — dense crackle, say — raises
+    the correlation everywhere at once, so a raw ``r`` read off it can match real
+    music; a clean tick train, by contrast, leaves the median near zero and
+    spikes only at its own multiples. Subtract the median before comparing one
+    window's peak against another's.
+    """
+    envelope = np.asarray(flux, dtype=np.float64)
+    lo = max(1, round(min_period_seconds * frame_rate))
+    hi = round(max_period_seconds * frame_rate)
+    if envelope.size < 2 * hi or hi <= lo:
+        return [], 0.0
+
+    envelope = envelope - envelope.mean()
+    energy = float(envelope @ envelope)
+    if energy <= EPS:
+        return [], 0.0
+    correlation = np.correlate(envelope, envelope, mode="full")[envelope.size - 1 :] / energy
+
+    window = correlation[lo:hi]
+    baseline = float(np.median(window))
+    guard = max(1, round(0.08 * frame_rate))
+    peaks: list[tuple[float, float]] = []
+    for index in np.argsort(window)[::-1]:
+        lag = int(index) + lo
+        if any(abs(lag - round(period * frame_rate)) < guard for period, _ in peaks):
+            continue
+        peaks.append((lag / frame_rate, float(window[index])))
+        if len(peaks) == top_k:
+            break
+    return peaks, baseline
+
+
+def correlation_at(flux: np.ndarray, lag: int) -> float:
+    """Normalised autocorrelation of an onset envelope at one lag.
+
+    Zero when the lag does not fit the envelope, so a caller can ask about a
+    fixed period — one turn of the disc, say — without first checking length.
+    """
+    envelope = np.asarray(flux, dtype=np.float64)
+    if lag <= 0 or envelope.size <= lag:
+        return 0.0
+    envelope = envelope - envelope.mean()
+    energy = float(envelope @ envelope)
+    if energy <= EPS:
+        return 0.0
+    return float(envelope[:-lag] @ envelope[lag:]) / energy

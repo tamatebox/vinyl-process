@@ -395,6 +395,145 @@
       "title": "Percentiles",
       "type": "object"
     },
+    "PeriodPeak": {
+      "additionalProperties": false,
+      "description": "One autocorrelation peak of the onset-strength envelope.",
+      "properties": {
+        "period_seconds": {
+          "exclusiveMinimum": 0,
+          "title": "Period Seconds",
+          "type": "number"
+        },
+        "r": {
+          "title": "R",
+          "type": "number"
+        }
+      },
+      "required": [
+        "period_seconds",
+        "r"
+      ],
+      "title": "PeriodPeak",
+      "type": "object"
+    },
+    "PeriodicitySection": {
+      "additionalProperties": false,
+      "description": "How periodic the material is, window by window.\n\nAnswers one question the level envelope cannot: is a quiet stretch faint\nmusic or the record's own surface? A groove defect repeats once per\nrevolution \u2014 1.8 s at 33 1/3 rpm, 1.333 s at 45 \u2014 and never on the beat, so a\nwindow topped by the revolution period is the pressing rather than the\nperformance, however loud or bright it is. This reports the correlations; the\nreading is the caller's.\n\nCompare a window's own top peak against its ``revolution`` entries: where a\nrevolution correlation rivals the top peak, the window is surface. Two things\nthat look like they should work do not. A single correlation taken at\n``programme_period_seconds`` does not \u2014 on a tested side the whole-programme\nestimate landed on the bar while individual windows expressed the sub-beat,\nso the comparison separated nothing. Nor does ``baseline_r`` alone; see there.",
+      "properties": {
+        "max_period_seconds": {
+          "exclusiveMinimum": 0,
+          "title": "Max Period Seconds",
+          "type": "number"
+        },
+        "meta": {
+          "$ref": "#/$defs/SectionMeta"
+        },
+        "min_period_seconds": {
+          "exclusiveMinimum": 0,
+          "title": "Min Period Seconds",
+          "type": "number"
+        },
+        "onset_hop_seconds": {
+          "exclusiveMinimum": 0,
+          "title": "Onset Hop Seconds",
+          "type": "number"
+        },
+        "programme_peak_prominence": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Programme Peak Prominence"
+        },
+        "programme_period_seconds": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Programme Period Seconds"
+        },
+        "window_hop_seconds": {
+          "exclusiveMinimum": 0,
+          "title": "Window Hop Seconds",
+          "type": "number"
+        },
+        "window_seconds": {
+          "exclusiveMinimum": 0,
+          "title": "Window Seconds",
+          "type": "number"
+        },
+        "windows": {
+          "items": {
+            "$ref": "#/$defs/PeriodicityWindow"
+          },
+          "title": "Windows",
+          "type": "array"
+        }
+      },
+      "required": [
+        "onset_hop_seconds",
+        "window_seconds",
+        "window_hop_seconds",
+        "min_period_seconds",
+        "max_period_seconds",
+        "windows"
+      ],
+      "title": "PeriodicitySection",
+      "type": "object"
+    },
+    "PeriodicityWindow": {
+      "additionalProperties": false,
+      "description": "One probe window. Positions are inclusive-exclusive.",
+      "properties": {
+        "baseline_r": {
+          "title": "Baseline R",
+          "type": "number"
+        },
+        "end_sample": {
+          "minimum": 0,
+          "title": "End Sample",
+          "type": "integer"
+        },
+        "peaks": {
+          "items": {
+            "$ref": "#/$defs/PeriodPeak"
+          },
+          "title": "Peaks",
+          "type": "array"
+        },
+        "revolution": {
+          "items": {
+            "$ref": "#/$defs/RevolutionCorrelation"
+          },
+          "title": "Revolution",
+          "type": "array"
+        },
+        "start_sample": {
+          "minimum": 0,
+          "title": "Start Sample",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "start_sample",
+        "end_sample",
+        "peaks",
+        "baseline_r",
+        "revolution"
+      ],
+      "title": "PeriodicityWindow",
+      "type": "object"
+    },
     "RecordingInfoSection": {
       "additionalProperties": false,
       "description": "Electrical and format characteristics of the capture itself.",
@@ -471,6 +610,33 @@
         "channel_rms_db"
       ],
       "title": "RecordingInfoSection",
+      "type": "object"
+    },
+    "RevolutionCorrelation": {
+      "additionalProperties": false,
+      "description": "Correlation at one turntable speed's revolution period.\n\nNamed speeds rather than discovered ones, in the same spirit as\n``spectral.bands``: how strongly this window repeats at exactly one turn of\nthe disc is a fact about the recording, and which speed the record actually\nis remains the reader's to conclude.",
+      "properties": {
+        "period_seconds": {
+          "exclusiveMinimum": 0,
+          "title": "Period Seconds",
+          "type": "number"
+        },
+        "r": {
+          "title": "R",
+          "type": "number"
+        },
+        "rpm": {
+          "exclusiveMinimum": 0,
+          "title": "Rpm",
+          "type": "number"
+        }
+      },
+      "required": [
+        "rpm",
+        "period_seconds",
+        "r"
+      ],
+      "title": "RevolutionCorrelation",
       "type": "object"
     },
     "RmsProfileSection": {
@@ -735,6 +901,18 @@
           "title": "Count",
           "type": "integer"
         },
+        "onset_coincidence": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Onset Coincidence"
+        },
         "programme_rate_per_minute": {
           "anyOf": [
             {
@@ -908,6 +1086,17 @@
       ],
       "default": null
     },
+    "periodicity": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/PeriodicitySection"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
     "recording_info": {
       "anyOf": [
         {
@@ -931,7 +1120,7 @@
       "default": null
     },
     "schema_version": {
-      "default": "2.0",
+      "default": "2.1",
       "title": "Schema Version",
       "type": "string"
     },

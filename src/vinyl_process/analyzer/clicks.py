@@ -24,7 +24,11 @@ from vinyl_process.models.analysis import (
     ThresholdPoint,
 )
 from vinyl_process.models.common import SectionMeta
-from vinyl_process.signal_ops import amplitude_to_db, click_events_block_sweep
+from vinyl_process.signal_ops import (
+    amplitude_to_db,
+    click_events_block_sweep,
+    onset_coincidence,
+)
 
 AMPLITUDE_BINS_DB: tuple[float, ...] = (-90.0, -60.0, -50.0, -40.0, -30.0, -20.0, -10.0, 0.0)
 WIDTH_BINS_MS: tuple[float, ...] = (0.0, 0.1, 0.25, 0.5, 1.0, 2.0, 4.0, 8.0)
@@ -81,7 +85,9 @@ def analyze_clicks(context: AnalyzerContext) -> ClicksSection:
     minutes_all = max(audio.duration_seconds / 60.0, 1e-9)
     for threshold in ladder:
         found = by_threshold[threshold]
-        at_silence, at_programme = _rates_by_region(context, [s for s, _e, _p in found])
+        positions_at = [s for s, _e, _p in found]
+        at_silence, at_programme = _rates_by_region(context, positions_at)
+        coincidence = onset_coincidence(audio.mono(), positions_at, audio.sample_rate)
         sweep.append(
             ThresholdPoint(
                 threshold=threshold,
@@ -89,6 +95,7 @@ def analyze_clicks(context: AnalyzerContext) -> ClicksSection:
                 rate_per_minute=round(len(found) / minutes_all, 2),
                 silence_rate_per_minute=at_silence,
                 programme_rate_per_minute=at_programme,
+                onset_coincidence=None if coincidence != coincidence else coincidence,
             )
         )
     events = by_threshold[promoted]

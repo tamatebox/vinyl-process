@@ -241,6 +241,14 @@ end to end for determinism.
   surface. `clicks.silence_rate_per_minute` versus
   `clicks.programme_rate_per_minute` exists so a skill can see this; the fix is a
   block-adaptive threshold, which would be a new algorithm id.
+- **The playable region is a level threshold, so a quiet passage can end a side
+  early.** `lead_out_start_sample` is where the level last crossed the silence
+  threshold. On material that drops out by design — dub, electronic — that fires
+  at the drop rather than at the run-out: on one tested side it landed 22 s
+  before the music actually stopped, and cutting there would have truncated the
+  track. `periodicity` is the cross-check, since a run-out groove repeats once per
+  revolution while a quiet outro keeps the beat. `lead_in_end_sample` has the
+  mirror problem and comes back `null` when no leading silence is found at all.
 - **`mad_interpolate` is a short-gap repairer.** It removes clicks up to a few
   milliseconds and leaves seams around −60 dBFS; wider damage needs a predictive
   (LPC/Janssen) interpolator, which would be a new algorithm id in the same engine.

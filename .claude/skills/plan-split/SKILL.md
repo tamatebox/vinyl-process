@@ -16,7 +16,15 @@ From `analysis.json`:
 - `boundaries.candidates[]` — `{sample, method, confidence}` with methods
   `silence`, `rms_valley`, `spectral_change`
 - `boundaries.lead_in_end_sample`, `boundaries.lead_out_start_sample` — the
-  playable region; the trailing silence is the run-out groove
+  playable region; the trailing silence is the run-out groove. **Both are level
+  thresholds and both can be wrong.** On material that drops out by design — dub,
+  electronic — `lead_out_start_sample` fires at the drop rather than at the
+  run-out: on one tested side it landed 22 s before the music stopped, and taking
+  it at face value would have truncated the track. `lead_in_end_sample` comes back
+  `null` when there is no leading silence to find. Check both against
+  `periodicity` before trusting either.
+- `periodicity.windows[]` — the answer to "is this stretch music or surface?",
+  which level and spectrum cannot give. See *Surface or programme?* below.
 - `silence.regions[]` — `{start_sample, music_end_sample, end_sample, mean_rms_db,
   duration_seconds, confidence}`. **`music_end_sample`, not `start_sample`, is
   where the preceding track stopped**: `start_sample` is a fixed-threshold
@@ -27,6 +35,44 @@ From `analysis.json`:
 
 Plus the release tracklist: expected track count and per-track durations. If you
 have none, ask the user for the track count before guessing.
+
+## Surface or programme?
+
+Every hard boundary on a record comes down to this question, and the two obvious
+ways to answer it both fail.
+
+**Level fails** because a quiet outro and a run-out groove sit at the same level.
+That is what `lead_out_start_sample` gets wrong.
+
+**Spectrum fails, and fails convincingly.** A scuffed lead-in groove is *bright* —
+on one tested side it ran 25 dB above the run-out in the 3-8 kHz band, above the
+music as well. Brightness reads as programme and it is not. What does mark
+surface is the *absence of bass*: that lead-in sat level with the run-out below
+150 Hz and 13 dB under the quietest confirmed music.
+
+**Periodicity is what settles it.** A groove defect repeats once per revolution —
+1.8 s at 33 1/3 rpm, 1.333 s at 45 — and never on the beat. For a window in
+`periodicity.windows[]`:
+
+- compare each `revolution[].r` against the window's own `peaks[0].r`. Where a
+  revolution correlation rivals the top peak, the window is the pressing.
+- otherwise check that `peaks[0].period_seconds` is `programme_period_seconds` or
+  a simple multiple or division of it, and that its prominence above
+  `baseline_r` is in the region of `programme_peak_prominence`.
+- where nothing correlates strongly — every `r` small, whatever the level — there
+  is no music there either. Silence and damage both look like this.
+
+Two readings that look sound and are not. `baseline_r` **is not** a surface
+marker: on the same side the crackling lead-in sat at 0.17-0.23 while the
+run-out, whose tick is far cleaner, sat at -0.03, and quiet programme reached
+0.24. Subtract it, do not threshold on it. And a single correlation taken at
+`programme_period_seconds` is not a discriminator either: on a second side the
+whole-programme estimate landed on the bar while individual windows expressed
+the sub-beat, and the comparison separated nothing.
+
+Expect the beat to show *more* strongly in a quiet passage than in the loud body
+of the same track — the surface stops masking it. A faint stretch that locks to
+the grid harder than the track does is still that track.
 
 ## Procedure
 
@@ -68,11 +114,21 @@ have none, ask the user for the track count before guessing.
    run-out is not a competitor for it. Do **not** interpolate that end from the
    label's duration — the instruction here used to say so, and it appended 11 s of
    run-out groove noise to a side whose printed duration was that much too long.
-   Confirm the cut against `rms_profile` past it: a flat plateau is the run-out
-   groove and the cut stands, while a level still descending means the fade is
-   still running, so extend to where it flattens. The label is a cross-check —
-   report a disagreement over ~5 s as a fact about the pressing, not as a reason
-   to move the cut.
+   Confirm the cut against `periodicity` past it, not against `rms_profile`. The
+   instruction here used to be "a flat plateau is the run-out groove and the cut
+   stands"; on a dub side that plateau *was* the track, 22 s of outro sitting at
+   the surface level with the beat still running, and the level threshold had
+   already called it the run-out. Read the windows after your cut: still on
+   `programme_period_seconds` means the track is still playing, so extend; taken
+   over by `revolution` means the run-out, so the cut stands. See *Surface or
+   programme?*.
+
+   The label is a cross-check in one direction only. Report a disagreement over
+   ~5 s as a fact about the pressing, not as a reason to move the cut — and do not
+   read an *agreement* as confirmation either. On a side whose printed duration was
+   12:21, starting the track at the needle drop instead of at the music gave
+   12:19.5, and that near-perfect match was the best argument for a boundary 20 s
+   wrong. Durations are sums; two errors inside one buy a coincidence cheaply.
 6. Emit the section.
 
 ## Output
@@ -100,17 +156,57 @@ table anyway. Write a plan carrying this `split` section with **`declick` and
 execute it into a directory of its own:
 
 ```sh
-vinyl-process execute plan-side-a.json --audio <recording> \
+vinyl-process execute plan-side-a.json --audio <side-a> \
   -o review/split --manifest manifest-side-a.json
+vinyl-process execute plan-side-b.json --audio <side-b> \
+  -o review/split --manifest manifest-side-b.json
 ```
 
-Seconds of compute, and it is the only check that works. Two things to get right:
+Both sides into the *same* directory — the track indices are album-wide, so that
+is where the numbering comes out right, and the loud copy below needs to see the
+whole album at once.
+
+Seconds of compute, and it is the only check that works. Three things to get
+right:
 
 - **Disable `normalize`.** The question is whether the cuts are right, not whether
   a level nobody has agreed to sounds good, and leaving it on quietly ships an
   unreviewed decision. Say that the render is therefore quieter than the finished
   album will be, so the volume gets turned up instead of the fades being judged
   as too faint.
+
+  Never satisfy a request for a louder render through the plan. `album_peak` is
+  computed per plan, so two sides get two different gains and a step appears
+  between them that is not on the record; and back-solving `target_db` from a
+  measured peak to make the gains match writes a number that means "+5.15 dB
+  here" while reading as a decision about level, then breaks silently the moment
+  `declick` is enabled and the measured peak moves. A provisional level is not an
+  adopted decision, and the plan holds adopted decisions only.
+- **Then make a loud copy, outside the plan.** Do this as a matter of course, not
+  only when asked. "Does it run on too long" is a question about whether surface
+  noise is audible, and at the un-normalised level it often is not — the tail
+  gets approved because nothing could be heard in it. Run this **once, after both
+  sides are rendered**, so a single gain covers the whole album:
+
+  ```python
+  # scratch, not part of the pipeline
+  import glob, os, numpy as np, soundfile as sf
+
+  files = sorted(glob.glob("review/split/*.flac"))
+  peak = max(np.abs(sf.read(f, dtype="float64", always_2d=True)[0]).max() for f in files)
+  gain = 10 ** ((-1.0 - 20 * np.log10(peak)) / 20)
+  os.makedirs("review/split-loud", exist_ok=True)
+  for f in files:
+      x, sr = sf.read(f, dtype="float64", always_2d=True)
+      sf.write(f"review/split-loud/{os.path.basename(f)}", x * gain, sr, subtype="PCM_24")
+  ```
+
+  One gain for every file, computed across both sides — run it per side and you
+  have rebuilt the step you were avoiding. 24-bit so no dither decision is
+  implied. Drop a `README.txt` in there saying it is disposable, carries no
+  manifest, and that `plan-normalize` has not run. Point the person at
+  `review/split/` for the cuts and `review/split-loud/` for the tails, and say
+  which is canonical.
 - **Whole tracks, not excerpts.** Clips stitched around each cut — tail, dropped
   segment, next entry — look informative and are not: that was tried too, and read
   as unintelligible. People judge a track by playing it.
@@ -118,15 +214,19 @@ Seconds of compute, and it is the only check that works. Two things to get right
 Alongside the audio, a table, one row per track: position, title, the duration you
 cut, the label's duration, and the difference. Then:
 
-- name the evidence each boundary came from (`silence`, `rms_valley`, or
-  interpolated from durations because nothing was detected there);
+- name the evidence each boundary came from (`silence`, `rms_valley`,
+  `periodicity`, or interpolated from durations because nothing was detected
+  there);
 - explain every difference over ~5 s — the usual causes are a fade the threshold
   cut short and a label duration that does not match the pressing;
-- flag any boundary whose `music_end_sample` had to be overridden.
+- flag any boundary whose `music_end_sample` had to be overridden, and any place
+  you went against `lead_in_end_sample` or `lead_out_start_sample`.
 
 Do not move on until the person has listened and agreed, and ask in the terms they
 can answer in: for each track, is the beginning clipped, does it end early, does it
-run on too long. Never in samples.
+run on too long. Never in samples. Say that the last of those is easiest to hear in
+`review/split-loud/`, and that the first two read the same in either copy — a flat
+gain cannot change the shape of an edge, only whether it is loud enough to notice.
 
 ## Rules
 

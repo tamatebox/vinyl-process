@@ -58,6 +58,7 @@ def _ensure_builtins() -> None:
         clicks,
         levels,
         noise,
+        periodicity,
         recording,
         rms,
         silence,

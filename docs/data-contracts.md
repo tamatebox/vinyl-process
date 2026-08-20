@@ -33,7 +33,7 @@ happened.
 
 ```jsonc
 {
-  "schema_version": "1.0",
+  "schema_version": "2.1",
   "document_type": "analysis",
   "generated_by": "vinyl-process 0.1.0",
   "source": { "path": "side-a.wav", "sha256": "…", "sample_rate": 44100,
@@ -88,6 +88,20 @@ happened.
                                   "energy_db": -48.2 } ] },
   "transients":    { "hop_seconds": 0.01, "density_per_second": [0.0, 1.0, …],
                      "mean_per_second": 0.1, "peak_per_second": 2.0 },
+  "periodicity":   { "onset_hop_seconds": 0.005, "window_seconds": 12.0,
+                     "window_hop_seconds": 4.0,
+                     "min_period_seconds": 0.25, "max_period_seconds": 4.0,
+                     "programme_period_seconds": 0.515,  // the beat
+                     "programme_peak_prominence": 0.389, // what music looks like
+                     "windows": [ { "start_sample": 576000, "end_sample": 1152000,
+                                    "peaks": [ { "period_seconds": 1.335, "r": 0.45 } ],
+                                    "baseline_r": 0.17,
+                                    // one entry per configured speed
+                                    "revolution": [ { "rpm": 33.33,
+                                                      "period_seconds": 1.8, "r": 0.18 },
+                                                    { "rpm": 45.0,
+                                                      "period_seconds": 1.3333,
+                                                      "r": 0.45 } ] } ] },
 
   "warnings": ["clipping: 2 region(s), 31 sample(s) at full scale"]
 }
@@ -107,6 +121,15 @@ inter-track gaps too, while a detector over-triggering on the material only fire
 under the programme. Both are `null` when the recording has no gap long enough to
 measure (`silence_min_seconds`, 2 s by default).
 
+`periodicity` answers what level and spectrum cannot: whether a quiet stretch is
+faint music or the record's own surface. A groove defect repeats once per
+revolution and never on the beat, so a window whose `revolution` correlation
+rivals its own top peak is the pressing rather than the performance. Compare
+against `programme_peak_prominence`, which is what a window of this record's
+music measures. Do not read `baseline_r` as a mark of surface noise on its own —
+on a tested side the crackling lead-in sat at 0.17 while the run-out groove, a
+far cleaner tick, sat at -0.03.
+
 `meta.params` records the parameters actually used, so a measurement stays
 explainable years later. `meta.confidence` is `1.0` for direct measurements
 (peaks, channel levels), lower for estimators (0.75 for click statistics, 0.7 for
@@ -121,7 +144,7 @@ block: which skill decided, why, how confident it was, and what it consulted.
 
 ```jsonc
 {
-  "schema_version": "1.0",
+  "schema_version": "2.1",
   "document_type": "processing_plan",
   "created_by": "plan-album",
   "source": { …same shape as analysis.source; sha256 is verified before running… },
@@ -200,7 +223,7 @@ Written next to the exported album. This is the receipt.
 
 ```jsonc
 {
-  "schema_version": "1.0",
+  "schema_version": "2.1",
   "document_type": "manifest",
   "generated_by": "vinyl-process 0.1.0",
   "run_key": "…",                    // digest over (source digest, plan digest)
