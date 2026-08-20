@@ -12,7 +12,15 @@ from vinyl_process.planning.skills import SKILLS, skill_for_section, skills_root
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SKILLS_DIR = REPO_ROOT / ".claude" / "skills"
-PLAN_SECTIONS = ("prefilter", "split", "declick", "normalize", "metadata", "export")
+PLAN_SECTIONS = (
+    "prefilter",
+    "split",
+    "declick",
+    "decrackle",
+    "normalize",
+    "metadata",
+    "export",
+)
 
 
 def frontmatter(path: Path) -> dict[str, str]:

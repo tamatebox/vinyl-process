@@ -12,7 +12,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from vinyl_process.errors import ContractError
 
-SCHEMA_VERSION = "3.3"
+SCHEMA_VERSION = "3.4"
 """``MAJOR.MINOR``. Additive changes bump MINOR; breaking changes bump MAJOR.
 
 3.0 because ``silence.regions[].music_start_sample`` is required: a 2.x
@@ -29,7 +29,10 @@ validates unchanged and executes to the same bytes — which is why this is a
 *minor* bump even though the executor gained a phase. Making the section required
 would have forced a major, and a major makes every archived plan
 non-re-executable; re-execution is the promise this project is built on, so it
-wins. See ``docs/adr/0012-the-executor-has-a-pre-split-phase.md``."""
+wins. See ``docs/adr/0012-the-executor-has-a-pre-split-phase.md``.
+
+3.4 adds ``processing_plan.decrackle``, on the same terms: optional, disabled by
+default, so a 3.3 plan validates unchanged and executes to the same bytes."""
 
 Confidence = Annotated[float, Field(ge=0.0, le=1.0)]
 """How much a measurement can be trusted. 0 = worthless, 1 = certain."""

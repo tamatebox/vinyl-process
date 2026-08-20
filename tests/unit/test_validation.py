@@ -411,3 +411,57 @@ def test_a_disabled_prefilter_is_not_checked_for_engines(plan: ProcessingPlan) -
         payload["prefilter"] = {"enabled": False, "engine": "nope", "highpass_hz": 900.0}
 
     assert codes(validate_plan(mutated(plan, disable))) == set()
+
+
+# --------------------------------------------------------------------------- #
+# decrackle
+# --------------------------------------------------------------------------- #
+def decrackled(plan: ProcessingPlan, **section: Any) -> ProcessingPlan:
+    def replace(payload: dict[str, Any]) -> None:
+        payload["decrackle"] = {"enabled": True, "engine": "native", **section}
+
+    return mutated(plan, replace)
+
+
+def test_an_absent_decrackle_section_is_valid_and_silent(plan: ProcessingPlan) -> None:
+    payload = plan.model_dump(mode="json")
+    payload.pop("decrackle")
+    revived = ProcessingPlan.model_validate(payload)
+    assert revived.decrackle.enabled is False
+    assert validate_plan(revived) == []
+
+
+def test_decrackle_without_a_threshold_is_fatal(plan: ProcessingPlan) -> None:
+    findings = validate_plan(decrackled(plan))
+    assert "decrackle-without-threshold" in codes(findings)
+    with pytest.raises(PlanValidationError, match="not executable"):
+        raise_for_errors(findings)
+
+
+def test_a_decrackle_width_wide_enough_to_be_clicks_warns(plan: ProcessingPlan) -> None:
+    findings = validate_plan(decrackled(plan, threshold=5.0, max_event_width_samples=8))
+    assert "decrackle-width-is-clicks" in codes(findings)
+
+
+def test_decrackle_without_declick_is_only_an_observation(plan: ProcessingPlan) -> None:
+    def both(payload: dict[str, Any]) -> None:
+        payload["decrackle"] = {"enabled": True, "engine": "native", "threshold": 5.0}
+        payload["declick"]["enabled"] = False
+
+    findings = validate_plan(mutated(plan, both))
+    assert "decrackle-without-declick" in codes(findings)
+    assert not [f for f in findings if f.severity == "error"]
+
+
+def test_pitch_protection_together_with_decrackle_warns(plan: ProcessingPlan) -> None:
+    """The manual says the combination "may seriously impair de-crackling"."""
+
+    def both(payload: dict[str, Any]) -> None:
+        payload["decrackle"] = {"enabled": True, "engine": "native", "threshold": 5.0}
+        payload["declick"]["params"] = {"confirm_k": 3.0}
+
+    assert "decrackle-with-pitch-protection" in codes(validate_plan(mutated(plan, both)))
+
+
+def test_a_sane_decrackle_section_reports_nothing(plan: ProcessingPlan) -> None:
+    assert codes(validate_plan(decrackled(plan, threshold=5.0))) == set()

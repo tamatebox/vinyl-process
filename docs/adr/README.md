@@ -18,3 +18,4 @@ edited after acceptance — a reversal is a new record that supersedes the old o
 | [0010](0010-the-click-statistic-is-local.md) | The click detector's statistic is local |
 | [0011](0011-a-job-directory-holds-no-scripts.md) | A job directory holds no scripts |
 | [0012](0012-the-executor-has-a-pre-split-phase.md) | The executor has a pre-split phase |
+| [0013](0013-crackle-is-a-separate-stage-with-its-own-detector.md) | Crackle is a separate stage with its own detector |

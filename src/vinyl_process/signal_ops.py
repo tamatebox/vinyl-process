@@ -222,6 +222,65 @@ def subsonic_highpass(
     return np.ascontiguousarray(sosfilt(sos, values, axis=0), dtype=np.float64)
 
 
+def crackle_events_curvature(
+    mono: np.ndarray,
+    threshold_ratio: float,
+    max_width_samples: int,
+    context_ms: float = 5.0,
+    sample_rate: int = 44100,
+) -> list[ClickEvent]:
+    """Per-sample outlier detection for crackle: 1-3 sample events, densely repeated.
+
+    A different question from :func:`click_events_block`, and deliberately a
+    different algorithm. ``block_ratio`` asks whether a *segment* is an outlier
+    against its neighbourhood — a collective decision, and the right one for a
+    discrete impulse of a few hundred microseconds. Crackle is a bed of one-to-three
+    sample events, each a weak outlier and there are thousands, so a collective
+    threshold low enough to catch them starts interpolating the music long before it
+    clears the bed. The tool for it examines **every sample individually**.
+
+    So the statistic here is per sample: ``|curvature|`` against the mean
+    ``|curvature|`` of its own neighbourhood. Two properties are carried over from
+    ``block_ratio`` on purpose. It is a **ratio**, so a quiet passage and a loud one
+    are judged alike. And it is **local**, so the answer does not depend on how much
+    audio the function was handed, which is what lets an analyzer and an engine
+    agree — see ``docs/adr/0010-the-click-statistic-is-local.md``.
+
+    ``threshold_ratio`` is that ratio, so **smaller is more aggressive**. It is not
+    ClickRepair's DeCrackle sensitivity, whose scale runs the other way and is "an
+    arbitrary percentage"; only that tool's *repair-rate band* transfers.
+
+    Runs wider than ``max_width_samples`` are dropped rather than repaired: at that
+    width the event is a click, and ``declick`` is what handles those. This function
+    therefore cannot bridge anything the click detector would have found, which is
+    what keeps the two stages from fighting over the same samples.
+    """
+    values = np.asarray(mono, dtype=np.float64)
+    if values.size < 3 or threshold_ratio <= 0 or max_width_samples < 1:
+        return []
+    curvature = np.abs(second_difference(values))
+    context = max(3, round(context_ms / 1000.0 * sample_rate))
+    cumulative = np.concatenate([[0.0], np.cumsum(curvature)])
+    half = context // 2
+    starts = np.clip(np.arange(curvature.size) - half, 0, curvature.size)
+    ends = np.clip(starts + context, 0, curvature.size)
+    starts = np.minimum(starts, ends)
+    counts = np.maximum(ends - starts, 1)
+    local_mean = (cumulative[ends] - cumulative[starts]) / counts
+    ratio = curvature / (local_mean + EPS)
+
+    # The first and last sample have no curvature (second_difference pads with
+    # zero), so they can never be outliers; nothing to guard beyond that, because
+    # the statistic needs no filter warm-up.
+    events: list[ClickEvent] = []
+    for start, end in runs_of_true(ratio > threshold_ratio):
+        if end - start > max_width_samples:
+            continue
+        peak = float(np.max(np.abs(values[start:end])))
+        events.append((start, end, peak))
+    return events
+
+
 def merge_runs(runs: list[tuple[int, int]], gap: int) -> list[tuple[int, int]]:
     """Merge ``[start, end)`` runs separated by fewer than ``gap`` samples.
 

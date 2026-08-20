@@ -27,8 +27,8 @@ Recording is out of scope.
                            │  processing_plan.json
 ┌──────────────────────────▼──────────────────────────────────┐
 │ DSP Executor (Python, src/vinyl_process/dsp + executor.py)   │
-│   executes — prefilter, declick, split, gain, resample,      │
-│              export, tag                                     │
+│   executes — prefilter, declick, decrackle, split, gain,      │
+│              resample, export, tag                            │
 │   deterministic: same audio + same plan → same bytes         │
 │   output: audio files + manifest.json                        │
 └─────────────────────────────────────────────────────────────┘
@@ -162,6 +162,9 @@ load source
             ─▶ declick    (engine and parameters from the plan; the whole side, so
                            the detector's context window is never truncated at a
                            track edge and never sees a fade)
+            ─▶ decrackle  (the 1-3 sample bed, per-sample rather than collective;
+                           after declick, because discrete defects come before
+                           continuous ones. Disabled by default)
   post-split phase — one buffer per track
             ─▶ split      (sample-exact cuts + the fades the plan asked for)
             ─▶ normalize  (strategy, target and ceiling from the plan; gain
@@ -358,7 +361,7 @@ end to end for determinism.
   capability and the calibration. The measurement side is already there:
   `silence.regions` carries `mean_rms_db` per gap, and `surface_noise` and
   `spectral.bands` cover the whole file.
-- **`declick` is not `decrackle`, and only the first exists.** `block_ratio`
+- **`decrackle` exists, and its reach is bounded by the material.** `block_ratio`
   makes a *collective* decision — it asks whether a short segment is an outlier
   against its neighbourhood — and that is the right question for a discrete
   impulse of a few hundred microseconds. Crackle is a different defect: very
@@ -370,7 +373,35 @@ end to end for determinism.
   ClickRepair ships DeClick and DeCrackle as separate controls and documents that
   its click detector "is not particularly attuned" to crackle. Lowering
   `declick.threshold` is the wrong lever, and reaching for it is how a day gets
-  spent. There is no de-crackle stage here.
+  spent.
+
+  So `decrackle` is a separate stage with a per-sample detector
+  ([adr/0013](adr/0013-crackle-is-a-separate-stage-with-its-own-detector.md)).
+  What remains a limitation is its **reach**: the statistic divides a sample's
+  curvature by the mean curvature of its neighbourhood, and high-frequency
+  programme content raises that denominator. Measured on synthesised material, a
+  3.1 kHz tone at −22 dBFS carries a curvature comparable to a crackle event 40 dB
+  below the programme, and detections across one injected bed fell by more than
+  half against the same bed under a bass line. The failure direction is the safe
+  one — fewer interpolations exactly where they would be most audible — but two
+  things follow: a threshold does not transfer between passages of one side, and a
+  bed below the material's own curvature is not reachable at any threshold. That is
+  a stopping point rather than a setting yet to be found.
+- **No de-noise, and the ffmpeg route was measured rather than assumed.**
+  `afftdn` is the obvious delegate and the pre-split phase is now the right place
+  for it, but two things blocked shipping it. Its `noise_floor` dominates the
+  result — measured on synthesised noise, `nr=9:nf=-40` reduced the bed by 3.6 dB
+  while `nr=20:nf=-45` managed 1.2 dB — and **no reference says what to set it
+  to**; Audacity's "sensitivity 6.00" is Audacity's own scale, not this one's.
+  Worse for the design this project wanted: `afftdn`'s own `sample_noise`
+  start/stop commands, driven through `asendcmd`, produced output **identical to
+  no command at all** on ffmpeg 9.0.1 across all three command spellings, so the
+  plan cannot hand the filter a profile region. The alternative, `band_noise`,
+  needs the 15 bands' frequency edges, and the filter documentation does not give
+  them. `track_noise` did the most work of anything tested (−6.7 dB, tone
+  untouched) and needs no region — but it is the filter deciding, which is the one
+  thing a plan is supposed to record. So de-noise is **research first**: the
+  missing piece is the reference, not the code.
 - **The fades no longer run before `declick`** — this entry is kept because the
   reasoning is why the order changed. `native.split()` applies the fades, and the
   executor's order used to be `split → declick`, so repair saw ramped material. The
@@ -386,7 +417,11 @@ end to end for determinism.
   repair, then fade" as a sequence, because the fades are attributes of
   `split.tracks[]` rather than a stage of their own — it no longer matters, since
   nothing runs between the cut and the fade.
-- **No de-noise, de-hum, de-crackle, de-clip, azimuth or speed correction
-  stages.** `prefilter` is the only pre-split stage that exists. `clipping`
-  measures a clipped transfer but nothing repairs one; `plan-album`'s first
-  checkpoint asks for a re-record instead.
+- **No de-hum, de-clip, azimuth or speed correction stages.** `prefilter` and
+  `decrackle` are the pre-split stages that exist. `clipping` measures a clipped
+  transfer but nothing repairs one: ffmpeg's `adeclip` makes the implementation
+  nearly free, which is the trap — no reference was found for how far
+  reconstruction may credibly go, and a stage with an uncalibrated skill would get
+  enabled and dialled by ear. `plan-album`'s first checkpoint prefers a re-record,
+  and that stays the answer until a reference says how much reconstruction is
+  defensible.

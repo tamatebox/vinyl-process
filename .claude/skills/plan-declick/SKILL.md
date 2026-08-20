@@ -49,8 +49,8 @@ material harder still, both because they false-detect.
 larger is more aggressive; `block_ratio`'s `threshold` is a ratio of energies, so
 *smaller* is more aggressive. Only the repair-rate band transfers.
 
-**Crackle is a different algorithm, and this pipeline does not have it.** The same
-manual separates its DeClick and DeCrackle controls because:
+**Crackle is a different algorithm, and this pipeline has one — a different one.**
+The same manual separates its DeClick and DeCrackle controls because:
 
 > "The detection/repair algorithms used for click removal are not particularly
 > attuned to the removal of very short (1–3 sample), rapidly repeated, small
@@ -60,8 +60,11 @@ Its DeCrackle is "a post process which examines **every sample individually**",
 against click removal's "more **collective** decision making process".
 `block_ratio` is the collective kind. So when a listener reports crackle rather
 than discrete clicks, lowering `threshold` is the wrong lever — it buys false
-repairs on the music long before it addresses a bed of 1–3 sample events. Say that
-it is out of scope here rather than chasing it.
+repairs on the music long before it addresses a bed of 1–3 sample events. Hand it
+to [plan-decrackle](../plan-decrackle/SKILL.md), which owns a per-sample detector
+for exactly that defect
+([adr/0013](../../../docs/adr/0013-crackle-is-a-separate-stage-with-its-own-detector.md)),
+rather than chasing it from here.
 
 **Pitch protection has a local equivalent.** `params.confirm_k` is this engine's
 nearest thing to ClickRepair's **Pitch Protection**, which "avoids periodic false
@@ -212,11 +215,16 @@ rung from the count alone.
 The band is in *Outside references*: roughly **1 in 200 to 1 in 2000** samples
 repaired. What belongs here is how to measure your rung against it, and how not to.
 
-**Compute the rate from the render, not from the plan.** The interpolated sample
-count is the total width of the spans where `review/declick/` differs from
-`review/split/`, over the total samples exported. `count` cannot stand in for it:
-a count is events, the band is samples, and most of a recording's events never
-reach the album.
+**Read the rate off the receipt.** Every repair stage's `detail` in
+`manifest.json` now carries `repaired N of M samples (1 in K)` — the executor holds
+both buffers, so the count is exact arithmetic rather than an estimate. `count`
+cannot stand in for it: a count is events, the band is samples.
+
+Two things to keep straight when quoting it. The figure is over the **whole side**,
+because repair runs pre-split — so it includes the lead-in and the run-out, which
+the cuts discard, and it therefore *overstates* the work reaching the album by
+however worn the unplayed parts are. And when `decrackle` also ran, **the band
+covers the pair**: quote both stages' figures and their sum.
 
 The failure mode this guards against has been measured twice on one record: a rung
 chosen by feel came out at **1 in 27 000** — more than an order of magnitude below
@@ -320,17 +328,19 @@ interpolated audio. Present, before deciding:
   is the audible band, against how many sit near the noise floor;
 - which rung you chose, and **how many of its detections fall inside the exported
   cuts** — that, not `count`, is how many spans the repair would interpolate.
-  Declick runs after the split, per track, so a detection in the lead-in, the
-  run-out or the dead middle of a gap is never repaired and never heard. `count` is
+  Declick runs on the whole side, so a detection in the lead-in, the
+  run-out or the dead middle of a gap is *repaired* — the stage runs pre-split — but
+  never exported and never heard, so it costs arithmetic and nothing else. `count` is
   the whole recording and overstates the work by however worn the unplayed parts
   are — **by half to three quarters** on the two sides where it has been counted.
   Give the in-cut figure in total and per minute, break it down per track so a
   concentration shows, and if you had to re-analyze to get the positions, say the
   figures come from that run;
-- **the repair rate, as a fraction of samples**, measured off the render and
-  placed against the 1-in-200-to-1-in-2000 band from *How much repair is normal*.
-  A rung below that band is doing less than the listener will notice, and saying so
-  is more useful than any count;
+- **the repair rate, as a fraction of samples**, read off the manifest's declick
+  stage and placed against the 1-in-200-to-1-in-2000 band from *How much repair is
+  normal*. A rung below that band is doing less than the listener will notice, and
+  saying so is more useful than any count. Say it is a whole-side figure, and add
+  `decrackle`'s if that stage ran;
 - your recommendation and what it costs if it is wrong.
 
 `"enabled": false` is a legitimate answer and is often the right one.
@@ -405,8 +415,12 @@ alone.
 ## Rules
 
 - Never run repairs yourself; the executor does.
-- Declick runs *after* split, per track, *before* normalization. Assume that
-  ordering when reasoning about levels.
+- Declick runs on the **whole side, before `split`**, and before `decrackle` and
+  `normalize`. Assume that ordering when reasoning about levels, and note what it
+  fixed: the detector's 40 ms context window is no longer truncated at a track
+  edge, and it no longer sees the fades `split` applies — which used to bias it
+  *towards missing* clicks in the bare-surface margins
+  ([adr/0012](../../../docs/adr/0012-the-executor-has-a-pre-split-phase.md)).
 - Re-analysing a declicked file still reports clicks: with the loud ones gone the
   detector's relative threshold drops and it resolves the repair's own seams,
   around −60 dBFS. Judge the result by the *amplitude* histogram, not the count,

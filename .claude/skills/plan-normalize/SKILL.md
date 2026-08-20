@@ -282,9 +282,11 @@ Then read the receipt, not just the audio:
 
 ## Rules
 
-- Never precompute the gain value. Declick changes peaks slightly, so the
-  executor measures after repair; your decision is the *strategy, target and
-  ceiling*, and the manifest records the gain that was actually applied.
+- Never precompute the gain value. Every repair stage changes peaks — `declick`
+  can take a dB off a side by removing a single tick, `decrackle` less but not
+  nothing — so the executor measures after all of them; your decision is the
+  *strategy, target and ceiling*, and the manifest records the gain that was
+  actually applied.
 - `target_db` (dBFS, or a level in dBFS on an RMS mode) and `peak_ceiling_db`
   (dBTP) must both be ≤ 0. Keep at least 1 dB of
   headroom for lossy transcodes the user may make later — the contract permits

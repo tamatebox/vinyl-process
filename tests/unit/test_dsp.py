@@ -16,7 +16,12 @@ from vinyl_process.errors import (
     ExecutionError,
     UnsupportedOperationError,
 )
-from vinyl_process.models.plan import DeclickPlan, PrefilterPlan, TrackBoundary
+from vinyl_process.models.plan import (
+    DeclickPlan,
+    DecracklePlan,
+    PrefilterPlan,
+    TrackBoundary,
+)
 from vinyl_process.signal_ops import amplitude_to_db
 
 SAMPLE_RATE = 44100
@@ -436,3 +441,74 @@ def test_ffmpeg_does_not_claim_prefilter() -> None:
     assert "prefilter" not in get_engine("ffmpeg").capabilities()
     with pytest.raises(UnsupportedOperationError, match="prefilter"):
         get_engine("ffmpeg").require("prefilter")
+
+
+# --------------------------------------------------------------------------- #
+# decrackle
+# --------------------------------------------------------------------------- #
+def crackled(seconds: float = 1.0) -> tuple[AudioBuffer, list[int]]:
+    t = np.arange(int(SAMPLE_RATE * seconds)) / SAMPLE_RATE
+    mono = 0.3 * np.sin(2 * np.pi * 220 * t)
+    positions = list(range(2000, mono.size - 2000, 997))
+    for index, position in enumerate(positions):
+        mono[position] += 0.05 * (1.0 if index % 2 else -1.0)
+    return AudioBuffer(np.column_stack([mono, mono]), SAMPLE_RATE), positions
+
+
+def test_decrackle_is_a_native_capability_and_not_an_ffmpeg_one() -> None:
+    assert "decrackle" in NativeEngine().capabilities()
+    assert "decrackle" not in get_engine("ffmpeg").capabilities()
+
+
+def test_decrackle_reduces_the_crackle_and_leaves_the_tone() -> None:
+    audio, positions = crackled()
+    clean = audio.samples.copy()
+    for index, position in enumerate(positions):
+        clean[position] -= 0.05 * (1.0 if index % 2 else -1.0)
+
+    repaired = NativeEngine().decrackle(
+        audio, DecracklePlan(enabled=True, threshold=3.0, max_event_width_samples=3)
+    )
+    before = float(np.max(np.abs(audio.samples - clean)))
+    after = float(np.max(np.abs(repaired.samples - clean)))
+    assert after < before / 4.0, f"error only fell from {before:.4f} to {after:.4f}"
+
+
+def test_decrackle_refuses_to_run_without_a_threshold() -> None:
+    audio, _positions = crackled()
+    with pytest.raises(ExecutionError, match="no threshold is set"):
+        NativeEngine().decrackle(audio, DecracklePlan(enabled=True))
+
+
+def test_decrackle_rejects_an_unknown_algorithm_and_interpolator() -> None:
+    audio, _positions = crackled()
+    with pytest.raises(ExecutionError, match="curvature_ratio"):
+        NativeEngine().decrackle(
+            audio, DecracklePlan(enabled=True, threshold=3.0, algorithm="magic")
+        )
+    with pytest.raises(ExecutionError, match="interpolator"):
+        NativeEngine().decrackle(
+            audio, DecracklePlan(enabled=True, threshold=3.0, params={"interpolator": "spline"})
+        )
+
+
+def test_decrackle_strength_scales_the_correction() -> None:
+    audio, _positions = crackled()
+
+    def moved(strength: float) -> float:
+        section = DecracklePlan(enabled=True, threshold=3.0, strength=strength)
+        return float(
+            np.sum(np.abs(NativeEngine().decrackle(audio, section).samples - audio.samples))
+        )
+
+    full = moved(1.0)
+    assert moved(0.0) == 0.0
+    assert 0.0 < moved(0.5) < full
+
+
+def test_decrackle_is_deterministic() -> None:
+    audio, _positions = crackled()
+    section = DecracklePlan(enabled=True, threshold=3.0)
+    first = NativeEngine().decrackle(audio, section)
+    second = NativeEngine().decrackle(audio, section)
+    assert np.array_equal(first.samples, second.samples)

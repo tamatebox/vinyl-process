@@ -157,6 +157,48 @@ class DeclickPlan(EngineSection):
 
 
 # --------------------------------------------------------------------------- #
+# decrackle
+# --------------------------------------------------------------------------- #
+class DecracklePlan(EngineSection):
+    """Crackle is not clicks, and this is not ``declick`` with a lower threshold.
+
+    Crackle is a bed of one-to-three sample events, repeated densely enough to be
+    heard as a continuous texture rather than as countable ticks. Each is a weak
+    outlier and there are thousands of them, so a collective threshold low enough
+    to catch them interpolates the music long before it clears the bed. The tool
+    for it examines every sample individually — which is why this is a separate
+    stage with its own algorithm, and why lowering ``declick.threshold`` is the
+    wrong lever.
+
+    Runs on the whole side in the pre-split phase, after ``declick``: discrete
+    defects before continuous ones. Optional and disabled by default.
+    """
+
+    enabled: bool = False
+
+    algorithm: str = "curvature_ratio"
+    """Engine-defined id, naming the *detector* — the half with evidence behind
+    it, the same convention ``declick`` follows."""
+
+    threshold: float | None = Field(default=None, gt=0)
+    """``|curvature|`` against the mean ``|curvature|`` of its own neighbourhood,
+    so **smaller is more aggressive** and there is deliberately no default.
+
+    It is not ClickRepair's DeCrackle sensitivity: that scale runs the other way
+    and is "an arbitrary percentage". Only that tool's *repair-rate band*
+    transfers, and holding a setting against it is what ``plan-decrackle`` does."""
+
+    max_event_width_samples: int = Field(default=3, ge=1, le=16)
+    """Wider runs are dropped rather than repaired: at that width the event is a
+    click and ``declick`` owns it. 1-3 samples is what crackle is."""
+
+    strength: float = Field(default=1.0, ge=0.0, le=1.0)
+    params: dict[str, Any] = Field(default_factory=dict)
+    """Engine extras: ``context_ms`` (5.0), ``interpolator``
+    (``linear`` | ``hermite``)."""
+
+
+# --------------------------------------------------------------------------- #
 # normalize
 # --------------------------------------------------------------------------- #
 class NormalizePlan(EngineSection):
@@ -271,6 +313,9 @@ class ProcessingPlan(VersionedDocument):
 
     split: SplitPlan
     declick: DeclickPlan
+    decrackle: DecracklePlan = Field(default_factory=DecracklePlan)
+    """Optional and disabled by default, like every stage added after 3.2."""
+
     normalize: NormalizePlan
     metadata: MetadataPlan
     export: ExportPlan

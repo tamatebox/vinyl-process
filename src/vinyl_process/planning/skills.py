@@ -68,6 +68,17 @@ SKILLS: tuple[SkillSpec, ...] = (
         summary="Chooses declick engine, algorithm, threshold, width and strength.",
     ),
     SkillSpec(
+        name="plan-decrackle",
+        owns="decrackle",
+        reads=(
+            "analysis.json#clicks",
+            "analysis.json#surface_noise",
+            "analysis.json#spectral",
+            "vinyl-process.toml#preferences",
+        ),
+        summary="Chooses the crackle threshold, event width and strength.",
+    ),
+    SkillSpec(
         name="plan-normalize",
         owns="normalize",
         reads=(

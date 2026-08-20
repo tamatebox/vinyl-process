@@ -39,6 +39,11 @@ SUBSONIC_BAND_HZ = (20.0, 30.0)
 workflow, step 8: 20-30 Hz at 24 dB/octave). ``plan-prefilter`` carries the
 citation; these bounds exist only so ``lint`` can say when a plan has left it."""
 
+CRACKLE_MAX_WIDTH_SAMPLES = 3
+"""Crackle is "very short (1-3 sample), rapidly repeated, small clicks" (ClickRepair
+3.9). Above that the event is a click and ``declick`` owns it; ``plan-decrackle``
+carries the citation."""
+
 SUBSONIC_MAX_HZ = 40.0
 """Above this a subsonic filter is reaching into the programme: the lowest note of
 a five-string bass is about 31 Hz and a kick drum's fundamental sits near 50 Hz,
@@ -71,6 +76,7 @@ def validate_plan(
     findings += _check_version(plan)
     findings += _check_engines(plan)
     findings += _check_prefilter(plan)
+    findings += _check_decrackle(plan)
     findings += _check_tracks(plan)
     findings += _check_cuts(plan)
     findings += _check_naming(plan)
@@ -113,6 +119,7 @@ def _check_engines(plan: ProcessingPlan) -> list[Finding]:
         ("prefilter", plan.prefilter.enabled, plan.prefilter.engine, "prefilter"),
         ("split", plan.split.enabled, plan.split.engine, "split"),
         ("declick", plan.declick.enabled, plan.declick.engine, "declick"),
+        ("decrackle", plan.decrackle.enabled, plan.decrackle.engine, "decrackle"),
         (
             "normalize",
             plan.normalize.enabled and plan.normalize.mode != "none",
@@ -190,6 +197,58 @@ def _check_prefilter(plan: ProcessingPlan) -> list[Finding]:
                     "prefilter.highpass_hz",
                 )
             )
+    return findings
+
+
+def _check_decrackle(plan: ProcessingPlan) -> list[Finding]:
+    """Crackle repair is easy to reach for and hard to hold in bounds."""
+    decrackle = plan.decrackle
+    if not decrackle.enabled:
+        return []
+    findings: list[Finding] = []
+    if decrackle.threshold is None:
+        findings.append(
+            Finding(
+                "error",
+                "decrackle-without-threshold",
+                "decrackle is enabled but no threshold is set; it is a decision with no "
+                "default, held against the repair-rate band for this pressing",
+                "decrackle.threshold",
+            )
+        )
+    if decrackle.max_event_width_samples > CRACKLE_MAX_WIDTH_SAMPLES:
+        findings.append(
+            Finding(
+                "warning",
+                "decrackle-width-is-clicks",
+                f"max_event_width_samples is {decrackle.max_event_width_samples}; crackle is "
+                f"1-3 sample events and above {CRACKLE_MAX_WIDTH_SAMPLES} this stage is "
+                "competing with declick for the same damage",
+                "decrackle.max_event_width_samples",
+            )
+        )
+    if decrackle.enabled and not plan.declick.enabled:
+        findings.append(
+            Finding(
+                "info",
+                "decrackle-without-declick",
+                "decrackle is enabled and declick is not. Practice repairs discrete defects "
+                "before continuous ones, and the wide events left in place are what this "
+                "stage's per-sample statistic then has to look past",
+                "decrackle.enabled",
+            )
+        )
+    if "confirm_k" in plan.declick.params and decrackle.enabled:
+        findings.append(
+            Finding(
+                "warning",
+                "decrackle-with-pitch-protection",
+                "declick.params.confirm_k is set and decrackle is enabled; ClickRepair's "
+                "manual warns that pitch protection together with de-crackling 'may seriously "
+                "impair de-crackling'. Run them in separate passes or expect less repair",
+                "decrackle.enabled",
+            )
+        )
     return findings
 
 

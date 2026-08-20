@@ -33,7 +33,7 @@ happened.
 
 ```jsonc
 {
-  "schema_version": "3.3",
+  "schema_version": "3.4",
   "document_type": "analysis",
   "generated_by": "vinyl-process 0.1.0",
   "source": { "path": "side-a.wav", "sha256": "…", "sample_rate": 44100,
@@ -233,7 +233,7 @@ block: which skill decided, why, how confident it was, and what it consulted.
 
 ```jsonc
 {
-  "schema_version": "3.3",
+  "schema_version": "3.4",
   "document_type": "processing_plan",
   "created_by": "plan-album",
   "source": { …same shape as analysis.source; sha256 is verified before running… },
@@ -280,6 +280,24 @@ block: which skill decided, why, how confident it was, and what it consulted.
     "strength": 1.0,                  // 0..1 blend of the repair; ffmpeg refuses < 1.0
     "preset": null,                   // reserved; no engine interprets it yet
     "params": {}                      // engine-specific extras, e.g. interpolator
+  },
+
+  // Optional, disabled by default. Crackle is 1-3 sample events repeated densely,
+  // which is a different defect from a click and needs a per-sample detector —
+  // lowering declick.threshold is the wrong lever. Runs after declick, before the
+  // cuts. See adr/0013.
+  "decrackle": {
+    "enabled": false,
+    "engine": "native",              // only 'native' implements decrackle
+    "algorithm": "curvature_ratio",  // names the detector, per adr/0010
+    "threshold": null,               // curvature ratio; SMALLER is more aggressive,
+                                     // and deliberately without a default. Not
+                                     // ClickRepair's sensitivity, whose scale runs
+                                     // the other way
+    "max_event_width_samples": 3,    // wider runs are dropped, not repaired: at that
+                                     // width the event is a click and declick owns it
+    "strength": 1.0,
+    "params": {}                     // context_ms (5.0), interpolator (linear|hermite)
   },
 
   "normalize": {
@@ -341,7 +359,7 @@ Written next to the exported album. This is the receipt.
 
 ```jsonc
 {
-  "schema_version": "3.3",
+  "schema_version": "3.4",
   "document_type": "manifest",
   "generated_by": "vinyl-process 0.1.0",
   "run_key": "…",                    // digest over (source digest, plan digest)
@@ -350,6 +368,11 @@ Written next to the exported album. This is the receipt.
   "stages": [                        // in the order they ran: the pre-split phase
                                      // (prefilter, declick) comes first
     { "stage": "prefilter", "status": "skipped", "detail": "prefilter disabled" },
+    { "stage": "declick", "status": "applied", "engine": "native",
+      // a repair stage records how much of the audio it changed, because the
+      // practitioner band is stated as a fraction of samples: 1 in 200 is
+      // "suspicious", 1 in 1000-2000 the typical floor
+      "detail": "algorithm=block_ratio (whole side, pre-split); repaired 412 of 956970 samples (1 in 2322)" },
     { "stage": "split", "status": "applied", "engine": "native",
       "engine_version": "native 0.1.0 (numpy 2.4.6)",
       "params_digest": "…",          // digest of the plan section that ran

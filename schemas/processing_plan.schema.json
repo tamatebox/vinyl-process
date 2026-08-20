@@ -76,6 +76,72 @@
       "title": "DeclickPlan",
       "type": "object"
     },
+    "DecracklePlan": {
+      "additionalProperties": false,
+      "description": "Crackle is not clicks, and this is not ``declick`` with a lower threshold.\n\nCrackle is a bed of one-to-three sample events, repeated densely enough to be\nheard as a continuous texture rather than as countable ticks. Each is a weak\noutlier and there are thousands of them, so a collective threshold low enough\nto catch them interpolates the music long before it clears the bed. The tool\nfor it examines every sample individually \u2014 which is why this is a separate\nstage with its own algorithm, and why lowering ``declick.threshold`` is the\nwrong lever.\n\nRuns on the whole side in the pre-split phase, after ``declick``: discrete\ndefects before continuous ones. Optional and disabled by default.",
+      "properties": {
+        "algorithm": {
+          "default": "curvature_ratio",
+          "title": "Algorithm",
+          "type": "string"
+        },
+        "decision": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/StageDecision"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "enabled": {
+          "default": false,
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "engine": {
+          "default": "native",
+          "title": "Engine",
+          "type": "string"
+        },
+        "max_event_width_samples": {
+          "default": 3,
+          "maximum": 16,
+          "minimum": 1,
+          "title": "Max Event Width Samples",
+          "type": "integer"
+        },
+        "params": {
+          "additionalProperties": true,
+          "title": "Params",
+          "type": "object"
+        },
+        "strength": {
+          "default": 1.0,
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Strength",
+          "type": "number"
+        },
+        "threshold": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Threshold"
+        }
+      },
+      "title": "DecracklePlan",
+      "type": "object"
+    },
     "DocumentRef": {
       "additionalProperties": false,
       "description": "Reference from one document to another, pinned by digest.",
@@ -736,6 +802,9 @@
     "declick": {
       "$ref": "#/$defs/DeclickPlan"
     },
+    "decrackle": {
+      "$ref": "#/$defs/DecracklePlan"
+    },
     "document_type": {
       "const": "processing_plan",
       "default": "processing_plan",
@@ -760,7 +829,7 @@
       "$ref": "#/$defs/PrefilterPlan"
     },
     "schema_version": {
-      "default": "3.3",
+      "default": "3.4",
       "title": "Schema Version",
       "type": "string"
     },

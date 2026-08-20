@@ -1253,7 +1253,7 @@
       "default": null
     },
     "schema_version": {
-      "default": "3.3",
+      "default": "3.4",
       "title": "Schema Version",
       "type": "string"
     },

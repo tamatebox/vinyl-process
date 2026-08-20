@@ -13,11 +13,17 @@ from vinyl_process import __version__
 from vinyl_process.audio import AudioBuffer
 from vinyl_process.dsp.base import Capability, DspEngine
 from vinyl_process.errors import ExecutionError
-from vinyl_process.models.plan import DeclickPlan, PrefilterPlan, TrackBoundary
+from vinyl_process.models.plan import (
+    DeclickPlan,
+    DecracklePlan,
+    PrefilterPlan,
+    TrackBoundary,
+)
 from vinyl_process.signal_ops import (
     apply_fades,
     click_events_block,
     confirm_clicks_sinusoidal,
+    crackle_events_curvature,
     remove_dc,
     repair_clicks,
     repair_clicks_ar,
@@ -26,6 +32,7 @@ from vinyl_process.signal_ops import (
 )
 
 ALGORITHMS = frozenset({"block_ratio"})
+CRACKLE_ALGORITHMS = frozenset({"curvature_ratio"})
 """``block_ratio``: detect clicks where the energy of a click-width window exceeds
 the energy of its neighbourhood by ``threshold`` times, then reconstruct each one
 by autoregressive least squares (Janssen 1986). ``threshold`` is a **ratio, not a
@@ -65,7 +72,7 @@ class NativeEngine(DspEngine):
     name = "native"
 
     def capabilities(self) -> frozenset[Capability]:
-        return frozenset({"prefilter", "split", "declick", "gain"})
+        return frozenset({"prefilter", "split", "declick", "decrackle", "gain"})
 
     def version(self) -> str:
         return f"native {__version__} (numpy {np.__version__})"
@@ -179,6 +186,45 @@ class NativeEngine(DspEngine):
                 iterations=int(plan.params.get("ar_iterations", 2)),
                 context=int(plan.params.get("ar_context", 8 * order)),
             )
+        )
+
+    def decrackle(self, audio: AudioBuffer, plan: DecracklePlan) -> AudioBuffer:
+        """Per-sample outlier repair for a bed of 1-3 sample events.
+
+        Linear interpolation by default rather than AR, and that is not laziness:
+        across one to three samples a straight line between the two survivors
+        cannot leave the range they span, so it cannot diverge on any material,
+        while an AR fit of order 11 (the derived rule for a 3-sample gap) would be
+        estimating a model from a context far larger than the hole it fills. The
+        interpolator stays a ``params`` choice because "which is best" is unsettled
+        here for the same reason it is in ``declick``.
+        """
+        if plan.algorithm not in CRACKLE_ALGORITHMS:
+            raise ExecutionError(
+                f"engine 'native' does not implement algorithm {plan.algorithm!r}; "
+                f"available: {sorted(CRACKLE_ALGORITHMS)}"
+            )
+        if plan.threshold is None:
+            raise ExecutionError(
+                "decrackle is enabled but no threshold is set. It is a decision, not a "
+                "default: it is a curvature ratio, smaller is more aggressive, and the "
+                "setting is held against the repair-rate band per pressing"
+            )
+        events = crackle_events_curvature(
+            audio.mono(),
+            plan.threshold,
+            plan.max_event_width_samples,
+            context_ms=float(plan.params.get("context_ms", 5.0)),
+            sample_rate=audio.sample_rate,
+        )
+        interpolator = str(plan.params.get("interpolator", "linear"))
+        if interpolator == "linear":
+            return audio.with_samples(repair_clicks_linear(audio.samples, events, plan.strength))
+        if interpolator == "hermite":
+            return audio.with_samples(repair_clicks(audio.samples, events, plan.strength))
+        raise ExecutionError(
+            f"engine 'native' has no decrackle interpolator {interpolator!r}; "
+            "available: linear, hermite"
         )
 
     def apply_gain(self, audio: AudioBuffer, gain_db: float) -> AudioBuffer:

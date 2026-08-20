@@ -90,16 +90,25 @@ def test_manifest_records_every_stage_and_the_environment(
     stages = {record.stage: record for record in manifest.stages}
     assert set(stages) == {
         "prefilter",
-        "split",
         "declick",
+        "decrackle",
+        "split",
         "normalize",
         "resample",
         "export",
         "metadata",
     }
     # The receipt lists the stages in the order they ran, pre-split phase first.
-    assert [record.stage for record in manifest.stages][:3] == ["prefilter", "declick", "split"]
+    assert [record.stage for record in manifest.stages][:4] == [
+        "prefilter",
+        "declick",
+        "decrackle",
+        "split",
+    ]
     assert stages["prefilter"].status == "skipped"
+    assert stages["decrackle"].status == "skipped"
+    # A repair stage says how much of the audio it actually changed.
+    assert "repaired" in stages["declick"].detail
     assert stages["split"].status == "applied"
     assert stages["split"].engine == "native"
     assert stages["split"].engine_version
@@ -518,3 +527,35 @@ def test_declick_now_sees_the_whole_side_rather_than_faded_tracks(
     samples, _rate = sf.read(str(first_output), dtype="float64", always_2d=True)
     assert np.allclose(samples[0], 0.0, atol=1e-6)
     assert np.allclose(samples[-1], 0.0, atol=1e-6)
+
+
+def test_decrackle_runs_after_declick_and_reports_its_repair_rate(
+    plan: ProcessingPlan, recording: SyntheticRecording, tmp_path: Path
+) -> None:
+    """The receipt has to carry the figure the practitioner band is stated in."""
+    payload = plan.model_dump(mode="json")
+    payload["decrackle"] = {"enabled": True, "engine": "native", "threshold": 3.0}
+    crackly = ProcessingPlan.model_validate(payload)
+
+    manifest = run(crackly, recording, tmp_path / "album")
+    order = [record.stage for record in manifest.stages]
+    assert order.index("declick") < order.index("decrackle") < order.index("split")
+
+    stages = {record.stage: record for record in manifest.stages}
+    assert stages["decrackle"].status == "applied"
+    assert stages["decrackle"].engine == "native"
+    assert "repaired" in stages["decrackle"].detail
+    assert "1 in " in stages["decrackle"].detail or "nothing changed" in (
+        stages["decrackle"].detail
+    )
+
+
+def test_a_decrackled_run_reproduces_bit_for_bit(
+    plan: ProcessingPlan, recording: SyntheticRecording, tmp_path: Path
+) -> None:
+    payload = plan.model_dump(mode="json")
+    payload["decrackle"] = {"enabled": True, "engine": "native", "threshold": 3.0}
+    crackly = ProcessingPlan.model_validate(payload)
+    first = run(crackly, recording, tmp_path / "one")
+    second = run(crackly, recording, tmp_path / "two")
+    assert first.output_digests() == second.output_digests()

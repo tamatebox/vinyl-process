@@ -1,6 +1,6 @@
 ---
 name: plan-album
-description: Orchestrate planning for a raw vinyl recording — run the analyzer, apply the plan-prefilter/plan-split/plan-declick/plan-normalize/plan-metadata/plan-export skills, assemble and lint processing_plan.json, then execute it. Use when the user wants to process a raw vinyl recording end to end.
+description: Orchestrate planning for a raw vinyl recording — run the analyzer, apply the plan-prefilter/plan-split/plan-declick/plan-decrackle/plan-normalize/plan-metadata/plan-export skills, assemble and lint processing_plan.json, then execute it. Use when the user wants to process a raw vinyl recording end to end.
 ---
 
 # Plan Album
@@ -91,6 +91,7 @@ One directory per record, holding everything about it and nothing else:
     split/                      split only                    → checkpoint 2
     prefilter/                  + prefilter, when enabled     → its own checkpoint
     declick/                    + declick                     → checkpoint 3
+    decrackle/                  + decrackle, when enabled     → its own checkpoint
     level/                      + normalize                   → checkpoint 4
       plots/                      the figures for that render (see below)
   album/                      the finished tracks + manifest-side-<side>.json
@@ -110,12 +111,13 @@ repair an improvement" is answered by `review/declick/` against `review/split/`
 and nothing else differs between them. Build each one by disabling the stages it
 has not reached yet and executing into its own directory:
 
-| Render | `prefilter` | `declick` | `split` | `normalize` |
-|---|---|---|---|---|
-| `review/split/` | **off** | **off** | on | **off** |
-| `review/prefilter/` | on | **off** | on | **off** |
-| `review/declick/` | as decided | on | on | **off** |
-| `review/level/` | as decided | on | on | on |
+| Render | `prefilter` | `declick` | `decrackle` | `split` | `normalize` |
+|---|---|---|---|---|---|
+| `review/split/` | **off** | **off** | **off** | on | **off** |
+| `review/prefilter/` | on | **off** | **off** | on | **off** |
+| `review/declick/` | as decided | on | **off** | on | **off** |
+| `review/decrackle/` | as decided | as decided | on | on | **off** |
+| `review/level/` | as decided | as decided | as decided | on | on |
 
 `review/prefilter/` is a rung only when the stage is enabled at all; on a record
 that leaves it off, the ladder starts at `review/split/` as before. Once it is
@@ -300,9 +302,10 @@ before continuous ones, level last (*Outside references*).
 | 1 | `prefilter` | [plan-prefilter](../plan-prefilter/SKILL.md) | pre-split |
 | 2 | `split` | [plan-split](../plan-split/SKILL.md) | — |
 | 3 | `declick` | [plan-declick](../plan-declick/SKILL.md) | pre-split |
-| 4 | `normalize` | [plan-normalize](../plan-normalize/SKILL.md) | post-split |
-| 5 | `metadata` | [plan-metadata](../plan-metadata/SKILL.md) | post-split |
-| 6 | `export` | [plan-export](../plan-export/SKILL.md) | post-split |
+| 4 | `decrackle` | [plan-decrackle](../plan-decrackle/SKILL.md) | pre-split |
+| 5 | `normalize` | [plan-normalize](../plan-normalize/SKILL.md) | post-split |
+| 6 | `metadata` | [plan-metadata](../plan-metadata/SKILL.md) | post-split |
+| 7 | `export` | [plan-export](../plan-export/SKILL.md) | post-split |
 
 **Decide in that order; the executor runs in its own.** `prefilter` and `declick`
 act on the whole side before the cuts, but `split` is decided second because
@@ -311,12 +314,19 @@ cuts, which needs the boundaries. Deciding a stage and running it are different
 orders, and only the second one is
 [adr/0012](../../../docs/adr/0012-the-executor-has-a-pre-split-phase.md).
 
-**Route past a disabled stage in one line, not with a checkpoint.** `prefilter` is
-off by default and most records should leave it off; "prefilter: off, rumble is
-−48 dB and there is no DC offset" is the whole of it. Open its checkpoint only
-when a measurement argues for the stage. A checkpoint per stage regardless of
-whether the stage does anything is how a seven-stop flow becomes a flow nobody
-reads.
+**Route past a disabled stage in one line, not with a checkpoint.** `prefilter`
+and `decrackle` are both off by default and most records should leave them off;
+"prefilter: off, rumble is −48 dB and there is no DC offset" and "decrackle: off,
+the complaint is discrete ticks rather than texture" are the whole of it. Open a
+checkpoint only when a measurement, or the listener's own description, argues for
+the stage. A checkpoint per stage regardless of whether the stage does anything is
+how an eight-stop flow becomes a flow nobody reads.
+
+**The repair rate is in the receipt now.** Each repair stage's `detail` in
+`manifest.json` carries `repaired N of M samples (1 in K)`, which is the figure the
+practitioner band is stated in — 1 in 200 "suspicious", 1 in 1000-2000 the typical
+floor. Quote it at checkpoints 3 and the decrackle one instead of diffing rendered
+directories, and quote **both** stages when both ran: the band covers the pair.
 
 **Everything after `split` is about the audio that survives the cuts, and
 `analysis.json` measures the whole recording.** The two are not the same file, and
@@ -413,8 +423,8 @@ decision people notice afterwards and cannot undo without re-running.
   validation error because the contract forbids unknown fields. Use
   `write_tags: false` there instead.
 
-  `prefilter` is **optional and disabled by default**, and every stage added after
-  schema 3.2 will be. That is what keeps the bump minor and every archived plan
+  `prefilter` and `decrackle` are **optional and disabled by default**, and every
+  stage added after schema 3.2 will be. That is what keeps the bump minor and every archived plan
   re-executable ([adr/0012](../../../docs/adr/0012-the-executor-has-a-pre-split-phase.md)).
   Write the section out anyway once you have considered it, with the `rationale`
   saying you decided against — an omitted section and a considered "no" are

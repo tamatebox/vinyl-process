@@ -13,6 +13,7 @@ from vinyl_process.signal_ops import (
     click_events_block_sweep,
     confirm_clicks_sinusoidal,
     correlation_at,
+    crackle_events_curvature,
     db_to_amplitude,
     gated_rms,
     gated_rms_of_blocks,
@@ -273,6 +274,88 @@ def test_block_detector_answer_does_not_depend_on_how_much_audio_it_was_given(
         f"detection rate moved from {whole:.2f}/s to {chunked:.2f}/s when the same audio "
         f"was handed over in {chunk_seconds}s pieces"
     )
+
+
+def needle_drop(signal: np.ndarray, at_seconds: float, width_ms: float = 20.0) -> np.ndarray:
+    """A stylus landing: a near-full-scale low thump with a sharp leading edge.
+
+    Deliberately far wider than ``max_click_width_ms``, because that is what a
+    real one is — and therefore what the detector rejects as programme material.
+    """
+    out = signal.copy()
+    start = int(at_seconds * SAMPLE_RATE)
+    length = int(width_ms / 1000.0 * SAMPLE_RATE)
+    envelope = np.exp(-np.linspace(0.0, 6.0, length))
+    out[start : start + length] += (
+        0.95 * envelope * np.sin(2 * np.pi * 60 * np.arange(length) / SAMPLE_RATE)
+    )
+    out[start] += 0.95
+    return out
+
+
+def test_a_huge_transient_does_not_change_detections_elsewhere() -> None:
+    """The question a lead-in raises: does the needle drop spoil the small clicks?
+
+    It cannot, and this is why the statistic is a local ratio rather than a
+    spread taken over the whole input (adr/0010). A global threshold would be
+    dragged upwards by one near-full-scale event and would then miss everything
+    quiet on the side; the ratio compares a click-width window against its *own*
+    40 ms neighbourhood, so an event outside that neighbourhood contributes
+    nothing at all. Not "little" — nothing: the detections away from it are
+    identical, event for event.
+    """
+    signal, positions = clicky(30.0, spacing=110_250)
+    threshold = usable_threshold(signal, positions)
+
+    def away(audio: np.ndarray) -> list[tuple[int, int, float]]:
+        # Everything past 10 s, which is 8 s clear of the transient below.
+        return sorted(
+            event
+            for event in click_events_block(audio, SAMPLE_RATE, threshold, 2.0)
+            if event[0] > 10 * SAMPLE_RATE
+        )
+
+    clean = away(signal)
+    assert clean, "the fixture must produce detections in the region under test"
+    assert away(needle_drop(signal, at_seconds=2.0)) == clean
+
+
+@pytest.mark.parametrize("at_seconds", [0.5, 2.0, 3.5])
+def test_a_huge_transients_shadow_is_confined_to_its_own_neighbourhood(
+    at_seconds: float,
+) -> None:
+    """There *is* a shadow, and this bounds how long it is.
+
+    A loud neighbour inflates the 40 ms context mean, which lowers the ratio a
+    genuine click reaches — so a small click close enough to a needle drop can be
+    hidden. What matters is that the shadow cannot be longer than the context
+    window, because nothing outside it enters the statistic. So this asserts the
+    *bound*, not the occurrence: outside 50 ms of the transient, every detection is
+    exactly as it was.
+
+    Deliberately not asserting "a click 5 ms away is missed". Whether a given
+    click survives depends on its own margin over the threshold and on the
+    material, the same reason ``usable_threshold`` is computed rather than
+    hard-coded — on one fixture the shadow swallowed a click at 10 ms and on
+    another it did not. The bound is the property; the radius is a measurement of
+    a fixture.
+    """
+    signal, positions = clicky(6.0, spacing=22_050)
+    threshold = usable_threshold(signal, positions)
+    damaged = needle_drop(signal, at_seconds=at_seconds, width_ms=2.0)
+
+    shadow = int(0.05 * SAMPLE_RATE)
+    centre = int(at_seconds * SAMPLE_RATE)
+
+    def outside(audio: np.ndarray) -> list[tuple[int, int, float]]:
+        return sorted(
+            event
+            for event in click_events_block(audio, SAMPLE_RATE, threshold, 2.0)
+            if not centre - shadow <= event[0] <= centre + shadow
+        )
+
+    assert outside(signal), "the fixture must produce detections outside the shadow"
+    assert outside(damaged) == outside(signal)
 
 
 def test_block_detector_finds_obvious_clicks_and_leaves_clean_audio_alone() -> None:
@@ -553,3 +636,115 @@ def test_rms_blocks_average_channels_so_the_figure_matches_a_plain_rms() -> None
     stereo = np.stack([mono, mono], axis=1)
     assert gated_rms(stereo, SAMPLE_RATE) == pytest.approx(gated_rms(mono, SAMPLE_RATE), rel=1e-9)
     assert rms_blocks(np.zeros((0, 2)), SAMPLE_RATE).size == 0
+
+
+# --------------------------------------------------------------------------- #
+# crackle
+# --------------------------------------------------------------------------- #
+def crackly(
+    seconds: float = 2.0, count: int = 400, amplitude: float = 0.05, seed: int = 3
+) -> tuple[np.ndarray, list[int]]:
+    """Tonal material with a bed of single-sample events — crackle, not clicks.
+
+    ``amplitude`` is 0.05 against a 0.30 programme, about -16 dB below it. That is
+    louder than real crackle, and deliberately so: ``tonal`` carries a 3.1 kHz
+    component whose *own* curvature is around 0.016, so quieter events are masked
+    by the material rather than missed by the detector. See
+    ``test_bright_material_masks_quiet_crackle``, which pins that behaviour instead
+    of hiding it in a fixture constant.
+    """
+    signal = tonal(seconds)
+    rng = np.random.default_rng(seed)
+    positions = sorted(
+        int(p) for p in rng.choice(np.arange(1000, signal.size - 1000), size=count, replace=False)
+    )
+    for index, position in enumerate(positions):
+        signal[position] += amplitude * (1.0 if index % 2 else -1.0)
+    return signal, positions
+
+
+def test_crackle_detector_finds_single_sample_events_and_stays_quiet_on_clean_audio() -> None:
+    signal, positions = crackly()
+    events = crackle_events_curvature(signal, 3.0, 3, sample_rate=SAMPLE_RATE)
+    hit = sum(any(start <= p < end for start, end, _peak in events) for p in positions)
+    assert hit >= 0.9 * len(positions), f"found only {hit} of {len(positions)}"
+    assert crackle_events_curvature(tonal(2.0), 3.0, 3, sample_rate=SAMPLE_RATE) == []
+
+
+def test_a_lower_crackle_threshold_repairs_more_samples() -> None:
+    """The direction of the dial, which is the opposite of ClickRepair's slider."""
+    signal, _positions = crackly()
+
+    def repaired(threshold: float) -> int:
+        events = crackle_events_curvature(signal, threshold, 3, sample_rate=SAMPLE_RATE)
+        return sum(end - start for start, end, _peak in events)
+
+    assert repaired(3.0) > repaired(5.0) > repaired(8.0)
+
+
+def test_the_crackle_detector_rejects_anything_wide_enough_to_be_a_click() -> None:
+    """It must not compete with ``declick`` for the same damage."""
+    signal, positions = clicky(2.0)
+    wide = crackle_events_curvature(signal, 3.0, 3, sample_rate=SAMPLE_RATE)
+    for start, end, _peak in wide:
+        assert end - start <= 3
+    # A 3-sample click is at the boundary and may be caught; a 12-sample one is not.
+    broad = tonal(2.0)
+    broad[20_000 : 20_000 + 12] += 0.5
+    events = crackle_events_curvature(broad, 3.0, 3, sample_rate=SAMPLE_RATE)
+    assert not any(start <= 20_005 < end for start, end, _peak in events)
+    assert positions, "fixture sanity"
+
+
+def test_bright_material_masks_quiet_crackle_and_errs_towards_under_repair() -> None:
+    """A real property of a curvature ratio, and the safe direction to fail in.
+
+    The statistic divides a sample's curvature by the mean curvature of its
+    neighbourhood, and high-frequency programme content raises that denominator —
+    a 3.1 kHz tone at 0.08 has a curvature near 0.016 all by itself. So the same
+    crackle is harder to find under bright material than under a bass line. The
+    consequence is **fewer detections, not more**: the stage under-repairs on the
+    material where over-repair would be most audible, which is the direction to
+    err in. ``plan-decrackle`` says so rather than claiming a threshold transfers
+    between passages.
+    """
+    quiet_positions = [12_000 + 300 * i for i in range(50)]
+
+    def bed(base: np.ndarray) -> np.ndarray:
+        signal = base.copy()
+        for index, position in enumerate(quiet_positions):
+            signal[position] += 0.01 * (1.0 if index % 2 else -1.0)
+        return signal
+
+    t_axis = np.arange(int(SAMPLE_RATE * 2.0)) / SAMPLE_RATE
+    dull = bed(0.30 * np.sin(2 * np.pi * 220 * t_axis))
+    bright = bed(tonal(2.0))
+
+    def found(signal: np.ndarray) -> int:
+        events = crackle_events_curvature(signal, 3.0, 3, sample_rate=SAMPLE_RATE)
+        return sum(any(start <= p < end for start, end, _peak in events) for p in quiet_positions)
+
+    assert found(dull) >= 0.9 * len(quiet_positions)
+    assert found(bright) < 0.5 * len(quiet_positions)
+
+
+def test_the_crackle_statistic_is_local_like_the_click_one() -> None:
+    """Same property, same reason (adr/0010): a loud event must not move the rest."""
+    signal, _positions = crackly(6.0, count=600)
+    loud = needle_drop(signal, at_seconds=1.0)
+
+    def away(audio: np.ndarray) -> list[tuple[int, int, float]]:
+        return sorted(
+            event
+            for event in crackle_events_curvature(audio, 3.0, 3, sample_rate=SAMPLE_RATE)
+            if event[0] > 3 * SAMPLE_RATE
+        )
+
+    assert away(signal)
+    assert away(loud) == away(signal)
+
+
+def test_crackle_detector_is_a_noop_on_degenerate_input() -> None:
+    assert crackle_events_curvature(np.zeros(2), 3.0, 3, sample_rate=SAMPLE_RATE) == []
+    assert crackle_events_curvature(tonal(0.1), 0.0, 3, sample_rate=SAMPLE_RATE) == []
+    assert crackle_events_curvature(tonal(0.1), 3.0, 0, sample_rate=SAMPLE_RATE) == []

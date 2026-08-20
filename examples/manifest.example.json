@@ -1,5 +1,5 @@
 {
-  "schema_version": "3.3",
+  "schema_version": "3.4",
   "document_type": "manifest",
   "generated_by": "vinyl-process 0.1.0",
   "run_key": "0000000000000000000000000000000000000000000000000000000000000000",
@@ -30,7 +30,15 @@
       "engine": "native",
       "engine_version": "…",
       "params_digest": "8f33f18675839ba6af410d767db4d88111e71b9d643e14cb4294a8b959ad071d",
-      "detail": "algorithm=block_ratio (whole side, pre-split)"
+      "detail": "algorithm=block_ratio (whole side, pre-split); repaired 63 of 956970 samples (1 in 15190)"
+    },
+    {
+      "stage": "decrackle",
+      "status": "skipped",
+      "engine": null,
+      "engine_version": null,
+      "params_digest": null,
+      "detail": "decrackle disabled"
     },
     {
       "stage": "split",

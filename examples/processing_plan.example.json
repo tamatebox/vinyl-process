@@ -1,5 +1,5 @@
 {
-  "schema_version": "3.3",
+  "schema_version": "3.4",
   "document_type": "processing_plan",
   "created_by": "plan-album",
   "source": {
@@ -68,6 +68,16 @@
     "max_click_width_ms": 2.0,
     "strength": 1.0,
     "preset": null,
+    "params": {}
+  },
+  "decrackle": {
+    "decision": null,
+    "enabled": false,
+    "engine": "native",
+    "algorithm": "curvature_ratio",
+    "threshold": null,
+    "max_event_width_samples": 3,
+    "strength": 1.0,
     "params": {}
   },
   "normalize": {

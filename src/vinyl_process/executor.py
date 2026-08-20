@@ -1,8 +1,10 @@
 """Plan executor: runs a ``ProcessingPlan`` end to end, deterministically.
 
 Two phases. **Before the cuts**, on the whole side:
-``prefilter -> declick``. **After them**, per track:
+``prefilter -> declick -> decrackle``. **After them**, per track:
 ``split -> normalize -> resample -> export -> tag -> manifest``.
+
+The pre-split order is practice's: discrete defects before continuous ones.
 
 The pre-split phase exists because restoration practice repairs discrete defects
 on the whole side and splits afterwards, and because anything that needs a
@@ -138,6 +140,7 @@ class _Execution:
         # Pre-split phase: the whole side, one buffer.
         audio = self._prefilter(audio)
         audio = self._declick(audio)
+        audio = self._decrackle(audio)
         # Post-split phase: one buffer per track.
         tracks = self._tracks(audio)
         buffers = self._split(audio, tracks)
@@ -234,14 +237,58 @@ class _Execution:
             self._record("declick", "skipped", detail="declick disabled")
             return audio
         engine = self._engine(self.plan.declick.engine, "declick")
+        return self._repaired("declick", audio, engine.declick(audio, self.plan.declick), engine)
+
+    def _decrackle(self, audio: AudioBuffer) -> AudioBuffer:
+        """Repair the crackle bed, after ``declick`` and still before the cuts.
+
+        Discrete defects before continuous ones, which is also the order that
+        keeps the two from fighting: ``declick`` bridges the wide events first, so
+        this stage's per-sample statistic is not looking at their edges.
+        """
+        if not self.plan.decrackle.enabled:
+            self._record("decrackle", "skipped", detail="decrackle disabled")
+            return audio
+        engine = self._engine(self.plan.decrackle.engine, "decrackle")
+        return self._repaired(
+            "decrackle", audio, engine.decrackle(audio, self.plan.decrackle), engine
+        )
+
+    def _repaired(
+        self,
+        stage: StageName,
+        before: AudioBuffer,
+        after: AudioBuffer,
+        engine: DspEngine,
+    ) -> AudioBuffer:
+        """Record a repair stage, with **how much of the audio it changed**.
+
+        The practitioner benchmark for repair is a fraction of samples — 1 in 200
+        is "suspicious", 1 in 1000-2000 the typical floor (ClickRepair 3.9;
+        ``plan-declick`` carries the citation). That figure used to be obtainable
+        only by diffing two rendered directories, which meant it was usually not
+        obtained at all, and a setting an order of magnitude below the band was
+        chosen twice on one record without anyone noticing.
+
+        The executor holds both buffers, so the exact count is arithmetic rather
+        than a decision, and it belongs in the receipt where the person deciding
+        will see it.
+        """
+        section = getattr(self.plan, stage)
+        changed = int(np.count_nonzero(np.any(after.samples != before.samples, axis=1)))
+        total = max(after.num_frames, 1)
+        rate = f"1 in {total // changed}" if changed else "nothing changed"
         self._record(
-            "declick",
+            stage,
             "applied",
             engine=engine,
-            section=self.plan.declick,
-            detail=f"algorithm={self.plan.declick.algorithm} (whole side, pre-split)",
+            section=section,
+            detail=(
+                f"algorithm={section.algorithm} (whole side, pre-split); "
+                f"repaired {changed} of {total} samples ({rate})"
+            ),
         )
-        return engine.declick(audio, self.plan.declick)
+        return after
 
     def _normalize(self, buffers: list[AudioBuffer]) -> list[AudioBuffer]:
         normalize = self.plan.normalize

@@ -15,6 +15,7 @@ cuts; the rest run per track.
 |---|---|
 | `prefilter` | Remove DC and/or high-pass the subsonic band, on the whole side |
 | `declick` | Detect and repair impulsive damage with the plan's parameters |
+| `decrackle` | Repair a bed of 1-3 sample events, per sample rather than collectively |
 | `split` | Cut the source into tracks at sample-exact boundaries, applying the plan's fades |
 | `gain` | Apply a gain in dB |
 
@@ -23,7 +24,7 @@ An engine implements only what it has. A partial engine is a first-class citizen
 ```sh
 $ vinyl-process engines
 ffmpeg [available] declick, gain (ffmpeg version 9.0.1 …)
-native [available] declick, gain, prefilter, split (native 0.1.0 (numpy 2.4.6))
+native [available] declick, decrackle, gain, prefilter, split (native 0.1.0 (numpy 2.4.6))
 ```
 
 ## Built-in engines
@@ -57,6 +58,15 @@ Pure numpy/scipy, no external binaries, every capability.
   (`p = 3·Nmax + 2`, window `8p`) rather than chosen, and `params.ar_order`,
   `ar_iterations` and `ar_context` override them. `params.confirm_k` is an opt-in
   second stage that discards candidates a few sinusoids already explain.
+- `decrackle`, algorithm `curvature_ratio` — a sample's `|second difference|`
+  against the mean `|second difference|` of its own neighbourhood
+  (`params.context_ms`, 5.0). A **ratio**, so level-independent, and **local**, for
+  the reasons in `adr/0010`; smaller is more aggressive, and there is no default.
+  Runs wider than `max_event_width_samples` are dropped rather than repaired, so
+  this stage cannot bridge anything `declick` would have found. `params.interpolator`
+  is `linear` by default — across one to three samples a straight line between the
+  survivors cannot leave the range they span — with `hermite` available. See
+  [adr/0013](adr/0013-crackle-is-a-separate-stage-with-its-own-detector.md).
 - `gain` — multiply by `10^(dB/20)`.
 
 What is established, on real audio rather than injected damage:
@@ -67,6 +77,28 @@ What is established, on real audio rather than injected damage:
   and this engine (which sees one track) describe the same events — under the old
   statistic they did not, once measured at 38 693 clicks reported against 58 355
   spans repaired.
+- **One huge transient does not spoil the small clicks.** The question a lead-in
+  raises: does the needle drop — near full scale, tens of milliseconds wide —
+  degrade repair of the quiet clicks elsewhere on the side? It cannot. Measured on
+  synthesised material: with a 0.95-amplitude thump inserted, every detection
+  outside 50 ms of it is **identical, event for event**, because the ratio compares
+  a click-width window against its *own* 40 ms neighbourhood and nothing outside
+  that neighbourhood enters the statistic. A global spread would have been dragged
+  upwards by the one loud event and would then miss everything quiet — which is
+  the failure `adr/0010` records. There *is* a shadow, bounded by the context
+  window and in practice around 10 ms, so a big event costs the clicks within a few
+  tens of milliseconds of itself and nothing beyond.
+
+  Two consequences worth stating, because they answer a real design question.
+  Repairing the **whole side** pre-split is safe, and **trimming the lead-in away
+  first is not a prerequisite**. And the drop itself is not repaired at all: at
+  tens of milliseconds it is wider than `max_click_width_ms` and is rejected as
+  programme material, which is the wide-damage limitation rather than a surprise.
+  Where this stops holding is anything that estimates a statistic over a *region*
+  rather than a neighbourhood — a noise profile above all: "large clicks can
+  corrupt a noise profile and make later processing pump or smear" (Sound Forge
+  Pro's vinyl-restoration guide). That is a de-noise problem, solved by choosing
+  the profile's region, not by trimming.
 - **It finds the surface.** On a near-clean pressing used as a negative control the
   old detector claimed 1082 events a minute while finding *none* in the inter-track
   gaps, where the surface is unmasked; the ratio found few and concentrated them in
@@ -99,6 +131,21 @@ version string the manifest records.
 - `gain` — the `volume` filter with `precision=double`. Without that flag the
   filter works internally in float and drifts ~1e-7 from the native engine; with
   it, both engines agree to double rounding.
+`decrackle` is deliberately **not** offered here. ffmpeg has no crackle filter,
+and mapping the stage onto `adeclick` with a narrow window was rejected rather
+than overlooked: `adeclick` is impulsive-noise removal, the collective family that
+the citation behind `decrackle` says is *not* attuned to crackle, so the mapping
+would contradict the reference that justifies the stage
+([adr/0013](adr/0013-crackle-is-a-separate-stage-with-its-own-detector.md)). An
+engine implements only what it has.
+
+`afftdn` would be the delegate for a de-noise stage, and that stage is not built.
+The reason is measured, not assumed — see *Known limitations* in
+[architecture.md](architecture.md): its `noise_floor` dominates the result and no
+reference says what to set it to, and its own `sample_noise` start/stop commands
+produced output identical to no command at all on ffmpeg 9.0.1, so a plan cannot
+hand it a profile region.
+
 - `declick`, algorithm `adeclick` — parameters are mapped deterministically and the
   mapping is part of the contract:
 

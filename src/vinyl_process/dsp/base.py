@@ -20,10 +20,17 @@ from typing import Literal
 
 from vinyl_process.audio import AudioBuffer
 from vinyl_process.errors import EngineUnavailableError, UnsupportedOperationError
-from vinyl_process.models.plan import DeclickPlan, PrefilterPlan, TrackBoundary
+from vinyl_process.models.plan import (
+    DeclickPlan,
+    DecracklePlan,
+    PrefilterPlan,
+    TrackBoundary,
+)
 
-Capability = Literal["prefilter", "split", "declick", "gain"]
-ALL_CAPABILITIES: frozenset[Capability] = frozenset({"prefilter", "split", "declick", "gain"})
+Capability = Literal["prefilter", "split", "declick", "decrackle", "gain"]
+ALL_CAPABILITIES: frozenset[Capability] = frozenset(
+    {"prefilter", "split", "declick", "decrackle", "gain"}
+)
 
 
 class DspEngine(ABC):
@@ -51,6 +58,9 @@ class DspEngine(ABC):
 
     def declick(self, audio: AudioBuffer, plan: DeclickPlan) -> AudioBuffer:
         raise UnsupportedOperationError(f"engine {self.name!r} does not support declick")
+
+    def decrackle(self, audio: AudioBuffer, plan: DecracklePlan) -> AudioBuffer:
+        raise UnsupportedOperationError(f"engine {self.name!r} does not support decrackle")
 
     def apply_gain(self, audio: AudioBuffer, gain_db: float) -> AudioBuffer:
         raise UnsupportedOperationError(f"engine {self.name!r} does not support gain")
