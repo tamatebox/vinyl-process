@@ -436,6 +436,66 @@
       "title": "NormalizePlan",
       "type": "object"
     },
+    "PrefilterPlan": {
+      "additionalProperties": false,
+      "description": "DC blocking and the subsonic high-pass, applied to the whole side before\nthe cuts.\n\nTwo one-line filters share a section because they answer the same question \u2014\nhow much of what the transfer captured below the music should reach the\nlistening copy \u2014 and neither justifies a stage of its own. Both are genuine\npreservation-versus-listening choices rather than constants, which is why they\nare here and not compiled in.\n\nDisabled by default, and the whole section is optional: a plan written before\n3.3 validates without it and executes to the same bytes.",
+      "properties": {
+        "dc_block": {
+          "default": false,
+          "title": "Dc Block",
+          "type": "boolean"
+        },
+        "decision": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/StageDecision"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "enabled": {
+          "default": false,
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "engine": {
+          "default": "native",
+          "title": "Engine",
+          "type": "string"
+        },
+        "highpass_hz": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0.0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Highpass Hz"
+        },
+        "highpass_rolloff_db_per_octave": {
+          "default": 24,
+          "enum": [
+            6,
+            12,
+            18,
+            24,
+            30,
+            36
+          ],
+          "title": "Highpass Rolloff Db Per Octave",
+          "type": "integer"
+        }
+      },
+      "title": "PrefilterPlan",
+      "type": "object"
+    },
     "SourceInfo": {
       "additionalProperties": false,
       "description": "Identity of the source recording a document refers to.\n\n``sha256`` is the anchor of reproducibility: the executor refuses to run a\nplan against audio whose digest does not match.",
@@ -696,8 +756,11 @@
       "title": "Notes",
       "type": "string"
     },
+    "prefilter": {
+      "$ref": "#/$defs/PrefilterPlan"
+    },
     "schema_version": {
-      "default": "3.2",
+      "default": "3.3",
       "title": "Schema Version",
       "type": "string"
     },

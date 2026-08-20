@@ -16,7 +16,7 @@ from vinyl_process.errors import (
     ExecutionError,
     UnsupportedOperationError,
 )
-from vinyl_process.models.plan import DeclickPlan, TrackBoundary
+from vinyl_process.models.plan import DeclickPlan, PrefilterPlan, TrackBoundary
 from vinyl_process.signal_ops import amplitude_to_db
 
 SAMPLE_RATE = 44100
@@ -329,3 +329,110 @@ def test_declick_refuses_to_invent_a_threshold() -> None:
     """
     with pytest.raises(ExecutionError, match="not a default"):
         NativeEngine().declick(tone(), DeclickPlan())
+
+
+# --------------------------------------------------------------------------- #
+# prefilter
+# --------------------------------------------------------------------------- #
+def test_prefilter_is_a_native_capability() -> None:
+    assert "prefilter" in NativeEngine().capabilities()
+
+
+def test_dc_block_removes_the_offset_exactly() -> None:
+    audio = tone()
+    offset = np.array([0.05, -0.02])
+    shifted = AudioBuffer(audio.samples + offset, audio.sample_rate)
+    result = NativeEngine().prefilter(
+        shifted, PrefilterPlan(enabled=True, dc_block=True, highpass_hz=None)
+    )
+    assert np.allclose(result.samples.mean(axis=0), 0.0, atol=1e-15)
+    # Nothing but the mean moved: the shape is untouched to full float precision.
+    assert np.allclose(result.samples, audio.samples - audio.samples.mean(axis=0), atol=1e-15)
+
+
+def test_prefilter_with_both_switches_off_returns_the_same_buffer() -> None:
+    audio = tone()
+    result = NativeEngine().prefilter(audio, PrefilterPlan(enabled=True))
+    assert result is audio
+
+
+def test_subsonic_highpass_removes_rumble_and_keeps_the_music() -> None:
+    """A 5 Hz warp under a 440 Hz tone: the rumble goes, the tone stays."""
+    frames = SAMPLE_RATE * 4
+    t = np.arange(frames) / SAMPLE_RATE
+    music = 0.4 * np.sin(2 * np.pi * 440 * t)
+    rumble = 0.3 * np.sin(2 * np.pi * 5 * t)
+    audio = AudioBuffer(np.column_stack([music + rumble, music + rumble]), SAMPLE_RATE)
+
+    result = NativeEngine().prefilter(
+        audio,
+        PrefilterPlan(enabled=True, highpass_hz=30.0, highpass_rolloff_db_per_octave=24),
+    )
+
+    # Judge the second half, past the filter's settling transient, and judge it
+    # per component: a forward-only filter shifts the phase of what it passes, so
+    # a sample-wise comparison against the unfiltered tone measures that shift
+    # rather than the attenuation this test is about.
+    tail = slice(frames // 2, frames)
+
+    def component(samples: np.ndarray, hz: float) -> float:
+        window = samples[tail]
+        spectrum = np.fft.rfft(window)
+        bin_index = round(hz * window.size / SAMPLE_RATE)
+        return float(2.0 * np.abs(spectrum[bin_index]) / window.size)
+
+    assert component(result.samples[:, 0], 440.0) == pytest.approx(0.4, rel=0.02)
+    assert component(result.samples[:, 0], 5.0) < 0.001  # 0.3 going in
+    # The peak came down, which is the headroom this stage buys.
+    assert float(np.max(np.abs(result.samples[tail, 0]))) < 0.45
+    assert float(np.max(np.abs(audio.samples[tail, 0]))) > 0.6
+
+
+def test_the_rolloff_delivered_is_the_rolloff_asked_for() -> None:
+    """24 dB/octave means order 4 applied once, not order 4 applied twice.
+
+    A zero-phase pass would double the rolloff, so a plan asking for 24 would
+    silently get 48. Measure the attenuation an octave below the cutoff against
+    the ideal Butterworth magnitude for that order.
+    """
+    frames = SAMPLE_RATE * 8
+    t = np.arange(frames) / SAMPLE_RATE
+    cutoff, probe = 40.0, 20.0
+    signal = np.sin(2 * np.pi * probe * t)
+    audio = AudioBuffer(np.column_stack([signal, signal]), SAMPLE_RATE)
+
+    result = NativeEngine().prefilter(
+        audio, PrefilterPlan(enabled=True, highpass_hz=cutoff, highpass_rolloff_db_per_octave=24)
+    )
+    tail = slice(frames // 2, frames)
+    measured_db = float(
+        amplitude_to_db(np.max(np.abs(result.samples[tail, 0])))
+        - amplitude_to_db(np.max(np.abs(audio.samples[tail, 0])))
+    )
+    order = 4
+    ideal_db = -10.0 * np.log10(1.0 + (cutoff / probe) ** (2 * order))
+    assert abs(measured_db - ideal_db) < 1.0
+    # ...and emphatically not the double-pass figure.
+    assert abs(measured_db - 2 * ideal_db) > 5.0
+
+
+def test_prefilter_is_deterministic() -> None:
+    audio = tone()
+    section = PrefilterPlan(enabled=True, dc_block=True, highpass_hz=25.0)
+    first = NativeEngine().prefilter(audio, section)
+    second = NativeEngine().prefilter(audio, section)
+    assert np.array_equal(first.samples, second.samples)
+
+
+def test_a_cutoff_at_or_above_nyquist_is_a_no_op() -> None:
+    audio = tone()
+    result = NativeEngine().prefilter(
+        audio, PrefilterPlan(enabled=True, highpass_hz=float(SAMPLE_RATE))
+    )
+    assert np.array_equal(result.samples, audio.samples)
+
+
+def test_ffmpeg_does_not_claim_prefilter() -> None:
+    assert "prefilter" not in get_engine("ffmpeg").capabilities()
+    with pytest.raises(UnsupportedOperationError, match="prefilter"):
+        get_engine("ffmpeg").require("prefilter")

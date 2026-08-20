@@ -1,6 +1,6 @@
 ---
 name: plan-album
-description: Orchestrate planning for a raw vinyl recording — run the analyzer, apply the plan-split/plan-declick/plan-normalize/plan-metadata/plan-export skills, assemble and lint processing_plan.json, then execute it. Use when the user wants to process a raw vinyl recording end to end.
+description: Orchestrate planning for a raw vinyl recording — run the analyzer, apply the plan-prefilter/plan-split/plan-declick/plan-normalize/plan-metadata/plan-export skills, assemble and lint processing_plan.json, then execute it. Use when the user wants to process a raw vinyl recording end to end.
 ---
 
 # Plan Album
@@ -89,8 +89,9 @@ One directory per record, holding everything about it and nothing else:
   plan-<side>.json            one per recording — plan-side-a.json, plan-side-b.json
   review/                     renders made to answer a checkpoint; throwaway
     split/                      split only                    → checkpoint 2
-    declick/                    split + declick               → checkpoint 3
-    level/                      split + declick + normalize   → checkpoint 4
+    prefilter/                  + prefilter, when enabled     → its own checkpoint
+    declick/                    + declick                     → checkpoint 3
+    level/                      + normalize                   → checkpoint 4
       plots/                      the figures for that render (see below)
   album/                      the finished tracks + manifest-side-<side>.json
 ```
@@ -109,11 +110,17 @@ repair an improvement" is answered by `review/declick/` against `review/split/`
 and nothing else differs between them. Build each one by disabling the stages it
 has not reached yet and executing into its own directory:
 
-| Render | `split` | `declick` | `normalize` |
-|---|---|---|---|
-| `review/split/` | on | **off** | **off** |
-| `review/declick/` | on | on | **off** |
-| `review/level/` | on | on | on |
+| Render | `prefilter` | `declick` | `split` | `normalize` |
+|---|---|---|---|---|
+| `review/split/` | **off** | **off** | on | **off** |
+| `review/prefilter/` | on | **off** | on | **off** |
+| `review/declick/` | as decided | on | on | **off** |
+| `review/level/` | as decided | on | on | on |
+
+`review/prefilter/` is a rung only when the stage is enabled at all; on a record
+that leaves it off, the ladder starts at `review/split/` as before. Once it is
+enabled it stays enabled on every rung above it, which is what keeps each
+comparison a single-stage difference.
 
 `metadata` stays enabled throughout — the filenames are rendered from it — and
 `export` has no switch at all.
@@ -288,13 +295,28 @@ decision below must cope with that rather than assume a field exists.
 The order is the pipeline's, and the pipeline's is practice's: discrete defects
 before continuous ones, level last (*Outside references*).
 
-| Order | Section | Skill |
-|---|---|---|
-| 1 | `split` | [plan-split](../plan-split/SKILL.md) |
-| 2 | `declick` | [plan-declick](../plan-declick/SKILL.md) |
-| 3 | `normalize` | [plan-normalize](../plan-normalize/SKILL.md) |
-| 4 | `metadata` | [plan-metadata](../plan-metadata/SKILL.md) |
-| 5 | `export` | [plan-export](../plan-export/SKILL.md) |
+| Order | Section | Skill | Phase |
+|---|---|---|---|
+| 1 | `prefilter` | [plan-prefilter](../plan-prefilter/SKILL.md) | pre-split |
+| 2 | `split` | [plan-split](../plan-split/SKILL.md) | — |
+| 3 | `declick` | [plan-declick](../plan-declick/SKILL.md) | pre-split |
+| 4 | `normalize` | [plan-normalize](../plan-normalize/SKILL.md) | post-split |
+| 5 | `metadata` | [plan-metadata](../plan-metadata/SKILL.md) | post-split |
+| 6 | `export` | [plan-export](../plan-export/SKILL.md) | post-split |
+
+**Decide in that order; the executor runs in its own.** `prefilter` and `declick`
+act on the whole side before the cuts, but `split` is decided second because
+`plan-declick`'s checkpoint counts the detections that fall *inside* the exported
+cuts, which needs the boundaries. Deciding a stage and running it are different
+orders, and only the second one is
+[adr/0012](../../../docs/adr/0012-the-executor-has-a-pre-split-phase.md).
+
+**Route past a disabled stage in one line, not with a checkpoint.** `prefilter` is
+off by default and most records should leave it off; "prefilter: off, rumble is
+−48 dB and there is no DC offset" is the whole of it. Open its checkpoint only
+when a measurement argues for the stage. A checkpoint per stage regardless of
+whether the stage does anything is how a seven-stop flow becomes a flow nobody
+reads.
 
 **Everything after `split` is about the audio that survives the cuts, and
 `analysis.json` measures the whole recording.** The two are not the same file, and
@@ -382,13 +404,21 @@ decision people notice afterwards and cannot undo without re-running.
 ## Rules
 
 - Never modify audio yourself and never bypass the executor.
-- **All five sections are always present.** They are required fields, so omitting
-  one is a validation error, not a way to skip a stage. To skip one, set
-  `"enabled": false` on it — `split`, `declick`, `normalize` and `metadata` each
+- **The five original sections are always present; the newer ones are optional.**
+  `split`, `declick`, `normalize`, `metadata` and `export` are required fields, so
+  omitting one is a validation error rather than a way to skip a stage. To skip
+  one, set `"enabled": false` — `split`, `declick`, `normalize` and `metadata` each
   have that flag (re-tagging an existing rip = disable the first three). `export`
   does not: a run always writes files, and `"enabled"` inside `export` is a
   validation error because the contract forbids unknown fields. Use
   `write_tags: false` there instead.
+
+  `prefilter` is **optional and disabled by default**, and every stage added after
+  schema 3.2 will be. That is what keeps the bump minor and every archived plan
+  re-executable ([adr/0012](../../../docs/adr/0012-the-executor-has-a-pre-split-phase.md)).
+  Write the section out anyway once you have considered it, with the `rationale`
+  saying you decided against — an omitted section and a considered "no" are
+  indistinguishable in the file otherwise.
 - The plan must stand alone: someone with only the recording and the plan must be
   able to reproduce the album exactly.
 - One recording per plan. A two-sided album is two recordings, two analyses and

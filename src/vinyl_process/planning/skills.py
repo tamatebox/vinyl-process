@@ -40,6 +40,17 @@ SKILLS: tuple[SkillSpec, ...] = (
         summary="Orchestrates the stage skills, assembles and validates the plan.",
     ),
     SkillSpec(
+        name="plan-prefilter",
+        owns="prefilter",
+        reads=(
+            "analysis.json#spectral",
+            "analysis.json#recording_info",
+            "analysis.json#peaks",
+            "vinyl-process.toml#preferences",
+        ),
+        summary="Chooses DC blocking and the subsonic cutoff, ahead of the cuts.",
+    ),
+    SkillSpec(
         name="plan-split",
         owns="split",
         reads=("analysis.json#boundaries", "analysis.json#silence", "release tracklist"),

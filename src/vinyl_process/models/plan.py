@@ -54,6 +54,44 @@ class EngineSection(ToggleableSection):
 
 
 # --------------------------------------------------------------------------- #
+# prefilter
+# --------------------------------------------------------------------------- #
+class PrefilterPlan(EngineSection):
+    """DC blocking and the subsonic high-pass, applied to the whole side before
+    the cuts.
+
+    Two one-line filters share a section because they answer the same question —
+    how much of what the transfer captured below the music should reach the
+    listening copy — and neither justifies a stage of its own. Both are genuine
+    preservation-versus-listening choices rather than constants, which is why they
+    are here and not compiled in.
+
+    Disabled by default, and the whole section is optional: a plan written before
+    3.3 validates without it and executes to the same bytes.
+    """
+
+    enabled: bool = False
+    """``False``, unlike every other stage. Removing anything from a transfer is
+    a decision someone has to take, and the archival answer is often "nothing"."""
+
+    dc_block: bool = False
+    """Subtract each channel's mean. Exact, cheap, and unlike a filter it has no
+    transition band — ``recording_info.dc_offset`` is what it removes."""
+
+    highpass_hz: float | None = Field(default=None, gt=0.0)
+    """Subsonic cutoff in Hz. ``None`` leaves the low end untouched.
+
+    Practice is 20-30 Hz (Audacity's LP workflow, step 8); ``plan-prefilter``
+    owns the choice and cites it. Nothing here defaults it, because a cutoff is a
+    choice about the record in the room."""
+
+    highpass_rolloff_db_per_octave: Literal[6, 12, 18, 24, 30, 36] = 24
+    """Stated in the unit the practice is stated in. The engine converts it to a
+    Butterworth order (``order = rolloff / 6``), which is deterministic and
+    documented, so no decision leaks into Python."""
+
+
+# --------------------------------------------------------------------------- #
 # split
 # --------------------------------------------------------------------------- #
 class TrackBoundary(ContractModel):
@@ -224,6 +262,12 @@ class ProcessingPlan(VersionedDocument):
     source: SourceInfo
     analysis: DocumentRef | None = None
     """The analysis this plan was derived from, pinned by digest."""
+
+    prefilter: PrefilterPlan = Field(default_factory=PrefilterPlan)
+    """Optional, and disabled by default, so a pre-3.3 plan validates unchanged.
+    The other five sections are required — see
+    ``docs/adr/0012-the-executor-has-a-pre-split-phase.md`` for why the newer
+    stages deviate from that convention rather than joining it."""
 
     split: SplitPlan
     declick: DeclickPlan

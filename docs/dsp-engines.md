@@ -8,10 +8,14 @@ implement the operation.
 
 ## Capabilities
 
+In pipeline order. `prefilter` and `declick` run on the whole side, before the
+cuts; the rest run per track.
+
 | Capability | Meaning |
 |---|---|
-| `split` | Cut the source into tracks at sample-exact boundaries, applying the plan's fades |
+| `prefilter` | Remove DC and/or high-pass the subsonic band, on the whole side |
 | `declick` | Detect and repair impulsive damage with the plan's parameters |
+| `split` | Cut the source into tracks at sample-exact boundaries, applying the plan's fades |
 | `gain` | Apply a gain in dB |
 
 An engine implements only what it has. A partial engine is a first-class citizen:
@@ -19,7 +23,7 @@ An engine implements only what it has. A partial engine is a first-class citizen
 ```sh
 $ vinyl-process engines
 ffmpeg [available] declick, gain (ffmpeg version 9.0.1 …)
-native [available] declick, gain, split (native 0.1.0 (numpy 2.4.6))
+native [available] declick, gain, prefilter, split (native 0.1.0 (numpy 2.4.6))
 ```
 
 ## Built-in engines
@@ -30,6 +34,14 @@ Pure numpy/scipy, no external binaries, every capability.
 
 - `split` — `AudioBuffer.slice` plus raised-cosine fades. Bit-exact: an unfaded cut
   is byte-identical to the corresponding slice of the source.
+- `prefilter` — subtract each channel's mean when `dc_block` is set, then a
+  Butterworth high-pass at `highpass_hz`. The plan states the rolloff in
+  **dB/octave** because that is the unit the practice is stated in; the engine
+  converts it by `order = rolloff / 6`, a documented unit conversion rather than a
+  choice. The filter runs **forward only** (`sosfilt`), so a plan asking for 24
+  dB/octave gets 24 — a zero-phase pass would deliver 48. The cost is phase shift
+  and a settling transient, both below 30 Hz on a subsonic filter, and both landing
+  in the lead-in because the stage runs before `split`. Determinism is unaffected.
 - `declick`, algorithm `block_ratio` — high-pass the signal (default 3 kHz,
   override with `params.highpass_hz`), then flag every sample where the energy of a
   click-width window (`params.detect_ms`, 0.2 ms) exceeds the energy of its

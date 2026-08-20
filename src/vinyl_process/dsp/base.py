@@ -20,10 +20,10 @@ from typing import Literal
 
 from vinyl_process.audio import AudioBuffer
 from vinyl_process.errors import EngineUnavailableError, UnsupportedOperationError
-from vinyl_process.models.plan import DeclickPlan, TrackBoundary
+from vinyl_process.models.plan import DeclickPlan, PrefilterPlan, TrackBoundary
 
-Capability = Literal["split", "declick", "gain"]
-ALL_CAPABILITIES: frozenset[Capability] = frozenset({"split", "declick", "gain"})
+Capability = Literal["prefilter", "split", "declick", "gain"]
+ALL_CAPABILITIES: frozenset[Capability] = frozenset({"prefilter", "split", "declick", "gain"})
 
 
 class DspEngine(ABC):
@@ -42,6 +42,9 @@ class DspEngine(ABC):
     def is_available(self) -> bool:
         """False when an external dependency (e.g. an ffmpeg binary) is missing."""
         return True
+
+    def prefilter(self, audio: AudioBuffer, plan: PrefilterPlan) -> AudioBuffer:
+        raise UnsupportedOperationError(f"engine {self.name!r} does not support prefilter")
 
     def split(self, audio: AudioBuffer, tracks: list[TrackBoundary]) -> list[AudioBuffer]:
         raise UnsupportedOperationError(f"engine {self.name!r} does not support split")

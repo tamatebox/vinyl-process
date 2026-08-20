@@ -34,6 +34,17 @@ THIN_TRUE_PEAK_DB = -0.7
 """A lossy transcode wants 1 dB of true-peak headroom; below 0.3 dB of shortfall
 nobody would act on the difference, so that is where the finding starts."""
 
+SUBSONIC_BAND_HZ = (20.0, 30.0)
+"""The cited practice for a subsonic high-pass on an LP transfer (Audacity's LP
+workflow, step 8: 20-30 Hz at 24 dB/octave). ``plan-prefilter`` carries the
+citation; these bounds exist only so ``lint`` can say when a plan has left it."""
+
+SUBSONIC_MAX_HZ = 40.0
+"""Above this a subsonic filter is reaching into the programme: the lowest note of
+a five-string bass is about 31 Hz and a kick drum's fundamental sits near 50 Hz,
+so a cutoff here removes music rather than rumble. A warning, not an error — a
+plan may have a reason, and it has to say what it is."""
+
 
 @dataclass(frozen=True)
 class Finding:
@@ -59,6 +70,7 @@ def validate_plan(
     findings: list[Finding] = []
     findings += _check_version(plan)
     findings += _check_engines(plan)
+    findings += _check_prefilter(plan)
     findings += _check_tracks(plan)
     findings += _check_cuts(plan)
     findings += _check_naming(plan)
@@ -98,6 +110,7 @@ def _check_version(plan: ProcessingPlan) -> list[Finding]:
 def _check_engines(plan: ProcessingPlan) -> list[Finding]:
     findings: list[Finding] = []
     stages = (
+        ("prefilter", plan.prefilter.enabled, plan.prefilter.engine, "prefilter"),
         ("split", plan.split.enabled, plan.split.engine, "split"),
         ("declick", plan.declick.enabled, plan.declick.engine, "declick"),
         (
@@ -131,6 +144,50 @@ def _check_engines(plan: ProcessingPlan) -> list[Finding]:
                     "engine-unavailable",
                     f"engine {engine_name!r} is not available on this system",
                     f"{section}.engine",
+                )
+            )
+    return findings
+
+
+def _check_prefilter(plan: ProcessingPlan) -> list[Finding]:
+    """The two ways a prefilter section is not what its author meant."""
+    prefilter = plan.prefilter
+    if not prefilter.enabled:
+        return []
+    if not prefilter.dc_block and prefilter.highpass_hz is None:
+        return [
+            Finding(
+                "warning",
+                "prefilter-no-op",
+                "prefilter is enabled but neither dc_block nor highpass_hz is set, so it "
+                "will pass the audio through unchanged; disable the section instead",
+                "prefilter",
+            )
+        ]
+    findings: list[Finding] = []
+    cutoff = prefilter.highpass_hz
+    if cutoff is not None:
+        low, high = SUBSONIC_BAND_HZ
+        if cutoff > SUBSONIC_MAX_HZ:
+            findings.append(
+                Finding(
+                    "warning",
+                    "subsonic-cutoff-high",
+                    f"highpass_hz is {cutoff:g} Hz, above {SUBSONIC_MAX_HZ:g} Hz — that is "
+                    "musical bass, not rumble; the cited practice is "
+                    f"{low:g}-{high:g} Hz",
+                    "prefilter.highpass_hz",
+                )
+            )
+        elif not low <= cutoff <= high:
+            findings.append(
+                Finding(
+                    "info",
+                    "subsonic-cutoff-outside-band",
+                    f"highpass_hz is {cutoff:g} Hz; the cited practice is {low:g}-{high:g} Hz. "
+                    "Below it, dc_block removes a DC offset exactly and without a "
+                    "transition band",
+                    "prefilter.highpass_hz",
                 )
             )
     return findings

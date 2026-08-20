@@ -14,7 +14,11 @@ from pydantic import Field
 
 from vinyl_process.models.common import ContractModel, DocumentRef, SourceInfo, VersionedDocument
 
-StageName = Literal["split", "declick", "normalize", "resample", "export", "metadata"]
+StageName = Literal["prefilter", "declick", "split", "normalize", "resample", "export", "metadata"]
+"""In pipeline order. ``prefilter`` and ``declick`` run **before** ``split``:
+repair works on the whole side, the way restoration practice orders it, and a
+noise profile taken from the medium's own groove is still reachable at that point.
+See ``docs/adr/0012-the-executor-has-a-pre-split-phase.md``."""
 StageStatus = Literal["applied", "skipped"]
 
 

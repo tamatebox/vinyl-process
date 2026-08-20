@@ -355,3 +355,59 @@ def test_hard_cuts_without_fades_are_flagged_once(plan: ProcessingPlan) -> None:
     findings = [f for f in validate_plan(mutated(plan, drop_fades)) if f.code == "hard-cut"]
     assert len(findings) == 1
     assert "click" in findings[0].message
+
+
+# --------------------------------------------------------------------------- #
+# prefilter
+# --------------------------------------------------------------------------- #
+def prefiltered(plan: ProcessingPlan, **section: Any) -> ProcessingPlan:
+    def replace(payload: dict[str, Any]) -> None:
+        payload["prefilter"] = {"enabled": True, "engine": "native", **section}
+
+    return mutated(plan, replace)
+
+
+def test_an_absent_prefilter_section_is_valid_and_silent(plan: ProcessingPlan) -> None:
+    """A pre-3.3 plan has no prefilter key at all and must still lint clean."""
+    payload = plan.model_dump(mode="json")
+    payload.pop("prefilter")
+    revived = ProcessingPlan.model_validate(payload)
+    assert revived.prefilter.enabled is False
+    assert validate_plan(revived) == []
+
+
+def test_prefilter_enabled_with_nothing_switched_on_warns(plan: ProcessingPlan) -> None:
+    findings = validate_plan(prefiltered(plan, dc_block=False, highpass_hz=None))
+    assert "prefilter-no-op" in codes(findings)
+
+
+def test_a_cutoff_in_the_cited_band_reports_nothing(plan: ProcessingPlan) -> None:
+    for cutoff in (20.0, 25.0, 30.0):
+        assert codes(validate_plan(prefiltered(plan, highpass_hz=cutoff))) == set()
+
+
+def test_a_cutoff_into_the_musical_bass_warns(plan: ProcessingPlan) -> None:
+    findings = validate_plan(prefiltered(plan, highpass_hz=80.0))
+    assert "subsonic-cutoff-high" in codes(findings)
+    assert not [f for f in findings if f.severity == "error"]
+
+
+def test_a_cutoff_below_the_cited_band_is_only_an_observation(plan: ProcessingPlan) -> None:
+    findings = validate_plan(prefiltered(plan, highpass_hz=5.0))
+    assert "subsonic-cutoff-outside-band" in codes(findings)
+    assert [f.severity for f in findings] == ["info"]
+
+
+def test_prefilter_engine_capability_is_checked(plan: ProcessingPlan) -> None:
+    broken = prefiltered(plan, highpass_hz=25.0)
+    broken = broken.model_copy(
+        update={"prefilter": broken.prefilter.model_copy(update={"engine": "ffmpeg"})}
+    )
+    assert "engine-capability" in codes(validate_plan(broken))
+
+
+def test_a_disabled_prefilter_is_not_checked_for_engines(plan: ProcessingPlan) -> None:
+    def disable(payload: dict[str, Any]) -> None:
+        payload["prefilter"] = {"enabled": False, "engine": "nope", "highpass_hz": 900.0}
+
+    assert codes(validate_plan(mutated(plan, disable))) == set()

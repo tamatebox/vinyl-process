@@ -1,5 +1,5 @@
 {
-  "schema_version": "3.2",
+  "schema_version": "3.3",
   "document_type": "manifest",
   "generated_by": "vinyl-process 0.1.0",
   "run_key": "0000000000000000000000000000000000000000000000000000000000000000",
@@ -17,12 +17,12 @@
   },
   "stages": [
     {
-      "stage": "split",
-      "status": "applied",
-      "engine": "native",
-      "engine_version": "…",
-      "params_digest": "9a8fd512149553264f5d38ca3a81470d350d376c976a1c57905807e448455f3f",
-      "detail": ""
+      "stage": "prefilter",
+      "status": "skipped",
+      "engine": null,
+      "engine_version": null,
+      "params_digest": null,
+      "detail": "prefilter disabled"
     },
     {
       "stage": "declick",
@@ -30,7 +30,15 @@
       "engine": "native",
       "engine_version": "…",
       "params_digest": "8f33f18675839ba6af410d767db4d88111e71b9d643e14cb4294a8b959ad071d",
-      "detail": "algorithm=block_ratio"
+      "detail": "algorithm=block_ratio (whole side, pre-split)"
+    },
+    {
+      "stage": "split",
+      "status": "applied",
+      "engine": "native",
+      "engine_version": "…",
+      "params_digest": "9a8fd512149553264f5d38ca3a81470d350d376c976a1c57905807e448455f3f",
+      "detail": ""
     },
     {
       "stage": "normalize",

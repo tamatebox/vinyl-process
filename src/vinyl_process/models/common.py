@@ -12,7 +12,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from vinyl_process.errors import ContractError
 
-SCHEMA_VERSION = "3.2"
+SCHEMA_VERSION = "3.3"
 """``MAJOR.MINOR``. Additive changes bump MINOR; breaking changes bump MAJOR.
 
 3.0 because ``silence.regions[].music_start_sample`` is required: a 2.x
@@ -21,7 +21,15 @@ read a document missing the field the Split skill now cuts from.
 
 3.1 adds ``metadata.disc_number``, ``metadata.total_discs`` and
 ``metadata.comment``. All three are optional with ``None`` defaults, so a 3.0
-plan still validates and still executes to the same bytes."""
+plan still validates and still executes to the same bytes.
+
+3.3 adds ``processing_plan.prefilter`` and the manifest's ``prefilter`` stage
+name. The section is optional with a disabled default, so a 3.1 or 3.2 plan
+validates unchanged and executes to the same bytes — which is why this is a
+*minor* bump even though the executor gained a phase. Making the section required
+would have forced a major, and a major makes every archived plan
+non-re-executable; re-execution is the promise this project is built on, so it
+wins. See ``docs/adr/0012-the-executor-has-a-pre-split-phase.md``."""
 
 Confidence = Annotated[float, Field(ge=0.0, le=1.0)]
 """How much a measurement can be trusted. 0 = worthless, 1 = certain."""

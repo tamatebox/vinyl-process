@@ -213,7 +213,7 @@ def test_engines_listing(cli: CliRunner) -> None:
     assert "native" in invoke(cli, "engines").output
     payload = json.loads(invoke(cli, "engines", "--json").output)
     native = next(item for item in payload if item["name"] == "native")
-    assert set(native["capabilities"]) == {"split", "declick", "gain"}
+    assert set(native["capabilities"]) == {"prefilter", "split", "declick", "gain"}
     assert native["available"] is True
 
 

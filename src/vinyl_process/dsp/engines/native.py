@@ -13,14 +13,16 @@ from vinyl_process import __version__
 from vinyl_process.audio import AudioBuffer
 from vinyl_process.dsp.base import Capability, DspEngine
 from vinyl_process.errors import ExecutionError
-from vinyl_process.models.plan import DeclickPlan, TrackBoundary
+from vinyl_process.models.plan import DeclickPlan, PrefilterPlan, TrackBoundary
 from vinyl_process.signal_ops import (
     apply_fades,
     click_events_block,
     confirm_clicks_sinusoidal,
+    remove_dc,
     repair_clicks,
     repair_clicks_ar,
     repair_clicks_linear,
+    subsonic_highpass,
 )
 
 ALGORITHMS = frozenset({"block_ratio"})
@@ -63,10 +65,37 @@ class NativeEngine(DspEngine):
     name = "native"
 
     def capabilities(self) -> frozenset[Capability]:
-        return frozenset({"split", "declick", "gain"})
+        return frozenset({"prefilter", "split", "declick", "gain"})
 
     def version(self) -> str:
         return f"native {__version__} (numpy {np.__version__})"
+
+    def prefilter(self, audio: AudioBuffer, plan: PrefilterPlan) -> AudioBuffer:
+        """DC removal then the subsonic high-pass, in that order.
+
+        The order is not arbitrary: a DC offset is a step at the filter's input,
+        and an IIR high-pass answers a step with a settling transient. Removing
+        the mean first leaves the filter nothing to settle from.
+
+        ``highpass_rolloff_db_per_octave`` becomes a Butterworth order by the
+        documented identity ``order = rolloff / 6`` — a unit conversion, which an
+        engine may perform, not a choice. The filter runs forward only so the
+        delivered rolloff is the one the plan asked for; see
+        ``signal_ops.subsonic_highpass``.
+        """
+        samples = audio.samples
+        if plan.dc_block:
+            samples = remove_dc(samples)
+        if plan.highpass_hz is not None:
+            samples = subsonic_highpass(
+                samples,
+                audio.sample_rate,
+                plan.highpass_hz,
+                plan.highpass_rolloff_db_per_octave // 6,
+            )
+        if samples is audio.samples:
+            return audio
+        return audio.with_samples(samples)
 
     def split(self, audio: AudioBuffer, tracks: list[TrackBoundary]) -> list[AudioBuffer]:
         """Sample-exact cuts with the fades the plan asked for."""

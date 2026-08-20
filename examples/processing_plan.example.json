@@ -1,5 +1,5 @@
 {
-  "schema_version": "3.2",
+  "schema_version": "3.3",
   "document_type": "processing_plan",
   "created_by": "plan-album",
   "source": {
@@ -13,6 +13,14 @@
   "analysis": {
     "path": "analysis.json",
     "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+  },
+  "prefilter": {
+    "decision": null,
+    "enabled": false,
+    "engine": "native",
+    "dc_block": false,
+    "highpass_hz": null,
+    "highpass_rolloff_db_per_octave": 24
   },
   "split": {
     "decision": {

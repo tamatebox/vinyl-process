@@ -88,7 +88,18 @@ def test_manifest_records_every_stage_and_the_environment(
     manifest = run(plan, recording, tmp_path / "album")
 
     stages = {record.stage: record for record in manifest.stages}
-    assert set(stages) == {"split", "declick", "normalize", "resample", "export", "metadata"}
+    assert set(stages) == {
+        "prefilter",
+        "split",
+        "declick",
+        "normalize",
+        "resample",
+        "export",
+        "metadata",
+    }
+    # The receipt lists the stages in the order they ran, pre-split phase first.
+    assert [record.stage for record in manifest.stages][:3] == ["prefilter", "declick", "split"]
+    assert stages["prefilter"].status == "skipped"
     assert stages["split"].status == "applied"
     assert stages["split"].engine == "native"
     assert stages["split"].engine_version
@@ -397,3 +408,113 @@ def test_the_analysis_document_is_never_needed_to_execute(
     assert "analyzer" not in source
     assert "AnalysisDocument" not in source
     run(plan, recording, tmp_path / "album")  # and it still works
+
+
+# --------------------------------------------------------------------------- #
+# the pre-split phase
+# --------------------------------------------------------------------------- #
+def test_prefilter_runs_before_the_cuts_and_recovers_headroom(
+    recording: SyntheticRecording, analysis: AnalysisDocument, tmp_path: Path
+) -> None:
+    """A warped transfer: the rumble eats the headroom a peak mode would use.
+
+    The filter is the whole difference between the two runs, so the gain the
+    second one finds is the headroom the stage bought.
+    """
+    warped = tmp_path / "warped.flac"
+    samples, rate = sf.read(str(recording.path), dtype="float64", always_2d=True)
+    t = np.arange(samples.shape[0]) / rate
+    rumble = 0.25 * np.sin(2 * np.pi * 4.0 * t)[:, None]
+    sf.write(str(warped), samples + rumble, rate, subtype="PCM_24")
+
+    warped_analysis = run_analysis(warped)
+    plain = build_plan(recording, warped_analysis)
+    plain = plain.model_copy(update={"source": warped_analysis.source})
+
+    def with_prefilter(payload: dict[str, Any]) -> ProcessingPlan:
+        payload["prefilter"] = {
+            "enabled": True,
+            "engine": "native",
+            "dc_block": True,
+            "highpass_hz": 30.0,
+            "highpass_rolloff_db_per_octave": 24,
+        }
+        return ProcessingPlan.model_validate(payload)
+
+    filtered = with_prefilter(plain.model_dump(mode="json"))
+
+    before = execute_plan(plain, tmp_path / "plain", source_path=warped, plan_digest="a" * 64)
+    after = execute_plan(filtered, tmp_path / "filtered", source_path=warped, plan_digest="b" * 64)
+
+    stages = {record.stage: record for record in after.stages}
+    assert stages["prefilter"].status == "applied"
+    assert stages["prefilter"].engine == "native"
+    assert "highpass=30 Hz @ 24 dB/oct" in stages["prefilter"].detail
+    assert "dc_block" in stages["prefilter"].detail
+    assert stages["prefilter"].params_digest
+
+    # The receipt proves the position, not just the presence.
+    order = [record.stage for record in after.stages]
+    assert order.index("prefilter") < order.index("declick") < order.index("split")
+
+    # The rumble was inflating the peak, so the filtered run finds more gain.
+    assert after.applied_gain_db is not None
+    assert before.applied_gain_db is not None
+    assert after.applied_gain_db > before.applied_gain_db + 1.0
+    # ...and both still hit the target, because album_peak is a peak mode.
+    assert after.applied_true_peak_db is not None
+    assert after.applied_true_peak_db < 0.0
+
+    # Re-measure the exported audio: the filter has to show up in the same
+    # quantity that argued for it, or the stage claimed something it did not do.
+    def rumble_db(manifest: ExecutionManifest) -> float:
+        section = run_analysis(Path(manifest.outputs[0].path), analyzers=["spectral"]).spectral
+        assert section is not None
+        return section.rumble_db
+
+    assert rumble_db(after) < rumble_db(before) - 6.0
+
+
+def test_prefilter_enabled_but_asking_for_nothing_says_so(
+    plan: ProcessingPlan, recording: SyntheticRecording, tmp_path: Path
+) -> None:
+    payload = plan.model_dump(mode="json")
+    payload["prefilter"] = {"enabled": True, "engine": "native"}
+    noop = ProcessingPlan.model_validate(payload)
+
+    manifest = run(noop, recording, tmp_path / "album")
+    stages = {record.stage: record for record in manifest.stages}
+    assert stages["prefilter"].status == "skipped"
+    assert any("asks for nothing" in warning for warning in manifest.warnings)
+
+
+def test_a_prefiltered_run_reproduces_bit_for_bit(
+    plan: ProcessingPlan, recording: SyntheticRecording, tmp_path: Path
+) -> None:
+    payload = plan.model_dump(mode="json")
+    payload["prefilter"] = {"enabled": True, "engine": "native", "highpass_hz": 25.0}
+    filtered = ProcessingPlan.model_validate(payload)
+
+    first = run(filtered, recording, tmp_path / "one")
+    second = run(filtered, recording, tmp_path / "two")
+    assert first.output_digests() == second.output_digests()
+
+
+def test_declick_now_sees_the_whole_side_rather_than_faded_tracks(
+    plan: ProcessingPlan, recording: SyntheticRecording, tmp_path: Path
+) -> None:
+    """Repair happens pre-split, so a track's fades are applied *after* it.
+
+    The observable consequence: with declick on, the first and last samples of an
+    exported track are still exactly the fade's own ramp — zero at the very edge —
+    rather than something repair touched afterwards.
+    """
+    manifest = run(plan, recording, tmp_path / "album")
+    stages = {record.stage: record for record in manifest.stages}
+    assert stages["declick"].status == "applied"
+    assert "pre-split" in stages["declick"].detail
+
+    first_output = Path(manifest.outputs[0].path)
+    samples, _rate = sf.read(str(first_output), dtype="float64", always_2d=True)
+    assert np.allclose(samples[0], 0.0, atol=1e-6)
+    assert np.allclose(samples[-1], 0.0, atol=1e-6)

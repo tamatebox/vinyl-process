@@ -27,7 +27,8 @@ Recording is out of scope.
                            │  processing_plan.json
 ┌──────────────────────────▼──────────────────────────────────┐
 │ DSP Executor (Python, src/vinyl_process/dsp + executor.py)   │
-│   executes — split, declick, gain, resample, export, tag     │
+│   executes — prefilter, declick, split, gain, resample,      │
+│              export, tag                                     │
 │   deterministic: same audio + same plan → same bytes         │
 │   output: audio files + manifest.json                        │
 └─────────────────────────────────────────────────────────────┘
@@ -100,7 +101,8 @@ vinyl_process
 ├── models/         the data contracts (pydantic v2), single source of truth
 │   ├── common.py      SourceInfo, DocumentRef, SectionMeta, SCHEMA_VERSION
 │   ├── analysis.py    AnalysisDocument and one section model per analyzer
-│   ├── plan.py        ProcessingPlan and its five sections
+│   ├── plan.py        ProcessingPlan: five required sections + prefilter,
+│   │                  which is optional and disabled (adr/0012)
 │   └── manifest.py    ExecutionManifest — what the executor actually did
 ├── config.py       [analyzer.*] measurement parameters, [preferences] for skills
 ├── analyzer/       base.py + registry.py + runner.py, one module per measurement
@@ -152,8 +154,16 @@ rounding, its `adeclick` is its own algorithm. See [dsp-engines.md](dsp-engines.
 
 ```
 validate the plan (engines, ranges, filenames, source digest) — refuse on error
-load source ─▶ split      (sample-exact cuts + the fades the plan asked for)
-            ─▶ declick    (per track, engine and parameters from the plan)
+load source
+  pre-split phase — the whole side, one buffer
+            ─▶ prefilter (DC blocking and/or the subsonic high-pass; disabled by
+                           default, because removing something the transfer
+                           captured is a decision)
+            ─▶ declick    (engine and parameters from the plan; the whole side, so
+                           the detector's context window is never truncated at a
+                           track edge and never sees a fade)
+  post-split phase — one buffer per track
+            ─▶ split      (sample-exact cuts + the fades the plan asked for)
             ─▶ normalize  (strategy, target and ceiling from the plan; gain
                            measured post-declick, because repair changes peaks,
                            then capped against the true peak)
@@ -164,9 +174,17 @@ load source ─▶ split      (sample-exact cuts + the fades the plan asked for)
             ─▶ manifest.json
 ```
 
+The two phases are [adr/0012](adr/0012-the-executor-has-a-pre-split-phase.md).
+Practice orders it this way — DC offset, subsonic filter, clicks, and only then
+track labels — and it is also the only ordering in which a noise profile taken
+from the medium's own unmodulated groove is reachable at all, since `split`
+discards the lead-in, the run-out and every gap middle by rule. A stage's
+*position* is therefore part of what a plan means, and moving one is a contract
+event rather than a refactor.
+
 Nothing is written until validation passes. Any stage can be disabled in the plan
 (`"enabled": false`), so a workflow can run only what it needs — re-tagging an
-existing rip disables split, declick and normalize.
+existing rip disables prefilter, split, declick and normalize.
 
 Ordering note: the pipeline in the project brief lists *metadata* before
 *export*. That is exactly what happens conceptually — the metadata **decision** is
@@ -271,7 +289,7 @@ end to end for determinism.
 | a measurement | `analyzer/<name>.py` with `@analyzer(...)` + a section model named after it. The runner resolves dependencies and stamps provenance |
 | a DSP engine | `dsp/engines/<name>.py` implementing only the capabilities it has, plus a `register_engine` call — or ship it separately and declare a `vinyl_process.dsp_engines` entry point |
 | a decision heuristic | the relevant `.claude/skills/plan-*` skill only |
-| a pipeline stage | a plan section model, an executor step, and a `plan-<stage>` skill that owns it |
+| a pipeline stage | a plan section model, an executor step, a `Capability`, and a `plan-<stage>` skill that owns it. A stage added after 3.2 is **optional with a disabled default**, so the bump stays minor and archived plans stay re-executable ([adr/0012](adr/0012-the-executor-has-a-pre-split-phase.md)). Decide whether it belongs in the pre-split phase (it needs the whole side, or a reference to the medium's own groove) or after the cuts |
 
 ## Known limitations
 
@@ -316,28 +334,30 @@ end to end for determinism.
   a level in dBFS from loudness in LUFS. `album_lufs` would be that filter plus
   conformance tests against the EBU Tech 3341 vectors, and is deliberately absent
   until both exist.
-- **No subsonic filter and no DC blocking.** Warp rumble at 0.5–8 Hz and a DC
-  offset both inflate the peak a peak mode normalizes against, so an affected
-  transfer comes out quieter than the music warrants for reasons nobody can hear.
-  `spectral.rumble_db` and `recording_info.dc_offset` measure it and
-  `plan-normalize` is told to name it in the rationale; nothing removes it. A
-  filter would be a new stage, and on the preservation-versus-listening line it
-  belongs upstream in `vinyl-archive` at least as much as here.
-- **De-noise cannot be a post-split stage.** This is a property of the pipeline's
-  shape, not of any pressing. A noise profile has to come from the medium's own
-  unmodulated groove — the lead-in, the run-out, or an inter-track gap — because a
-  profile taken from a quiet *musical* passage models the music too. `plan-split`
-  discards all three by rule, on every record: the lead-in and run-out to keep the
-  stylus drop out of `album_peak`, and the dead middle of every gap because it
-  belongs to neither track. So no stage after `split` can ever see one, and the
-  same applies to anything else that needs a reference to the medium's noise. The
-  measurement side is already there — `silence.regions` carries `mean_rms_db` per
-  gap, and `surface_noise` and `spectral.bands` cover the whole file — but the
-  executor may not read `analysis.json`, so the profile's *region* would have to
-  arrive as sample indices in the plan and be extracted before the cuts. Adding
-  de-noise therefore means giving the executor a pre-split phase, which is also
-  the order practice uses: Audacity's LP workflow reduces hiss at step 10 and
-  places the track labels at step 11.
+- **A subsonic filter improves the listening copy; it does not settle where it
+  belongs.** `prefilter` now removes DC and high-passes the subsonic band, so warp
+  rumble and a DC offset no longer have to inflate the peak a peak mode normalizes
+  against. What has not changed is the argument that this belongs upstream in
+  `vinyl-archive` at least as much as here: the capture keeps what the plan
+  removes, and the stage is reversible per plan
+  ([adr/0012](adr/0012-the-executor-has-a-pre-split-phase.md)). It is disabled by
+  default for that reason, and `plan-normalize` still names rumble in the
+  rationale where it costs gain, because the honest answer on a given record may
+  be to leave it in.
+- **De-noise is not built, but it is no longer blocked.** A noise profile has to
+  come from the medium's own unmodulated groove — the lead-in, the run-out, or an
+  inter-track gap — because a profile taken from a quiet *musical* passage models
+  the music too. `plan-split` discards all three by rule, on every record, so no
+  stage *after* `split` can ever see one; that was the shape of the pipeline, not a
+  property of any pressing. The executor now has a pre-split phase, which is where
+  such a stage would sit and is the order practice uses (Audacity's LP workflow
+  reduces hiss at step 10 and places the track labels at step 11). What remains to
+  build: a `denoise` plan section carrying the profile's *region* as source sample
+  indices — the executor may not read `analysis.json`, so a skill has to choose the
+  region from `silence.regions` and write it into the plan — plus the engine
+  capability and the calibration. The measurement side is already there:
+  `silence.regions` carries `mean_rms_db` per gap, and `surface_noise` and
+  `spectral.bands` cover the whole file.
 - **`declick` is not `decrackle`, and only the first exists.** `block_ratio`
   makes a *collective* decision — it asks whether a short segment is an outlier
   against its neighbourhood — and that is the right question for a discrete
@@ -351,17 +371,22 @@ end to end for determinism.
   its click detector "is not particularly attuned" to crackle. Lowering
   `declick.threshold` is the wrong lever, and reaching for it is how a day gets
   spent. There is no de-crackle stage here.
-- **The fades run before `declick`.** `native.split()` applies the fades the plan
-  asked for, and the executor's order is `split → declick`, so repair sees ramped
-  material. The energy ratio is invariant to a constant scale but not to a ramp
-  across its 40 ms context window: a fade-in makes the context after the window
-  louder than the context before it, which lowers the ratio and biases the
-  detector *towards missing* clicks. It acts on the head and tail margins, which
-  are bare surface and therefore where a record's clicks are densest — a 250 ms
-  linear fade changes amplitude by about 16 % over 40 ms, so roughly 35 % in
-  energy. Practice repairs before shaping anything. The plan cannot currently
-  express "cut without fades, repair, then fade", because the fades are
-  attributes of `split.tracks[]` rather than a stage of their own.
+- **The fades no longer run before `declick`** — this entry is kept because the
+  reasoning is why the order changed. `native.split()` applies the fades, and the
+  executor's order used to be `split → declick`, so repair saw ramped material. The
+  energy ratio is invariant to a constant scale but not to a ramp across its 40 ms
+  context window: a fade-in makes the context after the window louder than the
+  context before it, which lowers the ratio and biases the detector *towards
+  missing* clicks — in the head and tail margins, which are bare surface and
+  therefore where a record's clicks are densest. A 250 ms linear fade changes
+  amplitude by about 16 % over 40 ms, so roughly 35 % in energy. `declick` now runs
+  pre-split on the whole side, so it sees neither the fades nor a truncated context
+  window ([adr/0012](adr/0012-the-executor-has-a-pre-split-phase.md)). The
+  remaining wrinkle is cosmetic: the plan still cannot express "cut without fades,
+  repair, then fade" as a sequence, because the fades are attributes of
+  `split.tracks[]` rather than a stage of their own — it no longer matters, since
+  nothing runs between the cut and the fade.
 - **No de-noise, de-hum, de-crackle, de-clip, azimuth or speed correction
-  stages.** `clipping` measures a clipped transfer but nothing repairs one;
-  `plan-album`'s first checkpoint asks for a re-record instead.
+  stages.** `prefilter` is the only pre-split stage that exists. `clipping`
+  measures a clipped transfer but nothing repairs one; `plan-album`'s first
+  checkpoint asks for a re-record instead.

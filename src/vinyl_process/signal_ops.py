@@ -15,7 +15,7 @@ from collections.abc import Sequence
 import numpy as np
 import numpy.typing as npt
 from scipy.linalg import solve_toeplitz
-from scipy.signal import butter, resample_poly, sosfiltfilt
+from scipy.signal import butter, resample_poly, sosfilt, sosfiltfilt
 
 EPS = 1e-12
 """Floor for log/division so silence yields -240 dB instead of -inf."""
@@ -179,6 +179,47 @@ def highpass(mono: np.ndarray, sample_rate: int, cutoff_hz: float, order: int = 
         return np.asarray(mono, dtype=np.float64)
     sos = butter(order, cutoff_hz / nyquist, btype="highpass", output="sos")
     return np.asarray(sosfiltfilt(sos, mono), dtype=np.float64)
+
+
+def remove_dc(samples: npt.NDArray[np.float64]) -> npt.NDArray[np.float64]:
+    """Subtract each channel's own mean from ``(frames, channels)`` audio.
+
+    Exact rather than approximate, and with no transition band: a DC offset is a
+    constant, so removing it costs nothing at any audible frequency. This is the
+    quantity ``recording_info.dc_offset`` reports.
+    """
+    if samples.size == 0:
+        return np.asarray(samples, dtype=np.float64)
+    values = np.asarray(samples, dtype=np.float64)
+    return np.ascontiguousarray(values - values.mean(axis=0, keepdims=True))
+
+
+def subsonic_highpass(
+    samples: npt.NDArray[np.float64], sample_rate: int, cutoff_hz: float, order: int
+) -> npt.NDArray[np.float64]:
+    """Butterworth high-pass across every channel, applied **forward only**.
+
+    Forward-only, not zero-phase, and that is the whole point: a Butterworth of
+    order *n* rolls off at 6·*n* dB/octave in one pass, and the reference practice
+    this implements is stated in dB/octave (24, i.e. order 4). Running it through
+    ``sosfiltfilt`` would double the effective rolloff, so a plan asking for 24
+    would silently get 48 — exactly the kind of mismatch between a stated number
+    and a delivered one that this project treats as a defect.
+
+    The cost is phase shift near the cutoff and a settling transient at the head
+    of the buffer. Both live below 30 Hz on a subsonic filter, which is where
+    nothing is audible; ``sosfilt`` is deterministic, so the output still
+    reproduces bit for bit.
+
+    Returns the input unchanged when the cutoff is not usefully below Nyquist, or
+    when the buffer is too short for the filter to mean anything.
+    """
+    values = np.asarray(samples, dtype=np.float64)
+    nyquist = sample_rate / 2.0
+    if cutoff_hz <= 0 or cutoff_hz >= nyquist * 0.98 or values.shape[0] < 3 * order:
+        return values
+    sos = butter(order, cutoff_hz / nyquist, btype="highpass", output="sos")
+    return np.ascontiguousarray(sosfilt(sos, values, axis=0), dtype=np.float64)
 
 
 def merge_runs(runs: list[tuple[int, int]], gap: int) -> list[tuple[int, int]]:

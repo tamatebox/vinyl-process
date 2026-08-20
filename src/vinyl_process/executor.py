@@ -1,6 +1,14 @@
 """Plan executor: runs a ``ProcessingPlan`` end to end, deterministically.
 
-``split -> declick -> normalize -> resample -> export -> tag -> manifest``.
+Two phases. **Before the cuts**, on the whole side:
+``prefilter -> declick``. **After them**, per track:
+``split -> normalize -> resample -> export -> tag -> manifest``.
+
+The pre-split phase exists because restoration practice repairs discrete defects
+on the whole side and splits afterwards, and because anything that needs a
+reference to the medium's own unmodulated groove — the lead-in, the run-out, an
+inter-track gap — can only see one before the split discards all three. See
+``docs/adr/0012-the-executor-has-a-pre-split-phase.md``.
 
 Every subjective value comes from the plan. This module performs only the
 arithmetic the plan implies, and it deliberately never reads ``analysis.json``:
@@ -127,9 +135,12 @@ class _Execution:
             self.warnings.append("source digest verification was disabled for this run")
 
         audio = load_audio(self.source_path)
+        # Pre-split phase: the whole side, one buffer.
+        audio = self._prefilter(audio)
+        audio = self._declick(audio)
+        # Post-split phase: one buffer per track.
         tracks = self._tracks(audio)
         buffers = self._split(audio, tracks)
-        buffers = self._declick(buffers)
         buffers = self._normalize(buffers)
         buffers = self._resample(buffers)
         outputs = self._export(tracks, buffers)
@@ -168,6 +179,38 @@ class _Execution:
             return list(self.plan.split.tracks)
         return [TrackBoundary(index=1, start_sample=0, end_sample=audio.num_frames)]
 
+    def _prefilter(self, audio: AudioBuffer) -> AudioBuffer:
+        prefilter = self.plan.prefilter
+        if not prefilter.enabled:
+            self._record("prefilter", "skipped", detail="prefilter disabled")
+            return audio
+        if not prefilter.dc_block and prefilter.highpass_hz is None:
+            # Enabled with nothing switched on is a plan that says it will act and
+            # then does not. Say so in the receipt rather than reporting "applied".
+            self._record(
+                "prefilter",
+                "skipped",
+                detail="prefilter enabled but neither dc_block nor highpass_hz is set",
+            )
+            self.warnings.append(
+                "prefilter is enabled but asks for nothing: dc_block is false and "
+                "highpass_hz is null, so the audio passed through untouched"
+            )
+            return audio
+        engine = self._engine(prefilter.engine, "prefilter")
+        parts = []
+        if prefilter.dc_block:
+            parts.append("dc_block")
+        if prefilter.highpass_hz is not None:
+            parts.append(
+                f"highpass={prefilter.highpass_hz:g} Hz @ "
+                f"{prefilter.highpass_rolloff_db_per_octave} dB/oct"
+            )
+        self._record(
+            "prefilter", "applied", engine=engine, section=prefilter, detail=" ".join(parts)
+        )
+        return engine.prefilter(audio, prefilter)
+
     def _split(self, audio: AudioBuffer, tracks: list[TrackBoundary]) -> list[AudioBuffer]:
         if not self.plan.split.enabled:
             self._record("split", "skipped", detail="split disabled; the source is one track")
@@ -176,19 +219,29 @@ class _Execution:
         self._record("split", "applied", engine=engine, section=self.plan.split)
         return engine.split(audio, tracks)
 
-    def _declick(self, buffers: list[AudioBuffer]) -> list[AudioBuffer]:
+    def _declick(self, audio: AudioBuffer) -> AudioBuffer:
+        """Repair the whole side, before the cuts.
+
+        Two properties follow from the position, and both are the reason for it.
+        The detector's 40 ms context window is never truncated at a track edge,
+        and it never sees the fades — ``split`` applies those, so under the old
+        ordering repair worked on ramped material, which biases an energy ratio
+        *towards missing* clicks exactly in the bare-surface margins where a
+        record's clicks are densest. It also repairs lead-in, run-out and gap
+        material that the cuts then discard: wasted arithmetic, not wrong output.
+        """
         if not self.plan.declick.enabled:
             self._record("declick", "skipped", detail="declick disabled")
-            return buffers
+            return audio
         engine = self._engine(self.plan.declick.engine, "declick")
         self._record(
             "declick",
             "applied",
             engine=engine,
             section=self.plan.declick,
-            detail=f"algorithm={self.plan.declick.algorithm}",
+            detail=f"algorithm={self.plan.declick.algorithm} (whole side, pre-split)",
         )
-        return [engine.declick(buffer, self.plan.declick) for buffer in buffers]
+        return engine.declick(audio, self.plan.declick)
 
     def _normalize(self, buffers: list[AudioBuffer]) -> list[AudioBuffer]:
         normalize = self.plan.normalize

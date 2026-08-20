@@ -33,7 +33,7 @@ happened.
 
 ```jsonc
 {
-  "schema_version": "3.2",
+  "schema_version": "3.3",
   "document_type": "analysis",
   "generated_by": "vinyl-process 0.1.0",
   "source": { "path": "side-a.wav", "sha256": "…", "sample_rate": 44100,
@@ -233,11 +233,27 @@ block: which skill decided, why, how confident it was, and what it consulted.
 
 ```jsonc
 {
-  "schema_version": "3.2",
+  "schema_version": "3.3",
   "document_type": "processing_plan",
   "created_by": "plan-album",
   "source": { …same shape as analysis.source; sha256 is verified before running… },
   "analysis": { "path": "analysis.json", "sha256": "…" },
+
+  // Optional, and disabled by default: a plan written before schema 3.3 has no
+  // prefilter key at all and executes to the same bytes. Runs on the whole side,
+  // before the cuts — see adr/0012.
+  "prefilter": {
+    "enabled": false,
+    "engine": "native",
+    "dc_block": false,                // subtract each channel's mean
+    "highpass_hz": null,              // subsonic cutoff; null = no filter
+    "highpass_rolloff_db_per_octave": 24
+    // Stated in dB/octave because the practice is (Audacity's LP workflow, step
+    // 8: 20-30 Hz at 24 dB/octave). The engine converts it to a Butterworth
+    // order by `order = rolloff / 6` — a documented unit conversion, not a
+    // choice — and applies it forward only, so the rolloff delivered is the one
+    // asked for. 6 | 12 | 18 | 24 | 30 | 36.
+  },
 
   "split": {
     "enabled": true,
@@ -325,13 +341,15 @@ Written next to the exported album. This is the receipt.
 
 ```jsonc
 {
-  "schema_version": "3.2",
+  "schema_version": "3.3",
   "document_type": "manifest",
   "generated_by": "vinyl-process 0.1.0",
   "run_key": "…",                    // digest over (source digest, plan digest)
   "source": { …SourceInfo of the audio actually read… },
   "plan": { "path": "processing_plan.json", "sha256": "…" },
-  "stages": [
+  "stages": [                        // in the order they ran: the pre-split phase
+                                     // (prefilter, declick) comes first
+    { "stage": "prefilter", "status": "skipped", "detail": "prefilter disabled" },
     { "stage": "split", "status": "applied", "engine": "native",
       "engine_version": "native 0.1.0 (numpy 2.4.6)",
       "params_digest": "…",          // digest of the plan section that ran
