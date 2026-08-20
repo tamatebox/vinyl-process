@@ -9,6 +9,66 @@ Choose the final track boundaries. Treat this as an optimisation problem — pic
 the boundary set that best explains *all* the evidence — not as "cut at every
 silence".
 
+## Outside references
+
+Where a number below is a matter of LP-transfer practice rather than of this
+codebase, it is cited. Anything here without a citation is an in-house judgement
+and should be treated as uncalibrated until someone finds a source for it.
+
+**Where the boundary goes.** Audacity's
+[Sample workflow for LP digitization](https://manual.audacityteam.org/man/sample_workflow_for_lp_digitization.html)
+is the closest thing to a documented procedure. Step 14: "If you are using a
+2-second gap, adjust the label position as desired to be **0.5 seconds before the
+start of the next track**." Step 12 bounds the gap: "Edit the inter-track gap as
+desired to around a **maximum of 2 seconds**; you may wish to use a shorter gap
+or even **no gap at all** for some recordings."
+
+**That reference practice assumes the margin is silent, and ours is not.** The
+same step 12 opens: the gaps "are rarely truly silent so you may want to
+**replace them with silence**", and
+[VinylStudio](https://www.alpinesoft.co.uk/VinylStudio/helpfile/configure.htm)
+has an explicit "**Add Silence**: use these fields to add silence at the start
+and / or end of saved tracks", paired with "you should **eliminate the existing
+gaps** … possibly **fading the tracks in and out if there is a lot of background
+noise**". So the documented workflow cuts the record's own gap away and generates
+silence in its place. **This pipeline's `split` stage only cuts** — it cannot
+generate — so whatever margin is kept is the record's groove noise at whatever
+level the pressing has. Take the 0.5 s placement from the reference; do not
+inherit its assumption that 0.5 s is inaudible.
+
+**Fades.** Audacity step 13: "Normally fade outs should be longer (**typically a
+few seconds**), and fade ins, if required, **quite short (typically a fraction of
+a second)**", and it suggests a curved *Studio Fade Out* over a linear one.
+VinylStudio fades the edges when "there is a lot of background noise". Both are a
+fraction of a second or more, not the tens of milliseconds a de-click edge fade
+needs — the two purposes are different and the numbers do not transfer between
+them. See the fade rule under *Rules*.
+
+**Excluding what is not music.** Keeping the needle drop as a deliberate artefact
+is a recognised choice ([vinyl rip](https://en.wikipedia.org/wiki/Vinyl_rip)),
+and so is removing it; the dead air between the drop and the music is where the
+crackle lives. Practitioner advice to trim the needle drop and the run-out
+because they can peak above the music matches what this skill's *Rules* require
+for `album_peak`'s sake — reported through a search summary of
+[VinylEngine](https://www.vinylengine.com/turntable_forum/viewtopic.php?t=125872)
+threads that answer 403 to a direct fetch, so treat it as second-hand.
+
+**The tracklist pre-places the cuts, it does not confirm them.** VinylStudio's
+[split screen](https://www.alpinesoft.co.uk/VinylStudio/helpfile/split_tracks.htm)
+works the way step 1 of *Procedure* does: with looked-up track times "VinylStudio
+will have inserted trackbreak markers for you and you will just need to position
+them accurately in the gaps between the tracks". Durations position expectations;
+the audio places the cut.
+
+**Not applicable, and worth knowing why.** Red Book's two-second gap is the
+[pregap](https://en.wikipedia.org/wiki/Pregap) — index 00, *outside* the track,
+inserted by the burner — so "2 seconds of leading silence inside the track" was
+never the convention, and the advice for vinyl-to-CD was to *trim* the record's
+gap so it did not add to it. Lossless containers need no padding either: FLAC,
+WAV and ALAC are [gapless](https://en.wikipedia.org/wiki/Gapless_playback) by
+design, with no encoder delay to compensate, so a leading margin here buys
+nothing mechanical and is purely a listening choice.
+
 ## Inputs
 
 From `analysis.json`:
@@ -393,14 +453,25 @@ still play first.
   longer fade-in instead is worse: it shapes the signal to hide the symptom.
 - Titles do not belong here — they live in the `metadata` section. The plan must
   not carry the same string twice.
-- Both edges need a fade, and a short one is what is needed. A vinyl cut lands in
-  surface noise rather than silence, so a hard edge is a step discontinuity and
-  therefore an audible click; anything under 100 ms removes it, and **20 ms in
-  with 50–80 ms out** is enough. Do not go longer: a fade of a second or more
-  shapes seconds of the record's own noise, which is a change to the source rather
-  than a repair, and it buys nothing — the click was already gone at 80 ms. Keep
-  the fade shorter than the tail, so it starts after the music has stopped and
-  nothing musical is shaped by it.
+- **Both edges need a fade, and the length depends on which of two jobs it is
+  doing.** A vinyl cut lands in surface noise rather than silence, so a hard edge
+  is a step discontinuity and therefore an audible click. Removing *just that*
+  takes very little: 20 ms in with 50–80 ms out is enough, and it is the right
+  answer when the margin is short enough to be inaudible anyway.
+
+  But the margin is groove noise, not silence, and once it is long enough to hear,
+  the fade has a second job — bringing that noise in and out instead of switching
+  it on. That is what LP practice fades for, and it asks for far longer: a fade-in
+  of "a fraction of a second" and a fade-out "typically a few seconds", applied
+  when "there is a lot of background noise" (see *Outside references*). 250 ms in
+  and 500 ms out sits inside that guidance and has been adopted on a record here.
+
+  So choose the fade *with* the margin, not independently of it, and say which job
+  it is doing. The constraint that survives either way: **keep each fade inside
+  its own margin** — the fade-in ending before the entrance and the fade-out
+  starting after the music has stopped — so that nothing musical is shaped. A
+  fade that reaches into the programme is shaping the record rather than joining
+  to it, and *that*, not its length in milliseconds, is the line.
 - **A side that plays continuously is the opposite case.** Make the *interior*
   boundaries contiguous (`end_sample` == the next `start_sample`), set the fades at
   those joins to 0, and drop nothing between them: the tracks must concatenate back
