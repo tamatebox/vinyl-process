@@ -30,6 +30,14 @@ From `analysis.json`:
 - `clicks.width_histogram` — `bin_edges` in ms; loud clicks tend to be wider
 - `clicks.density_per_minute` — localised damage (one bad passage) versus a
   uniformly worn side
+- `clicks.positions_sample` — where the detections are, `positions_truncated` when
+  there were more than the analyzer records (5000 by default), so the list is a
+  prefix and not the whole set.
+
+  **The three histograms, the density and the positions all describe the promoted
+  rung only** — the sweep carries counts and rates per rung, nothing else. Once you
+  have chosen a different rung, they no longer describe your decision: re-analyze
+  at it (see *Reading the sweep*) rather than reading them across.
 - `transients.mean_per_second`, `transients.peak_per_second` — percussive
   material is where false positives get audible
 - `surface_noise.noise_floor_db`, `spectral.hiss_db`
@@ -77,12 +85,25 @@ rung and both have overturned a choice made on the rates alone:
 
 So: reject rungs where the rates are at parity, reject rungs whose
 `onset_coincidence` sits well above 1 unless `revolution_lock` explains them, and
-among what survives pick the lowest. Then **verify it by ear before trusting it**.
-Cut two seconds around the loudest few of
-its gap detections, amplify so the surface is audible at all, and listen for the
-click at the position it claims. This is the only positive evidence available: a
-gap holds no programme material, so anything impulsive there is damage by
-definition. On the record this was written against, twelve of twelve were real.
+among what survives pick the lowest.
+
+Then **verify it by ear before trusting it**, and verify *that rung*. Only the
+promoted rung's detections are recorded, so unless you chose it, re-analyze with
+the ladder's promotion moved to your rung — a config file, not a script, and its
+effect is recorded in `meta.params` and `config_digest`:
+
+```sh
+printf '[analyzer.clicks]\nthreshold_ratio = 75.0\n' > clicks-75.toml
+vinyl-process --config clicks-75.toml analyze <recording> -o analysis-clicks-75.json
+```
+
+Now `positions_sample` is your rung's. Take a handful of the detections that fall
+inside a `silence.regions[]` gap, cut two seconds around each, amplify so the
+surface is audible at all, and listen for the click at the position claimed. A gap
+holds no programme material, so anything impulsive there is damage by definition —
+this is the only positive evidence available. On the record this was written
+against, twelve of twelve were real. Amplitudes are not recorded per detection
+(only as a histogram), so pick by position, not by loudness.
 
 Then say how much of it reaches the album. Detections in the dead middle of a gap,
 the lead-in and the run-out are dropped by the split and cost nothing to ignore;
@@ -91,9 +112,17 @@ and 86 of those sat in the fade-in and fade-out of a single quiet track — the
 surface was uniform, the visibility was not.
 
 **No gaps, no calibration.** A continuous side, a live recording or a gapless
-album gives the sweep nothing unmasked to measure, and both rates collapse into
-one number. Say so, and either borrow a threshold from another side of the same
-pressing or leave repair off; do not pick a rung from the count alone.
+album gives the sweep nothing unmasked to measure: with no silent stretch of at
+least `silence_min_seconds` (2 s), `silence_rate_per_minute` comes back `null` on
+every rung, and so does `programme_rate_per_minute` when there is nothing to
+compare it against. Check for `null` before comparing, say so, and either borrow a
+threshold from another side of the same pressing or leave repair off; do not pick a
+rung from the count alone.
+
+**No `clicks` section at all** — the analyzer failed or was not selected, which
+`analyzers[]` reports — is not a reason to guess either. Re-run
+`analyze --analyzers silence,clicks`; if it will not run, set
+`"enabled": false` and say why.
 
 ## Decision guide
 
@@ -118,19 +147,31 @@ pressing or leave repair off; do not pick a rung from the count alone.
    chose, what its two rates were, and that you verified its gap detections by
    ear.
 4. **max_click_width_ms** — 2.0 default. Go up to 4.0 only when the width
-   histogram is populated above 1 ms. This value is also the rejection rule:
-   anything wider is treated as programme material, not damage.
+   histogram is populated above 1 ms. On `native` this value is also the rejection
+   rule — anything wider is treated as programme material, not damage — and it is
+   what the AR order and window are derived from. On `ffmpeg` it is neither: it maps
+   to `adeclick`'s analysis *window*, clamped to 10–100 ms and never narrower than
+   four click widths, so nothing is rejected for being wide. Do not read a width
+   across engines any more than a threshold.
 5. **Strength** — 1.0 for obvious damage; 0.6–0.8 for `conservative` intent or
    sparse damage on precious material.
 6. **params** — the escape hatch for engine-specific knobs, recorded in the plan
    so the run stays reproducible. `block_ratio` accepts `interpolator`
-   (`ar` | `hermite` | `linear`, default `ar`), `detect_ms`, `context_ms` and
-   `highpass_hz`; the AR order and window are derived from `max_click_width_ms` by
-   the published rule and should be left alone. **Which interpolator is best is
-   not settled** — comparisons by SNR against self-injected damage were discarded
-   as circular, and there is no public benchmark with clean references to appeal
-   to. If it matters for a record, render two and listen. `ffmpeg` accepts
+   (`ar` | `hermite` | `linear`, default `ar`), `detect_ms` (0.2), `context_ms`
+   (40.0), `highpass_hz` (3000), and `ar_order` / `ar_iterations` / `ar_context`.
+   Leave the last three alone: the order and window are *derived* from
+   `max_click_width_ms` by the published rule for this interpolator, and the numbers
+   that used to be hard-coded there were an order of magnitude off it. **Which
+   interpolator is best is not settled** — comparisons by SNR against self-injected
+   damage were discarded as circular, and there is no public benchmark with clean
+   references to appeal to. If it matters for a record, render two and listen.
+   `confirm_k` is available and off by default: it discards candidates that a few
+   sinusoids already explain, which lets a low rung stay sensitive to quiet clicks
+   without following the music. Switching it on is a decision — record it and its
+   `confirm_components` / `confirm_margin` in the rationale. `ffmpeg` accepts
    `window_ms`, `overlap`, `ar_order`, `burst_fusion`, `method`.
+7. **preset** — leave it `null`. The field is in the contract but no engine
+   interprets it; a value here would read as a decision that nothing acts on.
 
 ## Output
 
@@ -142,8 +183,8 @@ pressing or leave repair off; do not pick a rung from the count alone.
   "threshold": 50.0,               // a rung of clicks.threshold_sweep; no default
   "max_click_width_ms": 2.0,
   "strength": 1.0,
-  "preset": null,
-  "params": {},
+  "preset": null,                  // no engine reads this yet
+  "params": {},                    // e.g. {"interpolator": "hermite"}
   "decision": { "skill": "plan-declick", "rationale": "…", "confidence": 0.85,
                 "inputs": ["analysis.json#clicks", "analysis.json#transients"] }
 }
@@ -159,8 +200,9 @@ interpolated audio. Present, before deciding:
   over-triggering on the material);
 - the amplitude histogram in one line: how many events are above −30 dBFS, which
   is the audible band, against how many sit near the noise floor;
-- how many spans the proposed threshold would interpolate, in total and per
-  minute;
+- which rung you chose and its `count`, i.e. how many spans the repair would
+  interpolate, in total and per minute — and, if you had to re-analyze to get its
+  positions, say that the figures come from that run;
 - your recommendation and what it costs if it is wrong.
 
 `"enabled": false` is a legitimate answer and is often the right one.

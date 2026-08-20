@@ -70,6 +70,32 @@ happened.
   "clicks":        { "count": 5, "rate_per_minute": 13.8,
                      "silence_rate_per_minute": 0.0,     // rate in the gaps…
                      "programme_rate_per_minute": 28.0,  // …versus under the music
+                     // the same detector across a ladder of thresholds. The
+                     // headline count above is only the rung named by
+                     // meta.params.threshold_ratio; the plan picks its own.
+                     "threshold_sweep": [ { "threshold": 20.0, "count": 41,
+                                            "rate_per_minute": 113.2,
+                                            "silence_rate_per_minute": 0.0,
+                                            "programme_rate_per_minute": 230.1,
+                                            "onset_coincidence": 5.4,  // 1 = blind
+                                            // to note attacks, large = following them
+                                            "revolution_r": 0.11,
+                                            "revolution_lock": 0.5 },
+                                          { "threshold": 50.0, "count": 5,   // ← promoted
+                                            "rate_per_minute": 13.8,
+                                            "silence_rate_per_minute": 0.0,
+                                            "programme_rate_per_minute": 28.0,
+                                            "onset_coincidence": 0.6,
+                                            "revolution_r": 0.61,
+                                            "revolution_lock": 2.6 },
+                                          { "threshold": 400.0, "count": 0,
+                                            "rate_per_minute": 0.0,
+                                            "silence_rate_per_minute": 0.0,
+                                            "programme_rate_per_minute": 0.0,
+                                            // null wherever there is nothing to fold
+                                            "onset_coincidence": null,
+                                            "revolution_r": null,
+                                            "revolution_lock": null } ],
                      "amplitude_histogram": { "unit": "dBFS", "bin_edges": [...],
                                               "counts": [...] },
                      "width_histogram": { "unit": "ms", "bin_edges": [...],
@@ -116,8 +142,8 @@ happened.
 Every section carries `meta` (omitted above except once for brevity):
 
 ```jsonc
-"meta": { "analyzer": "clicks", "version": "1.0",
-          "params": { "threshold_mad": 6.0, "max_width_ms": 3.0, … },
+"meta": { "analyzer": "clicks", "version": "2.0",
+          "params": { "threshold_ratio": 50.0, "max_width_ms": 2.0, … },
           "confidence": 0.75 }
 ```
 
@@ -126,6 +152,19 @@ pair that decides whether declicking helps: a worn pressing crackles in the
 inter-track gaps too, while a detector over-triggering on the material only fires
 under the programme. Both are `null` when the recording has no gap long enough to
 measure (`silence_min_seconds`, 2 s by default).
+
+They are reported per rung of `clicks.threshold_sweep`, which is the section a
+declick decision is actually made from: no threshold suits two pressings, so the
+analyzer reports the whole ladder as the fact and `plan-declick` picks the rung.
+Each rung also carries `onset_coincidence` (how much more often than chance its
+detections sit on a rising edge — large means the detector is following the music)
+and `revolution_lock` (Rayleigh's statistic for the same detections folded onto
+the platter's period, whose null is exponential with mean 1 whatever the count, so
+rungs are comparable; a high value is a defect struck once per turn, which argues
+*for* repair). `count`, `rate_per_minute`, the two histograms, `density_per_minute`
+and `positions_sample` all describe one rung only — the one named by
+`meta.params.threshold_ratio` — so a plan that chooses a different rung must
+re-analyze at it rather than read those fields.
 
 `periodicity` answers what level and spectrum cannot: whether a quiet stretch is
 faint music or the record's own surface. A groove defect repeats once per
@@ -186,12 +225,16 @@ block: which skill decided, why, how confident it was, and what it consulted.
 
   "declick": {
     "enabled": true, "engine": "native",
-    "algorithm": "mad_interpolate",   // engine-defined id
-    "threshold": 6.0,                 // engine-defined scale (native: MAD sigmas)
-    "max_click_width_ms": 2.0,        // also the rejection rule for wide events
-    "strength": 1.0,                  // 0..1 blend of the repair
-    "preset": null,
-    "params": {}                      // engine-specific extras, e.g. highpass_hz
+    "algorithm": "block_ratio",       // engine-defined id ('adeclick' on ffmpeg)
+    "threshold": 50.0,                // engine-defined scale and deliberately
+                                      // without a default: for block_ratio a
+                                      // ratio of energies, read off
+                                      // clicks.threshold_sweep for *this* pressing
+    "max_click_width_ms": 2.0,        // native: also the rejection rule for wider
+                                      // events; ffmpeg maps it to an analysis window
+    "strength": 1.0,                  // 0..1 blend of the repair; ffmpeg refuses < 1.0
+    "preset": null,                   // reserved; no engine interprets it yet
+    "params": {}                      // engine-specific extras, e.g. interpolator
   },
 
   "normalize": {

@@ -40,14 +40,27 @@ One directory per record, holding everything about it and nothing else:
 ```
 
 A single-file album collapses this to `analysis.json`, `processing_plan.json`,
-`review/` and `album/`. Recordings are never committed — keep the job directory
-out of version control (this repository gitignores `jobs/`).
+`review/`, `album/` and `manifest.json`. The commands below are written for
+whichever case the surrounding text is about, so **substitute the names
+consistently**: a two-sided job runs every command twice, once per side, with its
+own `analysis-<stem>.json`, `plan-<side>.json` and `--manifest`. Recordings are
+never committed — keep the job directory out of version control (this repository
+gitignores `jobs/`).
 
 **Each review render adds exactly one stage to the one before it.** That is the
 point of the ladder: every comparison then isolates a single decision, so "is the
 repair an improvement" is answered by `review/declick/` against `review/split/`
-and nothing else differs between them. Build each one by setting `"enabled"` on
-the stages above it to `false` and executing into its own directory:
+and nothing else differs between them. Build each one by disabling the stages it
+has not reached yet and executing into its own directory:
+
+| Render | `split` | `declick` | `normalize` |
+|---|---|---|---|
+| `review/split/` | on | **off** | **off** |
+| `review/declick/` | on | on | **off** |
+| `review/level/` | on | on | on |
+
+`metadata` stays enabled throughout — the filenames are rendered from it — and
+`export` has no switch at all.
 
 ```sh
 vinyl-process execute plan-side-a.json --audio <recording> \
@@ -98,6 +111,8 @@ decision below must cope with that rather than assume a field exists.
 > `channel_correlation`; `peaks.peak_db`; `clipping.clipped_region_count`;
 > `surface_noise.noise_floor_db`; the number and length of the silent gaps; and
 > for a multi-file album, **which file is which side** and how you concluded it.
+> `bit_depth` is `null` on a float capture and the two channel figures are `null`
+> on a mono one — report `null` as `null`, never as a number you inferred.
 > Ask before planning anything: a clipped or mis-wired transfer should be
 > re-recorded, not processed.
 
@@ -128,10 +143,14 @@ Each stage skill states what its own checkpoint must show. In short:
 > under the programme, and how many spans a repair would interpolate.
 >
 > **Checkpoint 4 — is the level to be touched at all?** This is a yes/no question
-> and it is theirs, not yours. Quote `peaks.peak_db` and the target, and say the
-> gain is *at least* `target - peak_db` — it is usually larger, because the side's
-> loudest sample is often the stylus drop in the lead-in, which the split
-> excludes. Never present normalization as a default that needs no answer.
+> and it is theirs, not yours. Quote the target and the reference the chosen mode
+> measures against — `peaks.peak_db` for a peak mode, `peaks.gated_rms_db` for an
+> RMS one — and give the gain as *at least* `target - reference`: usually larger,
+> because the side's loudest sample is often the stylus drop in the lead-in, which
+> the split excludes. Say in the same breath that `normalize.peak_ceiling_db` can
+> cap it, in which case the applied gain comes out *below* that bound and the target
+> level is not reached. Never present normalization as a default that needs no
+> answer.
 >
 > **Checkpoint 5 — the release.** Label, catalogue number, country, year and the
 > tracklist you matched, plus how you matched it. A wrong release makes every tag
@@ -158,7 +177,9 @@ default.
 vinyl-process lint processing_plan.json --audio <recording> --analysis analysis.json
 ```
 
-Fix every `error`. Explain or fix every `warning`.
+Fix every `error`. Explain or fix every `warning`. `info` findings are
+observations — `resampling`, `ungated-rms` — and need no action beyond mentioning
+them if they were not deliberate.
 
 > **Checkpoint 6 — the final gate.** One line per stage with its on/off state and
 > what it will do (`split: 5 tracks`, `declick: off`, `normalize: album_peak
@@ -176,7 +197,8 @@ vinyl-process execute processing_plan.json --audio <recording> -o <album-dir>
 > place the *real* gain appears, so compare it with what you predicted at
 > checkpoint 4 and say so if it differs.
 
-Then `vinyl-process verify <album-dir>/manifest.json` to prove the run reproduces.
+Then `vinyl-process verify <album-dir>/<the manifest this run wrote>` to prove the
+run reproduces — once per side on a multi-side album.
 
 ## Running unattended
 
@@ -188,8 +210,13 @@ decision people notice afterwards and cannot undo without re-running.
 ## Rules
 
 - Never modify audio yourself and never bypass the executor.
-- Only include the stages the workflow needs: set `"enabled": false` on the rest
-  (re-tagging an existing rip = disable `split`, `declick` and `normalize`).
+- **All five sections are always present.** They are required fields, so omitting
+  one is a validation error, not a way to skip a stage. To skip one, set
+  `"enabled": false` on it — `split`, `declick`, `normalize` and `metadata` each
+  have that flag (re-tagging an existing rip = disable the first three). `export`
+  does not: a run always writes files, and `"enabled"` inside `export` is a
+  validation error because the contract forbids unknown fields. Use
+  `write_tags: false` there instead.
 - The plan must stand alone: someone with only the recording and the plan must be
   able to reproduce the album exactly.
 - One recording per plan. A two-sided album is two recordings, two analyses and

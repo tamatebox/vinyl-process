@@ -11,7 +11,9 @@ gain deterministically, post-declick and album-wide.
 There are **two** decisions here, not one. *How loud* is the target. *How much
 room to leave above it* is the ceiling, and it is the one that stops an album
 being clipped. A plan that carries only a target is incomplete for every mode
-except `album_peak`.
+except the peak modes: `album_peak` and `track_peak` aim the *sample* peak at
+`target_db`, so their target already bounds the peaks. A level target does not, and
+`lint` says so (`rms-without-peak-ceiling`, on `album_rms` and `album_gated_rms`).
 
 ## Inputs
 
@@ -23,11 +25,26 @@ From `analysis.json`:
 - `clipping` — `clipped_region_count`, `longest_run_samples`
 - `spectral.rumble_db` and `recording_info.dc_offset` — see *Wasted headroom*
 
-Plus `preferences.normalize_mode` and `preferences.normalize_target_db`.
+Plus `preferences.normalize_mode`, `preferences.normalize_target_db` and
+`preferences.normalize_peak_ceiling_db` — the user's ceiling, `-1.0` by default and
+`null` to ask for an uncapped gain. Start from it; the guidance below is why that
+default is usually right, not a reason to override a stated preference.
 
 `peak_db` is the largest stored sample; `true_peak_db` is where the waveform
 actually goes between samples, which is what a resampler or a lossy encoder will
 realise. They can differ by more than a dB on percussive material.
+
+Three of these can be missing, and each changes what you may claim:
+
+- **no `peaks` section** (its analyzer failed — `analyzers[]` says so): you have no
+  reference at all. Re-run `analyze --analyzers peaks`; do not plan a level from the
+  other sections.
+- **`true_peak_db` is `null`** (the recording is too short to oversample): you
+  cannot check the sample peak against the reconstructed one, so set the ceiling
+  rather than reasoning about whether it is needed.
+- **`gated_rms_db` is `null`**: an RMS bound has to come from `rms_db` instead,
+  which counts the gaps and therefore reads low. `lint` makes the same substitution;
+  say in the rationale that you used it.
 
 ## Decision guide
 
@@ -47,21 +64,27 @@ realise. They can differ by more than a dB on percussive material.
 4. `track_peak` is discouraged: it flattens the level relationships the record
    was mastered with. Use it only for compilations assembled from genuinely
    mismatched sources, and say so in `decision.rationale`.
-5. **Skip** (`"enabled": false`, or `mode: "none"`) when `peak_db` is already
-   within 0.5 dB of the target, or when `clipping.clipped_region_count > 0` and
-   the gain would be positive — normalizing a clipped capture amplifies the
-   damage. Tell the user instead.
+5. **Skip** (`"enabled": false`, or `mode: "none"`) when the gain would not be
+   worth applying: on a peak mode that is `peak_db` already within 0.5 dB of the
+   target, and on an RMS mode `gated_rms_db` (or `rms_db`, if that is `null`) within
+   0.5 dB of it. Skip too when `clipping.clipped_region_count > 0` and the gain
+   would be positive — normalizing a clipped capture amplifies the damage. Tell the
+   user instead.
 
 ### Choosing the ceiling
 
-`peak_ceiling_db` is in **dBTP**, against the 4×-oversampled peak.
+`peak_ceiling_db` is in **dBTP**, against the 4×-oversampled peak. Take
+`preferences.normalize_peak_ceiling_db` as the starting value and depart from it
+only for a reason you can name.
 
-- **−1.0 is the right answer almost always.** It is what every streaming platform
-  asks for and it is the headroom a later AAC/Opus transcode needs; the encoder
-  can add inter-sample peaks that were not in the FLAC.
-- Set it on **every** RMS mode. Set it on `album_peak` too whenever
-  `true_peak_db - peak_db` is more than about 0.3 dB, because a sample-peak target
-  of −1.0 dBFS then lands above −1.0 dBTP.
+- **−1.0 is the right answer almost always**, which is why it is the default. It is
+  what every streaming platform asks for and it is the headroom a later AAC/Opus
+  transcode needs; the encoder can add inter-sample peaks that were not in the FLAC.
+- Set it on **every** RMS mode, even if the preference says `null`: an uncapped
+  level target is the one combination that can drive the export into a clip. Set it
+  on `album_peak` too whenever `true_peak_db - peak_db` is more than about 0.3 dB,
+  because a sample-peak target of −1.0 dBFS then lands above −1.0 dBTP — and set it
+  when `true_peak_db` is `null`, since then you cannot know that it is not.
 - Do not set it *below* the target on a peak mode — the ceiling would win and the
   target would be decoration.
 - −2.0 if the user has said they transcode to lossy for a car or a phone.
@@ -72,7 +95,12 @@ A peak-based gain is limited by the loudest thing in the groove, audible or not.
 Two things on a vinyl transfer routinely are not:
 
 - **Rumble** — warp and wow put energy at 0.5–8 Hz that no one hears and that
-  still eats the headroom. Read `spectral.rumble_db` against `peaks.peak_db`.
+  still eats the headroom. `spectral.rumble_db` is what is below 40 Hz *relative to
+  the whole recording* — 20·log10 of the amplitude ratio, so it is ≤ 0 and is not a
+  level in dBFS. −48 dB is negligible; −20 dB is a tenth of the amplitude (1 % of
+  the energy) in a band nobody can hear. Compare it with the other entries of
+  `spectral.bands`, which are computed the same way, and never with
+  `peaks.peak_db` — that is a different quantity.
 - **DC offset** — `recording_info.dc_offset` shifts the whole waveform toward one
   rail, so one side of it clips early.
 
@@ -116,8 +144,9 @@ Present:
   larger, because the side's loudest sample is often the stylus drop in the
   lead-in, which the split excludes — on one tested pressing the bound was
   +2.4 dB and the executor applied +8.0 dB;
-- for an RMS mode, the same bound from `gated_rms_db`, and a warning that the
-  ceiling may cap it;
+- for an RMS mode, the same bound from `gated_rms_db` — or from `rms_db`, named as
+  such, when it is `null` — and a warning that the ceiling may cap it, in which
+  case the target level will not be reached;
 - for a two-sided album, both sides' `peak_db`, since each plan is normalized on
   its own and the sides can end up at different gains;
 - that the exact value appears in `manifest.applied_gain_db` after the run,
@@ -158,7 +187,8 @@ Then read the receipt, not just the audio:
 - Never precompute the gain value. Declick changes peaks slightly, so the
   executor measures after repair; your decision is the *strategy, target and
   ceiling*, and the manifest records the gain that was actually applied.
-- `target_db` and `peak_ceiling_db` must be ≤ 0 dBFS. Keep at least 1 dB of
+- `target_db` (dBFS, or a level in dBFS on an RMS mode) and `peak_ceiling_db`
+  (dBTP) must both be ≤ 0. Keep at least 1 dB of
   headroom for lossy transcodes the user may make later — the contract permits
   `0.0` and `lint` will tell you it is a bad idea.
 - If the source peaks above the target, the gain is negative — that is normal and

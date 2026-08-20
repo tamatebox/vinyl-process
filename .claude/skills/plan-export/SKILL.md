@@ -13,26 +13,43 @@ asked for something else.
 - `preferences.export_format`, `preferences.export_bit_depth`,
   `preferences.export_sample_rate`, `preferences.dither`,
   `preferences.track_filename_template`
-- `analysis.json#recording_info` — `subtype` and `bit_depth` of the capture
+- `analysis.json#recording_info` — `subtype` and `bit_depth` of the capture.
+  `bit_depth` is `null` for a subtype whose width is not a PCM depth, and the whole
+  section is absent if its analyzer failed (`analyzers[]` says so). Either way fall
+  back on the archival default — 24-bit — and on `source.sample_rate`, and say in
+  the rationale that the capture's depth was not known.
 - `analysis.json#source.sample_rate`
+- `normalize.peak_ceiling_db`, if you are considering a resample — see below
 
 ## Decision guide
 
 1. **Container**: `flac` by default (lossless, tags, widely supported). `wav` or
    `aiff` only when a tool in the user's chain needs it; both carry ID3 tags
    here, which some players ignore.
-2. **Bit depth**: match the capture. Never *raise* it — 16 → 24 adds nothing but
-   bytes. Reducing 24 → 16 is a deliberate loss; if the user wants it, set
-   `dither: "tpdf"` with a fixed `dither_seed` so the export stays reproducible.
-3. **Sample rate**: `null` (keep the source rate) for archival. Resample only on
-   an explicit request; the executor uses polyphase resampling and the plan is
-   the record that it happened.
-4. **Dither**: `"none"` at 24 bit — it sits far below any pressing's noise floor.
-   `"tpdf"` when reducing to 16 bit.
+2. **Bit depth**: 16 or 24 — the contract has no other value. Match the capture
+   when it is one of the two; a 32-bit or float capture, or one whose `bit_depth`
+   came back `null`, exports at **24**, which is the archival default and loses
+   nothing anyone can hear. Never *raise* a depth — 16 → 24 adds bytes and no
+   information. Reducing 24 → 16 is a deliberate loss and needs the user's word.
+3. **Sample rate**: `null` (keep the source rate) for archival. Resample only on an
+   explicit request, and to a rate that exists in the wild — 44100, 48000, 88200,
+   96000; the contract does not constrain the number, so a typo here is a failed
+   run at best. The executor resamples **after** normalizing, and resampling moves
+   the peaks, so a plan that resamples needs `normalize.peak_ceiling_db` set: the
+   ceiling is held against the 4×-oversampled peak, which is what bounds the sample
+   peak of the resampled result. Check it before shipping a resample.
+4. **Dither**: quantisation happens exactly once, in `save_audio`, from the float64
+   the whole pipeline works in — so it is the *output* depth that decides, not the
+   capture's. `"none"` at 24 bit: the quantisation floor sits far below any
+   pressing's noise floor. `"tpdf"` whenever `bit_depth` is 16, with a fixed
+   `dither_seed` so the export stays reproducible.
 5. **Naming**: `"{index:02d} - {title}"` by default. Available fields are
    `index`, `title`, `artist`, `album_artist`, `album`, `year`, `position`,
-   `catalog_number`. Filenames are sanitised for the filesystem, and
-   `vinyl-process lint` fails on a template that renders two identical names.
+   `catalog_number`. Keep `{index}` in it and use the **same template for both
+   sides**: the collision check runs per plan, so two sides sharing an album
+   directory can overwrite each other's files without a single lint finding.
+   Filenames are sanitised for the filesystem, and `vinyl-process lint` fails on a
+   template that renders two identical names within one plan.
 
 ## Output
 
@@ -45,8 +62,9 @@ asked for something else.
   "dither_seed": 0,
   "track_filename_template": "{index:02d} - {title}",
   "write_tags": true,
-  "decision": { "skill": "plan-export", "rationale": "…",
-                "inputs": ["vinyl-process.toml#preferences"] }
+  "decision": { "skill": "plan-export", "rationale": "…", "confidence": 0.95,
+                "inputs": ["vinyl-process.toml#preferences",
+                           "analysis.json#recording_info"] }
 }
 ```
 

@@ -189,10 +189,13 @@ boundary set. The executor cuts at the samples it is given.
 
 ```
 Analyze                     Parameter selection            Repair
-clicks.count/rate      →    engine, algorithm,        →    detect with those
-amplitude & width           threshold, click width,        parameters and
-histograms, density,        strength, preset               interpolate
-transient density           (plan-declick skill)           (DSP engine)
+clicks.threshold_sweep →    engine, algorithm,        →    detect with those
+ (per rung: two rates,      threshold, click width,        parameters and
+  onset coincidence,        strength, interpolator         interpolate
+  revolution lock)          (plan-declick skill)           (DSP engine)
+amplitude & width
+histograms, density,
+transient density
 ```
 
 Detection maths is shared between the Analyzer and the native engine through
@@ -273,14 +276,17 @@ end to end for determinism.
   record this was tested against, but arbitrarily more in principle). A true
   album-wide gain needs a multi-source plan, or an explicit-gain mode the skill
   fills in from both analyses.
-- **The click detector's threshold is global.** `mad_interpolate` derives one
-  robust sigma for the whole side, so it under-detects in quiet passages and
-  over-detects wherever the material's high-frequency energy is bursty. On a
-  bass-heavy pressing it reported 1100 events/min under the programme against
-  9/min in the inter-track gaps — the events were tracking the music, not the
-  surface. `clicks.silence_rate_per_minute` versus
-  `clicks.programme_rate_per_minute` exists so a skill can see this; the fix is a
-  block-adaptive threshold, which would be a new algorithm id.
+- **The click threshold cannot be defaulted, and nothing automates the choice.**
+  `block_ratio` compares a click-width window against its own 40 ms
+  neighbourhood, so the statistic is local — but no ratio suits two pressings, and
+  on the album this was measured against the two sides wanted different rungs.
+  `clicks.threshold_sweep` reports the whole ladder and the engine refuses to run
+  without a threshold, so the choice is explicit rather than hidden; it is still a
+  judgement, made per record from the two rates, `onset_coincidence` and
+  `revolution_lock`, and confirmed by ear. On one pressing every rung read an onset
+  coincidence above 2 — the detector was following the beat at every threshold, and
+  the answer was to leave repair off. Separating surface from programme more
+  reliably than an energy ratio would be a new algorithm id.
 - **The playable region is a level threshold, so a quiet passage can end a side
   early.** `lead_out_start_sample` is where the level last crossed the silence
   threshold. On material that drops out by design — dub, electronic — that fires
@@ -289,9 +295,13 @@ end to end for determinism.
   track. `periodicity` is the cross-check, since a run-out groove repeats once per
   revolution while a quiet outro keeps the beat. `lead_in_end_sample` has the
   mirror problem and comes back `null` when no leading silence is found at all.
-- **`mad_interpolate` is a short-gap repairer.** It removes clicks up to a few
-  milliseconds and leaves seams around −60 dBFS; wider damage needs a predictive
-  (LPC/Janssen) interpolator, which would be a new algorithm id in the same engine.
+- **Wide damage is not repaired at all.** Events wider than
+  `max_click_width_ms` are rejected as programme material rather than bridged,
+  because at that width the detector cannot tell the two apart — so a scratch
+  spanning tens of milliseconds survives. The AR fill (Janssen) reconstructs the
+  oscillation across the fraction of a millisecond a click leaves, and leaves seams
+  around −60 dBFS; which interpolator is best is unestablished, and there is no
+  benchmark with clean references to settle it ([dsp-engines.md](dsp-engines.md)).
 - **No loudness (LUFS) normalization.** `album_gated_rms` has BS.1770-4's block
   geometry, its two gates and ReplayGain's album pooling, so it measures the
   programme rather than the silence — but no K-weighting, which is what separates

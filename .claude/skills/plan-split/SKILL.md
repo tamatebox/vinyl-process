@@ -21,10 +21,16 @@ From `analysis.json`:
   electronic — `lead_out_start_sample` fires at the drop rather than at the
   run-out: on one tested side it landed 22 s before the music stopped, and taking
   it at face value would have truncated the track. `lead_in_end_sample` comes back
-  `null` when there is no leading silence to find. Check both against
-  `periodicity` before trusting either.
+  `null` when there is no leading silence to find, and `lead_out_start_sample`
+  does the same when the recording ends in music. Check both against
+  `periodicity` before trusting either, and read *both* as absent rather than as
+  zero: a `null` marker means the side has no detected edge there, which changes
+  where track 1 starts and where the last one ends (see Rules).
 - `periodicity.windows[]` — the answer to "is this stretch music or surface?",
   which level and spectrum cannot give. See *Surface or programme?* below.
+  `programme_period_seconds` and `programme_peak_prominence` are `null` when no
+  window lies wholly inside the programme, and the whole section is absent when
+  its analyzer failed or was not selected.
 - `silence.regions[]` — `{start_sample, music_end_sample, music_start_sample,
   end_sample, mean_rms_db, duration_seconds, confidence}`.
   **`music_start_sample`, not `end_sample`, is where the next track begins**: the
@@ -78,10 +84,23 @@ Expect the beat to show *more* strongly in a quiet passage than in the loud body
 of the same track — the surface stops masking it. A faint stretch that locks to
 the grid harder than the track does is still that track.
 
+**When periodicity is not available**, this question has no reliable answer here.
+The section is absent if its analyzer failed (`analyzers[]` says so) and
+`programme_period_seconds` / `programme_peak_prominence` are `null` when no window
+sat wholly inside the programme. Re-run `analyze --analyzers silence,periodicity`
+first — it is cheap. If it still cannot be had, do not fall back on level or
+spectrum, which is what this section exists to rule out: keep the longer cut, drop
+`decision.confidence` accordingly, and say in the rationale that the boundary is
+unconfirmed. Erring long ships fadeable surface noise; erring short truncates a
+track.
+
 ## Procedure
 
 1. Convert the tracklist durations into expected boundary positions (cumulative
    sums), scaled into the playable region between lead-in end and lead-out start.
+   Where either marker is `null`, use the file's own edge in its place (`0` and
+   `source.num_samples`) for this scaling only — it positions the *expectations*,
+   not the cuts, which come from steps 3–5.
 2. Score candidates: high-confidence `silence` first; `rms_valley` where silence
    is missing (segued or live sides); `spectral_change` only to break ties
    between nearby candidates.
@@ -121,14 +140,19 @@ the grid harder than the track does is still that track.
    run-out is not a competitor for it. Do **not** interpolate that end from the
    label's duration — the instruction here used to say so, and it appended 11 s of
    run-out groove noise to a side whose printed duration was that much too long.
-   Confirm the cut against `periodicity` past it, not against `rms_profile`. The
-   instruction here used to be "a flat plateau is the run-out groove and the cut
-   stands"; on a dub side that plateau *was* the track, 22 s of outro sitting at
-   the surface level with the beat still running, and the level threshold had
-   already called it the run-out. Read the windows after your cut: still on
+   Confirm the cut against `periodicity` past it, not against `rms_profile` — a
+   flat plateau at the surface level can be the track itself (a dub side ran 22 s
+   of outro through one, with the beat still going, after the level threshold had
+   already called it the run-out). Read the windows after your cut: still on
    `programme_period_seconds` means the track is still playing, so extend; taken
    over by `revolution` means the run-out, so the cut stands. See *Surface or
    programme?*.
+
+   **If no silence region opens after the last track began**, the recording ends in
+   music or in undetected surface: close it at `source.num_samples`, check the last
+   windows of `periodicity` for a run-out that was never detected as silence, and
+   record in the rationale that the end is the end of the file. Still do not
+   interpolate it from the label's duration.
 
    The label is a cross-check in one direction only. Report a disagreement over
    ~5 s as a fact about the pressing, not as a reason to move the cut — and do not
@@ -160,7 +184,11 @@ cannot settle a boundary. This was tried, and what came back was "I can't tell
 without hearing it" — which is right, and the Checkpoint below used to ask for a
 table anyway. Write a plan carrying this `split` section with **`declick` and
 `normalize` disabled** (leave `metadata` alone — the filenames come from it) and
-execute it into a directory of its own:
+execute it into a directory of its own. `metadata` is decided *after* this
+checkpoint, so unless the tracklist is already in hand and written into
+`metadata.tracks`, the filenames come out as `Track 01…` and `lint` says so
+(`missing-title`, a warning). That is expected here; do not invent titles to
+silence it.
 
 ```sh
 vinyl-process execute plan-side-a.json --audio <side-a> \
@@ -200,7 +228,11 @@ right:
   # plan-album forbids scripts there, and this is not part of the pipeline.
   import glob, os, numpy as np, soundfile as sf
 
-  files = sorted(glob.glob("review/split/*.flac"))
+  # Whatever plan-export chose — do not assume FLAC.
+  exts = ("flac", "wav", "aiff", "aif")
+  files = sorted(f for e in exts for f in glob.glob(f"review/split/*.{e}"))
+  if not files:
+      raise SystemExit("nothing in review/split — render both sides first")
   peak = max(np.abs(sf.read(f, dtype="float64", always_2d=True)[0]).max() for f in files)
   gain = 10 ** ((-1.0 - 20 * np.log10(peak)) / 20)
   os.makedirs("review/split-loud", exist_ok=True)
@@ -243,8 +275,9 @@ gain cannot change the shape of an edge, only whether it is loud enough to notic
   continues where side A stopped (6, 7, …) so both sides export into one directory
   with correct filenames and tags. Indices must be contiguous and ascending;
   tracks must not overlap; the dead middle of a gap stays in neither track.
-- Start the first track from the first silence region's `music_start_sample`, less
-  the same margin every other track gets — **not** from `lead_in_end_sample`. That
+- Start the first track from the **opening** silence region's `music_start_sample`
+  — the region whose `start_sample` is 0 — less the same margin every other track
+  gets, and **not** from `lead_in_end_sample`. That
   marker is where the lead-in groove stops, and the needle drop lands *after* it:
   on both sides of a tested pressing the loudest sample of the whole side was the
   drop itself, at −3.4 dBFS between `lead_in_end_sample` and the first gap, against
@@ -252,6 +285,12 @@ gain cannot change the shape of an edge, only whether it is loud enough to notic
   1 and then hands it to `album_peak`, which costs 5.6 dB of gain across the whole
   album. Likewise the last track ends at its own `music_end_sample` (step 5), not
   at `lead_out_start_sample`. Cut *inside* a silence.
+
+  **When there is no opening region** — `lead_in_end_sample` is `null` and no
+  region starts at 0 — the side simply begins in music: start track 1 at sample 0
+  and say so in the rationale. Do not take the *next* region instead; that one is
+  the gap after track 1, and starting there would open the album at track 2's
+  entrance.
 - **Whatever margin you keep is bare surface, and that is where the clicks are.**
   Nothing masks them there, and the opening grooves are the most handled part of a
   record: on one album the first half-second of a track carried up to 45 times the
@@ -270,8 +309,13 @@ gain cannot change the shape of an edge, only whether it is loud enough to notic
   than a repair, and it buys nothing — the click was already gone at 80 ms. Keep
   the fade shorter than the tail, so it starts after the music has stopped and
   nothing musical is shaped by it.
-- **A side that plays continuously is the opposite case.** Make the boundaries
-  contiguous (`end_sample` == the next `start_sample`), set every fade to 0, and
-  drop nothing: the tracks must concatenate back into the recording sample for
-  sample, or every transition gets a dip. `vinyl-process lint` fails a plan that
-  mixes the two (`gapless-fade`).
+- **A side that plays continuously is the opposite case.** Make the *interior*
+  boundaries contiguous (`end_sample` == the next `start_sample`), set the fades at
+  those joins to 0, and drop nothing between them: the tracks must concatenate back
+  into the recording sample for sample, or every transition gets a dip. The two
+  outer edges are not interior joins — the side still has a lead-in and a run-out —
+  so the first `start_sample` and the last `end_sample` follow the ordinary rules
+  above, fade included. `vinyl-process lint` reports a fade at a contiguous join as
+  an `error` (`gapless-fade`); a fade-less cut *into* the recording is the milder
+  `hard-cut` warning, so a plan that mixes the two conventions can still lint clean
+  — read the findings, do not rely on the exit code alone.

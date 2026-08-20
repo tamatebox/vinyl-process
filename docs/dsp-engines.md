@@ -30,20 +30,54 @@ Pure numpy/scipy, no external binaries, every capability.
 
 - `split` — `AudioBuffer.slice` plus raised-cosine fades. Bit-exact: an unfaded cut
   is byte-identical to the corresponding slice of the source.
-- `declick`, algorithm `mad_interpolate` — high-pass the signal (default 3 kHz,
-  override with `params.highpass_hz`), subtract a median-filtered copy, and flag
-  samples beyond `threshold` robust sigmas (MAD). Threshold crossings are merged
-  into events, each event is localised onto the impulse using the curvature of the
-  unfiltered signal, events wider than `max_click_width_ms` are rejected as
-  programme material, and the rest are bridged with cubic Hermite interpolation
-  blended by `strength`.
+- `declick`, algorithm `block_ratio` — high-pass the signal (default 3 kHz,
+  override with `params.highpass_hz`), then flag every sample where the energy of a
+  click-width window (`params.detect_ms`, 0.2 ms) exceeds the energy of its
+  surrounding neighbourhood (`params.context_ms`, 40 ms) by `threshold` times.
+  `threshold` is a **ratio, not a sigma count**, and has no default: it is read off
+  `clicks.threshold_sweep` for the pressing in hand, and the engine refuses to run
+  without it. Crossings are merged into events, each event is localised onto the
+  impulse using the curvature of the unfiltered signal, events wider than
+  `max_click_width_ms` are rejected as programme material, and the rest are bridged
+  by autoregressive least squares (Janssen 1986) blended by `strength`.
+  `params.interpolator` also offers `hermite` and `linear`; the AR order and window
+  are *derived* from `max_click_width_ms` by the published rule
+  (`p = 3·Nmax + 2`, window `8p`) rather than chosen, and `params.ar_order`,
+  `ar_iterations` and `ar_context` override them. `params.confirm_k` is an opt-in
+  second stage that discards candidates a few sinusoids already explain.
 - `gain` — multiply by `10^(dB/20)`.
 
-Measured on synthetic material: injected clicks are attenuated by 20–50 dB, samples
-outside a repaired span are left bit-identical, and steady tones and percussion
-produce no false positives. What remains at a repaired site is a seam around
-−60 dBFS; re-analysing a declicked file therefore still reports clicks, at a much
-lower amplitude. Judge repair by the amplitude histogram, not by the count.
+What is established, on real audio rather than injected damage:
+
+- **The statistic is local.** Handed the same 60 s in different chunk sizes, the
+  robust-sigma detector this replaced moved its answer by up to 7.8x while the
+  energy ratio held to within 10 %. That is why the analyzer (which sees a side)
+  and this engine (which sees one track) describe the same events — under the old
+  statistic they did not, once measured at 38 693 clicks reported against 58 355
+  spans repaired.
+- **It finds the surface.** On a near-clean pressing used as a negative control the
+  old detector claimed 1082 events a minute while finding *none* in the inter-track
+  gaps, where the surface is unmasked; the ratio found few and concentrated them in
+  the gaps, twelve of which were confirmed audible by ear.
+- **No repair invents a level.** Every bridge is clipped into the bounds of its own
+  neighbourhood. Unbounded, the cubic once bridged a 65-sample gap at twelve times
+  the amplitude of its neighbourhood and three times the peak of the whole track —
+  inside the width limit the plan had set.
+
+Samples outside a repaired span are left bit-identical: only the event spans are
+written. What remains at a repaired site is a seam around −60 dBFS, and the
+detector's threshold is relative, so re-analysing a declicked file still reports
+clicks — at a much lower amplitude. Judge repair by the amplitude histogram, not by
+the count, and never iterate towards `count == 0`.
+
+Two things are **not** established. Which interpolator is better: comparisons by
+SNR against damage injected here were discarded as unsound (the material, the click
+shapes and the amplitudes were all chosen by the same hand that chose the
+algorithm), and there is no public benchmark with clean references to appeal to.
+And whether a given threshold fires on the music: the ratio does fire on some
+percussive attacks, which is what the analyzer's per-rung `onset_coincidence` is
+for — read it before trusting a rung, because a repair that follows the beat
+interpolates over the attacks.
 
 ### `ffmpeg` — interchangeability, demonstrated
 
