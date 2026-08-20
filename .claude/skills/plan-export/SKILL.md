@@ -50,6 +50,14 @@ asked for something else.
 }
 ```
 
+## Checkpoint
+
+This section needs no stop of its own. State the outcome in the final summary —
+container, bit depth, sample rate, dither, filename template — because the
+defaults follow from the capture rather than from taste: keep the source's bit
+depth and sample rate, and dither only when reducing depth. Anything else is a
+request someone made, so name who asked for it in `decision.rationale`.
+
 ## Rules
 
 - The export section has no `enabled` flag: a run always writes files. To skip

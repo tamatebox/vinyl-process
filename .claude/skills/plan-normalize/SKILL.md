@@ -42,6 +42,24 @@ From `analysis.json`: `peaks` (`peak_db`, `rms_db`, `crest_factor_db`),
 }
 ```
 
+## Checkpoint
+
+**Ask whether the level should be touched at all.** It is a yes/no question, it
+belongs to the person who owns the record, and it is the change they will notice
+afterwards. Never carry the default through silently.
+
+Present:
+
+- `peaks.peak_db` and the target you propose;
+- the gain as a *lower bound*: `target - peak_db`. The real value is usually
+  larger, because the side's loudest sample is often the stylus drop in the
+  lead-in, which the split excludes — on one tested pressing the bound was
+  +2.4 dB and the executor applied +8.0 dB;
+- for a two-sided album, both sides' `peak_db`, since each plan is normalized on
+  its own and the sides can end up at different gains;
+- that the exact value appears in `manifest.applied_gain_db` after the run, and
+  that keeping the capture's level is `"enabled": false`.
+
 ## Rules
 
 - Never precompute the gain value. Declick changes peaks slightly, so the

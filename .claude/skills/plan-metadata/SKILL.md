@@ -57,6 +57,19 @@ conclude must be *in* the plan.
 }
 ```
 
+## Checkpoint
+
+A wrong release makes every tag wrong, and it is cheap to check. Present:
+
+- the release you resolved to: artist, album, label, catalogue number, country,
+  year, and its Discogs/MusicBrainz id;
+- **how** you matched it — catalogue number from the sleeve, track count, per-side
+  durations within N seconds;
+- the tracklist as it will be tagged, with the vinyl positions;
+- anything you could not verify, marked as such.
+
+Never present titles taken from memory as if they were looked up.
+
 ## Rules
 
 - This section is the single source of truth for titles: the export filenames are

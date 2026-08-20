@@ -8,54 +8,122 @@ description: Orchestrate planning for a raw vinyl recording — run the analyzer
 Turn a raw recording into a validated `processing_plan.json`, then execute it.
 You are the planning layer: **you decide, Python only measures and executes.**
 
+## How to run it
+
+Work through the steps below **one at a time, stopping at every checkpoint**. A
+checkpoint is not a progress report: it is a decision handed back to the person
+who owns the record. Do not start the next step until they have answered.
+
+Stop where a wrong answer cannot be spotted later by looking at the output. Track
+boundaries, declick strength and whether the level is touched at all are exactly
+that: by the time there are ten tagged FLACs, verifying them means listening to
+the whole side.
+
+A checkpoint that dumps data is not a checkpoint. Show a small table and the one
+question that matters.
+
 ## Procedure
 
-1. **Measure** (skip if an `analysis.json` for this exact file already exists):
-   ```sh
-   vinyl-process analyze <recording> -o analysis.json
-   ```
-   Read `analyzers[]` first: a section is absent when its analyzer failed, and
-   every decision below must cope with that instead of assuming a field exists.
+### 1. Measure
 
-2. **Gather context**
-   - Release identity: artist/album, or a Discogs/MusicBrainz release ID or URL.
-     Prefer an explicit ID — pressings differ.
-   - User preferences: `vinyl-process config show`. These are defaults for your
-     decisions, not commands to the executor.
-   - Tracklist with per-track durations, when a release is known.
+```sh
+vinyl-process analyze <recording> -o analysis.json
+```
 
-3. **Decide each section** with its owning skill, in this order:
-   | Section | Skill |
-   |---|---|
-   | `split` | [plan-split](../plan-split/SKILL.md) |
-   | `declick` | [plan-declick](../plan-declick/SKILL.md) |
-   | `normalize` | [plan-normalize](../plan-normalize/SKILL.md) |
-   | `metadata` | [plan-metadata](../plan-metadata/SKILL.md) |
-   | `export` | [plan-export](../plan-export/SKILL.md) |
+Read `analyzers[]` first: a section is absent when its analyzer failed, and every
+decision below must cope with that rather than assume a field exists.
 
-4. **Assemble** `processing_plan.json`:
-   - `source`: copy verbatim from `analysis.json`.
-   - `analysis`: `{"path": "analysis.json", "sha256": "<sha256 of that file>"}`.
-   - `created_by`: `"plan-album"`.
-   - one object per section, each with a `decision` block recording `skill`,
-     `rationale`, `confidence` and the `inputs` you consulted.
-   - `notes`: a short summary of the decisions that were not obvious.
-   - See `examples/processing_plan.example.json` for the exact shape and
-     `schemas/processing_plan.schema.json` for the formal contract.
+> **Checkpoint 1 — is this transfer worth processing?**
+> Duration; sample rate, bit depth and `recording_info.channel_balance_db` /
+> `channel_correlation`; `peaks.peak_db`; `clipping.clipped_region_count`;
+> `surface_noise.noise_floor_db`; the number and length of the silent gaps; and
+> for a multi-file album, **which file is which side** and how you concluded it.
+> Ask before planning anything: a clipped or mis-wired transfer should be
+> re-recorded, not processed.
 
-5. **Lint before handing over** — never give the user an unexecutable plan:
-   ```sh
-   vinyl-process lint processing_plan.json --audio <recording> --analysis analysis.json
-   ```
-   Fix every `error`. Explain or fix every `warning`.
+### 2. Gather context
 
-6. **Confirm with the user**: track list with durations, and the decisions worth
-   knowing about (unusual boundaries, skipped stages, aggressive declicking).
+- Release identity: artist/album, or a Discogs/MusicBrainz release ID or URL.
+  Prefer an explicit ID — pressings differ.
+- User preferences: `vinyl-process config show`. These are defaults for your
+  decisions, not commands to the executor.
+- Tracklist with per-track durations, when a release is known.
 
-7. **Execute** once they approve, then sanity-check the manifest:
-   ```sh
-   vinyl-process execute processing_plan.json --audio <recording> -o <album-dir>
-   ```
+### 3. Decide each section, checking in after each one
+
+| Order | Section | Skill |
+|---|---|---|
+| 1 | `split` | [plan-split](../plan-split/SKILL.md) |
+| 2 | `declick` | [plan-declick](../plan-declick/SKILL.md) |
+| 3 | `normalize` | [plan-normalize](../plan-normalize/SKILL.md) |
+| 4 | `metadata` | [plan-metadata](../plan-metadata/SKILL.md) |
+| 5 | `export` | [plan-export](../plan-export/SKILL.md) |
+
+Each stage skill states what its own checkpoint must show. In short:
+
+> **Checkpoint 2 — the track list.** Measured duration against the label's, with
+> the difference per track, and every difference over ~5 s explained.
+>
+> **Checkpoint 3 — repair or not.** The click rate in the gaps against the rate
+> under the programme, and how many spans a repair would interpolate.
+>
+> **Checkpoint 4 — is the level to be touched at all?** This is a yes/no question
+> and it is theirs, not yours. Quote `peaks.peak_db` and the target, and say the
+> gain is *at least* `target - peak_db` — it is usually larger, because the side's
+> loudest sample is often the stylus drop in the lead-in, which the split
+> excludes. Never present normalization as a default that needs no answer.
+>
+> **Checkpoint 5 — the release.** Label, catalogue number, country, year and the
+> tracklist you matched, plus how you matched it. A wrong release makes every tag
+> wrong.
+
+`export` needs no stop of its own: keep the capture's own bit depth and sample
+rate, and state that in the final summary. Anything else is a request, not a
+default.
+
+### 4. Assemble
+
+- `source`: copy verbatim from `analysis.json`.
+- `analysis`: `{"path": "analysis.json", "sha256": "<sha256 of that file>"}`.
+- `created_by`: `"plan-album"`.
+- one object per section, each with a `decision` block recording `skill`,
+  `rationale`, `confidence` and the `inputs` you consulted.
+- `notes`: a short summary of the decisions that were not obvious.
+- See `examples/processing_plan.example.json` for the shape and
+  `schemas/processing_plan.schema.json` for the formal contract.
+
+### 5. Lint, then get the go-ahead
+
+```sh
+vinyl-process lint processing_plan.json --audio <recording> --analysis analysis.json
+```
+
+Fix every `error`. Explain or fix every `warning`.
+
+> **Checkpoint 6 — the final gate.** One line per stage with its on/off state and
+> what it will do (`split: 5 tracks`, `declick: off`, `normalize: album_peak
+> -1.0 dBFS`, `export: FLAC 16-bit/48 kHz`, `metadata: 10 tags`), plus the lint
+> result. This is the last point at which nothing has been written.
+
+### 6. Execute and check the receipt
+
+```sh
+vinyl-process execute processing_plan.json --audio <recording> -o <album-dir>
+```
+
+> **Checkpoint 7 — what actually happened.** From `manifest.json`: the applied
+> gain, each stage's status, and the track durations. The manifest is the first
+> place the *real* gain appears, so compare it with what you predicted at
+> checkpoint 4 and say so if it differs.
+
+Then `vinyl-process verify <album-dir>/manifest.json` to prove the run reproduces.
+
+## Running unattended
+
+If the person explicitly asks for the whole thing without stops, do it — but list
+which checkpoints you skipped and what you assumed at each, and put the same list
+in `notes`. Never skip checkpoint 4 silently: a changed playback level is the one
+decision people notice afterwards and cannot undo without re-running.
 
 ## Rules
 

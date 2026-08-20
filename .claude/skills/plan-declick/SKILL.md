@@ -73,6 +73,22 @@ Plus `preferences.declick_intent` (`conservative` / `balanced` / `aggressive`).
 }
 ```
 
+## Checkpoint
+
+Repair is destructive in the sense that matters: every repaired span is
+interpolated audio. Present, before deciding:
+
+- `clicks.silence_rate_per_minute` against `clicks.programme_rate_per_minute` —
+  and say which of the two readings this is (worn pressing, or detector
+  over-triggering on the material);
+- the amplitude histogram in one line: how many events are above −30 dBFS, which
+  is the audible band, against how many sit near the noise floor;
+- how many spans the proposed threshold would interpolate, in total and per
+  minute;
+- your recommendation and what it costs if it is wrong.
+
+`"enabled": false` is a legitimate answer and is often the right one.
+
 ## Rules
 
 - Never run repairs yourself; the executor does.

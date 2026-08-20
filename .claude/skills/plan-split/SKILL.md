@@ -74,6 +74,20 @@ have none, ask the user for the track count before guessing.
 }
 ```
 
+## Checkpoint
+
+Hand back a table, one row per track: position, title, the duration you cut, the
+label's duration, and the difference. Then:
+
+- name the evidence each boundary came from (`silence`, `rms_valley`, or
+  interpolated from durations because nothing was detected there);
+- explain every difference over ~5 s — the usual causes are a fade the threshold
+  cut short and a label duration that does not match the pressing;
+- flag any boundary whose `music_end_sample` had to be overridden.
+
+Boundaries are the one decision that cannot be checked afterwards without
+listening to the whole side, so do not move on until the table is agreed.
+
 ## Rules
 
 - Positions are integer samples into the *source* file. Never seconds.
