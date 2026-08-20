@@ -215,3 +215,38 @@ def test_a_track_reaching_into_the_run_out_is_informational(
 
 def test_raise_for_errors_passes_clean_findings() -> None:
     raise_for_errors([Finding("warning", "x", "y")])
+
+
+def test_a_fade_at_a_gapless_join_is_fatal(plan: ProcessingPlan) -> None:
+    """Contiguous boundaries mean gapless: a fade there breaks reassembly."""
+
+    def make_contiguous(payload: dict[str, Any]) -> None:
+        tracks = payload["split"]["tracks"]
+        tracks[1]["start_sample"] = tracks[0]["end_sample"]
+
+    findings = validate_plan(mutated(plan, make_contiguous))
+    assert "gapless-fade" in codes(findings)
+
+
+def test_a_gapless_side_without_fades_is_accepted(plan: ProcessingPlan) -> None:
+    def make_gapless(payload: dict[str, Any]) -> None:
+        tracks = payload["split"]["tracks"]
+        tracks[1]["start_sample"] = tracks[0]["end_sample"]
+        for track in tracks:
+            track["fade_in_ms"] = 0.0
+            track["fade_out_ms"] = 0.0
+
+    findings = validate_plan(mutated(plan, make_gapless))
+    assert "gapless-fade" not in codes(findings)
+    assert "hard-cut" not in codes(findings), "a deliberate gapless side must not be nagged"
+
+
+def test_hard_cuts_without_fades_are_flagged_once(plan: ProcessingPlan) -> None:
+    def drop_fades(payload: dict[str, Any]) -> None:
+        for track in payload["split"]["tracks"]:
+            track["fade_in_ms"] = 0.0
+            track["fade_out_ms"] = 0.0
+
+    findings = [f for f in validate_plan(mutated(plan, drop_fades)) if f.code == "hard-cut"]
+    assert len(findings) == 1
+    assert "click" in findings[0].message

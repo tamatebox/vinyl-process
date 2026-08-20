@@ -72,6 +72,73 @@ def test_silence_regions_match_the_generated_gaps(
         assert end == pytest.approx(expected_end, abs=TOLERANCE_SECONDS)
 
 
+def test_music_end_follows_a_fade_past_the_silence_threshold(tmp_path) -> None:
+    """A track that fades out crosses the threshold long before it has stopped.
+
+    Regression test for the behaviour that cost 22 s of a real pressing's closing
+    fade: ``start_sample`` is where the level crossed a fixed threshold, while
+    ``music_end_sample`` is where the decay settles — and only the latter is safe
+    to cut at.
+    """
+    import soundfile as sf
+
+    sample_rate = 16000
+    noise_amplitude = 4e-4  # -68 dBFS, so the threshold lands near -60 dBFS
+    tone_amplitude = 0.5
+    fade_seconds = 25.0
+
+    def build(with_fade: bool) -> np.ndarray:
+        rng = np.random.default_rng(4)
+
+        def noise(seconds: float) -> np.ndarray:
+            return rng.normal(0.0, noise_amplitude, round(seconds * sample_rate))
+
+        def tone(seconds: float) -> np.ndarray:
+            t = np.arange(round(seconds * sample_rate)) / sample_rate
+            return tone_amplitude * np.sin(2 * np.pi * 220 * t)
+
+        parts = [noise(2.0), tone(4.0)]
+        if with_fade:
+            # dB-linear fade that stops exactly at the noise floor, so it spends
+            # several seconds under the silence threshold while still decaying.
+            decibels = np.linspace(
+                0.0,
+                20 * np.log10(noise_amplitude / tone_amplitude),
+                round(fade_seconds * sample_rate),
+            )
+            parts.append(tone(fade_seconds) * 10.0 ** (decibels / 20.0))
+        parts.append(noise(8.0))
+        return np.concatenate(parts)
+
+    def trailing_region(with_fade: bool):
+        mono = build(with_fade)
+        path = tmp_path / f"fade-{with_fade}.wav"
+        sf.write(str(path), np.column_stack([mono, mono]), sample_rate, subtype="PCM_24")
+        document = run_analysis(path, analyzers=["silence"])
+        assert document.silence is not None
+        region = document.silence.regions[-1]
+        return region.start_sample / sample_rate, region.music_end_sample / sample_rate
+
+    crossing, settled = trailing_region(with_fade=False)
+    assert crossing == pytest.approx(6.0, abs=0.2)
+    # Nothing to follow: the two agree to within the smoothing window.
+    assert settled - crossing < 1.0
+
+    crossing, settled = trailing_region(with_fade=True)
+    # The threshold fires a long way into the fade, which really ends at 6 + 25 s.
+    assert crossing < 27.0
+    assert settled - crossing > 2.0
+    assert settled <= 6.0 + fade_seconds
+
+
+def test_music_end_equals_the_start_for_a_leading_region(analysis: AnalysisDocument) -> None:
+    """There is no music before the lead-in, so there is nothing to follow."""
+    assert analysis.silence is not None
+    leading = analysis.silence.regions[0]
+    assert leading.start_sample == 0
+    assert leading.music_end_sample == 0
+
+
 def test_lead_in_and_lead_out_are_detected(
     analysis: AnalysisDocument, recording: SyntheticRecording
 ) -> None:
@@ -147,6 +214,41 @@ def test_click_histograms_are_well_formed_and_bin_the_injected_level(
     injected_db = 20 * np.log10(CLICK_AMPLITUDE)
     loudest_edge = clicks.amplitude_histogram.bin_edges[-2]
     assert injected_db > loudest_edge - 20
+
+
+def test_click_rates_separate_surface_noise_from_over_triggering(
+    analysis: AnalysisDocument, recording: SyntheticRecording
+) -> None:
+    """The fixture injects clicks only into the programme, so the programme rate
+    must exceed the silence rate — this is what tells a worn pressing (both high)
+    from a detector firing on the music (only the programme high)."""
+    clicks = analysis.clicks
+    assert clicks is not None
+    assert clicks.silence_rate_per_minute == 0.0
+    assert clicks.programme_rate_per_minute is not None
+    assert clicks.programme_rate_per_minute > 0.0
+
+
+def test_clicks_pulls_in_the_silence_it_needs(recording: SyntheticRecording) -> None:
+    document = run_analysis(recording.path, analyzers=["clicks"])
+    assert [run.name for run in document.analyzers] == [
+        "rms_profile",
+        "surface_noise",
+        "silence",
+        "clicks",
+    ]
+
+
+def test_click_rates_are_absent_when_there_are_no_gaps(tmp_path) -> None:
+    """A document must not invent a rate it could not measure."""
+    from tests.fixtures.synth import write_recording
+
+    gapless = write_recording(
+        tmp_path / "gapless.wav", track_seconds=(6.0,), lead_in=0.5, lead_out=0.5
+    )
+    document = run_analysis(gapless.path, analyzers=["clicks"])
+    assert document.clicks is not None
+    assert document.clicks.silence_rate_per_minute is None
 
 
 def test_click_density_covers_the_whole_recording(

@@ -225,8 +225,22 @@ end to end for determinism.
 ## Known limitations
 
 - **One source file per plan.** A two-sided album is two recordings, two analyses
-  and two plans exported into the same directory. A multi-source plan would need a
-  `sources[]` array and per-track source references.
+  and two plans exported into the same directory — `split.tracks[].index` carries
+  the album-wide track number and `metadata.total_tracks` the album-wide count, so
+  the numbering comes out right, and each run needs its own `--manifest` name. What
+  this does *not* solve is normalization: `album_peak` is computed per plan, so two
+  sides whose loudest passages differ get slightly different gains (0.09 dB on the
+  record this was tested against, but arbitrarily more in principle). A true
+  album-wide gain needs a multi-source plan, or an explicit-gain mode the skill
+  fills in from both analyses.
+- **The click detector's threshold is global.** `mad_interpolate` derives one
+  robust sigma for the whole side, so it under-detects in quiet passages and
+  over-detects wherever the material's high-frequency energy is bursty. On a
+  bass-heavy pressing it reported 1100 events/min under the programme against
+  9/min in the inter-track gaps — the events were tracking the music, not the
+  surface. `clicks.silence_rate_per_minute` versus
+  `clicks.programme_rate_per_minute` exists so a skill can see this; the fix is a
+  block-adaptive threshold, which would be a new algorithm id.
 - **`mad_interpolate` is a short-gap repairer.** It removes clicks up to a few
   milliseconds and leaves seams around −60 dBFS; wider damage needs a predictive
   (LPC/Janssen) interpolator, which would be a new algorithm id in the same engine.

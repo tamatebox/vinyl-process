@@ -65,4 +65,10 @@ You are the planning layer: **you decide, Python only measures and executes.**
 - The plan must stand alone: someone with only the recording and the plan must be
   able to reproduce the album exactly.
 - One recording per plan. A two-sided album is two recordings, two analyses and
-  two plans exported into the same album directory.
+  two plans exported into the same album directory:
+  - side B's `split.tracks[].index` continues the album numbering (6, 7, …) and
+    both plans set `metadata.total_tracks`;
+  - each run gets its own receipt: `--manifest manifest-side-a.json`;
+  - `album_peak` is computed per plan, so check the two sides' `peaks.peak_db`
+    against each other and say so in `notes` if they differ by more than ~1 dB —
+    the sides will end up at slightly different gains.

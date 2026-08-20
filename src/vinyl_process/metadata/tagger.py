@@ -44,8 +44,13 @@ _ID3_TXXX = {
 
 
 def resolve_tags(plan: MetadataPlan, track_index: int, total_tracks: int) -> dict[str, list[str]]:
-    """Flatten the plan's metadata into canonical tag names for one track."""
+    """Flatten the plan's metadata into canonical tag names for one track.
+
+    ``total_tracks`` is what this run produces; ``plan.total_tracks`` overrides it,
+    which is how side B of a record still tags ``5/10`` rather than ``5/5``.
+    """
     track = plan.track_for(track_index)
+    album_total = plan.total_tracks or total_tracks
     values: dict[str, object] = {
         "album": plan.album,
         "albumartist": plan.album_artist,
@@ -60,7 +65,7 @@ def resolve_tags(plan: MetadataPlan, track_index: int, total_tracks: int) -> dic
         "discogs_release_id": plan.discogs_release_id,
         "musicbrainz_albumid": plan.musicbrainz_release_id,
         "tracknumber": track_index,
-        "tracktotal": total_tracks,
+        "tracktotal": album_total,
         "position": track.position if track else None,
         "style": list(plan.styles) or None,
     }

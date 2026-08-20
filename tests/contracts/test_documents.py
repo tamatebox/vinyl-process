@@ -99,7 +99,19 @@ def test_split_requires_contiguous_non_overlapping_tracks() -> None:
     with pytest.raises(ValidationError, match="at least one track"):
         plan_with([])
     with pytest.raises(ValidationError, match="contiguous"):
-        plan_with([{"index": 2, "start_sample": 0, "end_sample": 100}])
+        plan_with(
+            [
+                {"index": 1, "start_sample": 0, "end_sample": 100},
+                {"index": 3, "start_sample": 200, "end_sample": 300},
+            ]
+        )
+    with pytest.raises(ValidationError, match="contiguous"):
+        plan_with(
+            [
+                {"index": 2, "start_sample": 0, "end_sample": 100},
+                {"index": 1, "start_sample": 200, "end_sample": 300},
+            ]
+        )
     with pytest.raises(ValidationError, match="overlap"):
         plan_with(
             [
@@ -202,3 +214,31 @@ def test_manifest_output_digests_are_keyed_by_filename() -> None:
 def test_analysis_sections_are_optional_so_subsets_stay_valid() -> None:
     document = AnalysisDocument.model_validate({"generated_by": "t", "source": SOURCE})
     assert all(getattr(document, name) is None for name in AnalysisDocument.section_fields())
+
+
+def test_a_second_side_continues_the_album_numbering() -> None:
+    """Side B is its own plan but keeps the album's track numbers, so both sides
+    can be exported into one directory without colliding."""
+    side_b = ProcessingPlan.model_validate(
+        {
+            **MINIMAL_PLAN,
+            "split": {
+                "tracks": [
+                    {"index": 6, "start_sample": 0, "end_sample": 100},
+                    {"index": 7, "start_sample": 100, "end_sample": 200},
+                ]
+            },
+            "metadata": {
+                "total_tracks": 10,
+                "tracks": [{"index": 6, "title": "Six"}, {"index": 7, "title": "Seven"}],
+            },
+        }
+    )
+    assert side_b.track_indices() == [6, 7]
+    assert side_b.metadata.total_tracks == 10
+    assert side_b.metadata.title_for(7) == "Seven"
+
+
+def test_total_tracks_must_be_positive() -> None:
+    with pytest.raises(ValidationError):
+        ProcessingPlan.model_validate({**MINIMAL_PLAN, "metadata": {"total_tracks": 0}})

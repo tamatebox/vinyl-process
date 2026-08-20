@@ -13,6 +13,11 @@ is interpolated audio.
 
 From `analysis.json`:
 
+- `clicks.silence_rate_per_minute` versus `clicks.programme_rate_per_minute` —
+  **read these first.** A worn pressing crackles in the inter-track gaps as much
+  as under the music; a detector over-triggering on the material fires only under
+  the programme. On one bass-heavy pressing the split was 9/min against 1100/min,
+  and declicking would have interpolated 17 000 musical transients.
 - `clicks.count`, `clicks.rate_per_minute`
 - `clicks.amplitude_histogram` — `bin_edges` in dBFS; the tail tells you whether
   the damage is loud or merely present
@@ -34,7 +39,9 @@ Plus `preferences.declick_intent` (`conservative` / `balanced` / `aggressive`).
    at scale. Check availability with `vinyl-process engines`.
 2. **Skip entirely** (`"enabled": false`) when `rate_per_minute < 2` and the
    amplitude histogram is empty above −30 dBFS: the repair risk exceeds the
-   benefit.
+   benefit. Skip it too when the programme rate dwarfs the silence rate — that is
+   the detector firing on the music, and no threshold in the plan will fix a
+   threshold that is global by construction.
 3. **Threshold** — engine-specific scale. For `native` it is robust-sigma (MAD)
    multiples: 6.0 default; 4.5–5.0 for noisy pressings (rate > 50/min with a hot
    histogram tail); 7.0–8.0 for quiet pressings, or when

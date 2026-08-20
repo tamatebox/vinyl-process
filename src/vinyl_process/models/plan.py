@@ -58,7 +58,12 @@ class EngineSection(ToggleableSection):
 # --------------------------------------------------------------------------- #
 class TrackBoundary(ContractModel):
     """A cut, in integer source samples. Titles live in the metadata section —
-    the plan must not carry the same string twice."""
+    the plan must not carry the same string twice.
+
+    ``index`` is the track's position on the *album*, not within this plan: side B
+    of a two-sided record continues where side A stopped, so both sides can be
+    exported into one directory with correct numbering.
+    """
 
     index: int = Field(ge=1)
     start_sample: int = Field(ge=0)
@@ -83,8 +88,9 @@ class SplitPlan(EngineSection):
         if not self.tracks:
             raise ValueError("split.enabled requires at least one track")
         indices = [t.index for t in self.tracks]
-        if indices != list(range(1, len(indices) + 1)):
-            raise ValueError("track indices must be contiguous starting at 1")
+        first = indices[0]
+        if indices != list(range(first, first + len(indices))):
+            raise ValueError(f"track indices must be contiguous and ascending, got {indices}")
         for prev, cur in zip(self.tracks, self.tracks[1:], strict=False):
             if cur.start_sample < prev.end_sample:
                 raise ValueError(f"tracks {prev.index} and {cur.index} overlap")
@@ -127,6 +133,10 @@ class TrackTag(ContractModel):
 
 
 class MetadataPlan(ToggleableSection):
+    total_tracks: int | None = Field(default=None, ge=1)
+    """Tracks on the whole album, when this plan covers only one side. ``None``
+    means "as many as this plan produces"."""
+
     album: str | None = None
     album_artist: str | None = None
     artist: str | None = None

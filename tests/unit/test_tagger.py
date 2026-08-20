@@ -124,3 +124,17 @@ def test_unsupported_container_is_reported(tmp_path: Path) -> None:
     path.write_bytes(b"not audio")
     with pytest.raises(MetadataError, match="supported containers"):
         apply_tags(path, METADATA, 1, 1)
+
+
+def test_album_total_overrides_the_per_run_count() -> None:
+    """Side B of a record tags 6/10, not 6/5."""
+    side_b = MetadataPlan.model_validate(
+        {
+            "total_tracks": 10,
+            "album": "Two Sides",
+            "tracks": [{"index": 6, "title": "Sixth"}],
+        }
+    )
+    tags = resolve_tags(side_b, 6, total_tracks=5)
+    assert tags["tracknumber"] == ["6"]
+    assert tags["tracktotal"] == ["10"]

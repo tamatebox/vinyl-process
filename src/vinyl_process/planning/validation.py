@@ -54,6 +54,7 @@ def validate_plan(
     findings += _check_version(plan)
     findings += _check_engines(plan)
     findings += _check_tracks(plan)
+    findings += _check_cuts(plan)
     findings += _check_naming(plan)
     findings += _check_export(plan)
     if audio_path is not None:
@@ -194,6 +195,58 @@ def _check_tracks(plan: ProcessingPlan) -> list[Finding]:
                 "orphan-metadata",
                 f"metadata describes track(s) {sorted(extra)} that the split does not produce",
                 "metadata.tracks",
+            )
+        )
+    return findings
+
+
+def _check_cuts(plan: ProcessingPlan) -> list[Finding]:
+    """How the cuts meet the audio: gapless requires the opposite of the default.
+
+    A side meant to play continuously is expressed by contiguous boundaries
+    (``end_sample == next start_sample``) so the tracks concatenate back into the
+    original samples. A fade at such a boundary silently defeats that: every
+    transition gets a dip, and the reassembled side is no longer the recording.
+
+    The reverse case — a cut into recorded material with no fade — is a click,
+    because a vinyl cut lands in surface noise rather than digital silence.
+    """
+    if not plan.split.enabled or len(plan.split.tracks) < 1:
+        return []
+
+    findings: list[Finding] = []
+    for previous, current in zip(plan.split.tracks, plan.split.tracks[1:], strict=False):
+        if current.start_sample != previous.end_sample:
+            continue
+        if previous.fade_out_ms > 0 or current.fade_in_ms > 0:
+            findings.append(
+                Finding(
+                    "error",
+                    "gapless-fade",
+                    f"tracks {previous.index} and {current.index} are contiguous, which means "
+                    "gapless playback, but a fade is applied at the join: the tracks would no "
+                    "longer concatenate back into the recording",
+                    f"split.tracks[{current.index}]",
+                )
+            )
+
+    hard_cuts = sum(
+        (track.fade_in_ms == 0 and track.start_sample > 0)
+        + (track.fade_out_ms == 0 and track.end_sample < plan.source.num_samples)
+        for track in plan.split.tracks
+    )
+    contiguous = sum(
+        current.start_sample == previous.end_sample
+        for previous, current in zip(plan.split.tracks, plan.split.tracks[1:], strict=False)
+    )
+    if hard_cuts and contiguous < len(plan.split.tracks) - 1:
+        findings.append(
+            Finding(
+                "warning",
+                "hard-cut",
+                f"{hard_cuts} track edge(s) cut into the recording with no fade; a vinyl cut "
+                "lands in surface noise, not silence, so the step is audible as a click",
+                "split.tracks",
             )
         )
     return findings

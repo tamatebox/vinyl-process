@@ -46,9 +46,9 @@ vinyl-process lint processing_plan.json --strict     # warnings are failures too
 
 Answers "is this plan executable?" — the questions the schema cannot: unknown or
 incapable engines, cuts past the end of the recording, fades longer than their
-track, a filename template that fails to render or collides, a source digest that
-no longer matches, an analysis of a different recording, normalizing a clipped
-source. Exits 65 if anything is fatal.
+track, a fade at a gapless join, a filename template that fails to render or
+collides, a source digest that no longer matches, an analysis of a different
+recording, normalizing a clipped source. Exits 65 if anything is fatal.
 
 ### execute
 
@@ -60,6 +60,18 @@ Runs the plan and writes the tracks plus `manifest.json`. Nothing is written unt
 validation passes. Existing files are protected — pass `--overwrite` to replace
 them. `--no-verify-source` skips the digest check (the length check still applies,
 so truncated audio cannot silently produce short tracks).
+
+`--manifest NAME` names the receipt. A two-sided record is two plans exported into
+one album directory, and each needs its own:
+
+```sh
+vinyl-process execute plan-side-a.json --audio side-a.flac -o album --manifest manifest-side-a.json
+vinyl-process execute plan-side-b.json --audio side-b.flac -o album --manifest manifest-side-b.json
+```
+
+Side B's plan numbers its tracks 6-10 (`split.tracks[].index`) and sets
+`metadata.total_tracks` to 10, so the two runs land in one directory without
+colliding and tag as `6/10` rather than `1/5`.
 
 ### verify
 

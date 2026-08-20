@@ -56,8 +56,13 @@ def execute_plan(
     plan_digest: str = "",
     verify_source: bool = True,
     overwrite: bool = False,
+    manifest_name: str = MANIFEST_NAME,
 ) -> ExecutionManifest:
-    """Execute ``plan`` into ``output_dir`` and return the manifest."""
+    """Execute ``plan`` into ``output_dir`` and return the manifest.
+
+    ``manifest_name`` matters for a two-sided record: both sides export into one
+    album directory, and each run needs its own receipt.
+    """
     return _Execution(
         plan=plan,
         output_dir=Path(output_dir),
@@ -66,6 +71,7 @@ def execute_plan(
         plan_digest=plan_digest,
         verify_source=verify_source,
         overwrite=overwrite,
+        manifest_name=manifest_name,
     ).run()
 
 
@@ -82,6 +88,7 @@ class _Execution:
         plan_digest: str,
         verify_source: bool,
         overwrite: bool,
+        manifest_name: str = MANIFEST_NAME,
     ) -> None:
         self.plan = plan
         self.output_dir = output_dir
@@ -90,6 +97,7 @@ class _Execution:
         self.plan_digest = plan_digest
         self.verify_source = verify_source
         self.overwrite = overwrite
+        self.manifest_name = manifest_name
         self.stages: list[StageRecord] = []
         self.warnings: list[str] = []
         self.applied_gain_db: float | None = None
@@ -133,7 +141,12 @@ class _Execution:
             completed_at=_now(),
             warnings=self.warnings,
         )
-        manifest_path = self.output_dir / MANIFEST_NAME
+        manifest_path = self.output_dir / self.manifest_name
+        if manifest_path.exists() and not self.overwrite:
+            raise ExecutionError(
+                f"{manifest_path} already exists; pass overwrite=True (CLI: --overwrite), "
+                "or give this run its own --manifest name"
+            )
         manifest_path.write_text(manifest.model_dump_json(indent=2) + "\n", encoding="utf-8")
         logger.info("wrote %s", manifest_path)
         return manifest

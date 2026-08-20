@@ -296,6 +296,19 @@
           "title": "Styles",
           "type": "array"
         },
+        "total_tracks": {
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Total Tracks"
+        },
         "tracks": {
           "items": {
             "$ref": "#/$defs/TrackTag"
@@ -491,7 +504,7 @@
     },
     "TrackBoundary": {
       "additionalProperties": false,
-      "description": "A cut, in integer source samples. Titles live in the metadata section \u2014\nthe plan must not carry the same string twice.",
+      "description": "A cut, in integer source samples. Titles live in the metadata section \u2014\nthe plan must not carry the same string twice.\n\n``index`` is the track's position on the *album*, not within this plan: side B\nof a two-sided record continues where side A stopped, so both sides can be\nexported into one directory with correct numbering.",
       "properties": {
         "end_sample": {
           "exclusiveMinimum": 0,

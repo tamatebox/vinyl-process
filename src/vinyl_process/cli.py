@@ -193,6 +193,13 @@ def lint(
 )
 @click.option("--no-verify-source", is_flag=True, help="Skip the plan/audio SHA-256 check.")
 @click.option("--overwrite", is_flag=True, help="Replace existing output files.")
+@click.option(
+    "--manifest",
+    "manifest_name",
+    default="manifest.json",
+    show_default=True,
+    help="Receipt filename; give each side of a record its own.",
+)
 @handle_errors
 def execute(
     plan_file: str,
@@ -200,6 +207,7 @@ def execute(
     output_dir: str,
     no_verify_source: bool,
     overwrite: bool,
+    manifest_name: str,
 ) -> None:
     """Deterministically execute PLAN_FILE (processing_plan.json)."""
     from vinyl_process.executor import execute_plan
@@ -213,6 +221,7 @@ def execute(
         plan_digest=digest_file(plan_file),
         verify_source=not no_verify_source,
         overwrite=overwrite,
+        manifest_name=manifest_name,
     )
     click.echo(f"{len(manifest.outputs)} track(s) exported to {output_dir}")
     if manifest.applied_gain_db is not None:

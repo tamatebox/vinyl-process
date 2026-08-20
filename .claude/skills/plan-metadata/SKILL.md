@@ -26,7 +26,8 @@ conclude must be *in* the plan.
    pressing. If several candidates survive, ask the user.
 2. Extract album-level tags: `album`, `album_artist`, `artist`, `year`, `genre`,
    `styles`, `label`, `catalog_number`, and the resolved `discogs_release_id`
-   and/or `musicbrainz_release_id`.
+   and/or `musicbrainz_release_id`. Set `total_tracks` to the album's count
+   whenever this plan covers only one side, or side B will tag `1/5`.
 3. Per track: `index` (matching the `split` indices exactly), `title`, optional
    `artist` for compilations and split releases, and `position` as printed on the
    label (`"A1"`, `"B3"`).
@@ -49,6 +50,7 @@ conclude must be *in* the plan.
   "discogs_release_id": "1873013",
   "musicbrainz_release_id": null,
   "artwork_path": null,
+  "total_tracks": 10,               // album-wide, when this plan is one side
   "tracks": [ { "index": 1, "title": "Speak to Me", "artist": null, "position": "A1" } ],
   "decision": { "skill": "plan-metadata", "rationale": "…", "confidence": 0.9,
                 "inputs": ["discogs:release/1873013"] }

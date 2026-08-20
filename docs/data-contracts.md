@@ -54,7 +54,11 @@ happened.
                      "values_db": [-68.1, -67.9, …] },
   "surface_noise": { "noise_floor_db": -68.0, "stability_db": 0.4 },
   "silence":       { "threshold_db": -60.0,
-                     "regions": [ { "start_sample": 0, "end_sample": 88200,
+                     "regions": [ { "start_sample": 0,
+                                    "music_end_sample": 0,   // where the music
+                                    // before this region really stopped, which on
+                                    // a fading track is well past start_sample
+                                    "end_sample": 88200,
                                     "mean_rms_db": -68.0, "duration_seconds": 2.0,
                                     "confidence": 0.93 } ] },
   "boundaries":    { "candidates": [ { "sample": 489510, "method": "silence",
@@ -62,6 +66,8 @@ happened.
                      "lead_in_end_sample": 88200,
                      "lead_out_start_sample": 846720 },
   "clicks":        { "count": 5, "rate_per_minute": 13.8,
+                     "silence_rate_per_minute": 0.0,     // rate in the gaps…
+                     "programme_rate_per_minute": 28.0,  // …versus under the music
                      "amplitude_histogram": { "unit": "dBFS", "bin_edges": [...],
                                               "counts": [...] },
                      "width_histogram": { "unit": "ms", "bin_edges": [...],
@@ -95,6 +101,12 @@ Every section carries `meta` (omitted above except once for brevity):
           "confidence": 0.75 }
 ```
 
+`clicks.silence_rate_per_minute` and `clicks.programme_rate_per_minute` are the
+pair that decides whether declicking helps: a worn pressing crackles in the
+inter-track gaps too, while a detector over-triggering on the material only fires
+under the programme. Both are `null` when the recording has no gap long enough to
+measure (`silence_min_seconds`, 2 s by default).
+
 `meta.params` records the parameters actually used, so a measurement stays
 explainable years later. `meta.confidence` is `1.0` for direct measurements
 (peaks, channel levels), lower for estimators (0.75 for click statistics, 0.7 for
@@ -122,6 +134,10 @@ block: which skill decided, why, how confident it was, and what it consulted.
                   "inputs": ["analysis.json#boundaries", "discogs:release/1873013"] },
     "tracks": [ { "index": 1, "start_sample": 88200, "end_sample": 445410,
                   "fade_in_ms": 20.0, "fade_out_ms": 30.0 } ]
+    // index is the position on the *album*: side B continues where side A
+    // stopped (6, 7, …), so both sides export into one directory. Indices must
+    // be contiguous and ascending within a plan; gaps between tracks are legal
+    // and normal — the dead middle of a vinyl gap belongs to neither track.
   },
 
   "declick": {
@@ -144,6 +160,7 @@ block: which skill decided, why, how confident it was, and what it consulted.
 
   "metadata": {
     "enabled": true,                  // false = do not write tags (names still used)
+    "total_tracks": 10,               // album-wide; null = as many as this plan cuts
     "album": "The Dark Side of the Moon", "album_artist": "Pink Floyd",
     "artist": "Pink Floyd", "year": 1973, "genre": "Rock",
     "styles": ["Prog Rock"], "label": "Harvest", "catalog_number": "SHVL 804",

@@ -11,7 +11,7 @@ import numpy as np
 
 from vinyl_process.analyzer.base import AnalyzerContext
 from vinyl_process.analyzer.registry import analyzer
-from vinyl_process.models.analysis import ClicksSection, Histogram
+from vinyl_process.models.analysis import ClicksSection, Histogram, SilenceSection
 from vinyl_process.models.common import SectionMeta
 from vinyl_process.signal_ops import amplitude_to_db, click_events
 
@@ -33,9 +33,11 @@ def _histogram(values: np.ndarray, edges: tuple[float, ...], unit: str) -> Histo
 
 @analyzer(
     name="clicks",
-    version="1.0",
-    description="Click count, rate, amplitude and width histograms, density over time.",
+    version="1.1",
+    description="Click count, rate, histograms, and where the clicks are.",
+    requires=("silence",),
     defaults={
+        "silence_min_seconds": 2.0,
         "threshold_mad": 6.0,
         "max_width_ms": 3.0,
         "highpass_hz": 3000.0,
@@ -61,6 +63,7 @@ def analyze_clicks(context: AnalyzerContext) -> ClicksSection:
     positions = [start for start, _e, _p in events]
     limit = context.integer("max_positions")
     minutes = max(audio.duration_seconds / 60.0, 1e-9)
+    silence_rate, programme_rate = _rates_by_region(context, positions)
 
     return ClicksSection(
         # The detector is a robust-statistics estimator, not ground truth: it is
@@ -71,6 +74,8 @@ def analyze_clicks(context: AnalyzerContext) -> ClicksSection:
         amplitude_histogram=_histogram(peaks_db, AMPLITUDE_BINS_DB, "dBFS"),
         width_histogram=_histogram(widths_ms, WIDTH_BINS_MS, "ms"),
         density_per_minute=_density_per_minute(positions, audio.sample_rate, audio.num_frames),
+        silence_rate_per_minute=silence_rate,
+        programme_rate_per_minute=programme_rate,
         positions_sample=positions[:limit],
         positions_truncated=len(positions) > limit,
     )
@@ -85,3 +90,42 @@ def _density_per_minute(positions: list[int], sample_rate: int, num_frames: int)
     for position in positions:
         counts[min(buckets - 1, int(position // (sample_rate * 60)))] += 1.0
     return [float(c) for c in counts]
+
+
+def _rates_by_region(
+    context: AnalyzerContext, positions: list[int]
+) -> tuple[float | None, float | None]:
+    """Split the detection rate between inter-track silence and programme.
+
+    Only stretches of at least ``silence_min_seconds`` count as silence. The
+    default of 2 s is chosen to include a normal inter-track gap on a record while
+    excluding the sub-second quiet moments that occur inside a track.
+    """
+    silence = context.typed_section("silence", SilenceSection)
+    sample_rate = context.audio.sample_rate
+    total_samples = context.audio.num_frames
+    minimum = context.number("silence_min_seconds") * sample_rate
+
+    gaps = [
+        (region.start_sample, region.end_sample)
+        for region in silence.regions
+        if region.end_sample - region.start_sample >= minimum
+    ]
+    silent_samples = sum(end - start for start, end in gaps)
+    programme_samples = max(total_samples - silent_samples, 0)
+    if not positions and not gaps:
+        return None, None
+
+    found = np.asarray(positions, dtype=np.int64)
+    in_silence = (
+        int(sum(int(((found >= start) & (found < end)).sum()) for start, end in gaps))
+        if found.size
+        else 0
+    )
+
+    def rate(count: int, samples: int) -> float | None:
+        if samples <= 0:
+            return None
+        return round(count / (samples / sample_rate / 60.0), 2)
+
+    return rate(in_silence, silent_samples), rate(len(positions) - in_silence, programme_samples)

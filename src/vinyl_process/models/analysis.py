@@ -38,6 +38,19 @@ class SilenceRegion(ContractModel):
 
     start_sample: int = Field(ge=0)
     end_sample: int = Field(ge=0)
+
+    music_end_sample: int = Field(ge=0)
+    """Where the music *before* this region actually stopped.
+
+    ``start_sample`` is where the level crossed a fixed threshold, which for a
+    track that fades out happens mid-fade — on one tested pressing 4 s early on
+    one track and 22 s early on another. This is instead where the level has come
+    down to what the region itself measures, so a cut placed here never clips a
+    fade. Equal to ``start_sample`` for a region that begins at sample 0, and a
+    lower bound for a region that is mostly fade rather than silence (typically
+    the trailing one, where the fade and the run-out sit at the same level).
+    """
+
     mean_rms_db: float
     duration_seconds: float = Field(ge=0)
     confidence: Confidence
@@ -133,6 +146,20 @@ class ClicksSection(Section):
     amplitude_histogram: Histogram
     width_histogram: Histogram
     density_per_minute: list[float]
+
+    silence_rate_per_minute: float | None = Field(default=None, ge=0)
+    """Detection rate inside the silent stretches between tracks, where there is
+    nothing but the record's own surface. ``None`` when silence was not measured."""
+
+    programme_rate_per_minute: float | None = Field(default=None, ge=0)
+    """Detection rate where music is playing.
+
+    Read together with :attr:`silence_rate_per_minute` this separates a worn
+    pressing (both rates high) from a detector over-triggering on the material
+    (only the programme rate high) — a distinction the count alone cannot make,
+    and one that decides whether declicking helps or dulls the record.
+    """
+
     positions_sample: list[int]
     positions_truncated: bool = False
 

@@ -28,7 +28,7 @@
     },
     {
       "name": "silence",
-      "version": "1.0",
+      "version": "1.1",
       "status": "ok",
       "message": null,
       "duration_ms": null
@@ -42,7 +42,7 @@
     },
     {
       "name": "clicks",
-      "version": "1.0",
+      "version": "1.1",
       "status": "ok",
       "message": null,
       "duration_ms": null
@@ -135,10 +135,12 @@
   "silence": {
     "meta": {
       "analyzer": "silence",
-      "version": "1.0",
+      "version": "1.1",
       "params": {
         "margin_db": 8.0,
-        "min_duration_seconds": 0.5
+        "min_duration_seconds": 0.5,
+        "settle_seconds": 1.0,
+        "settle_margin_db": 3.0
       },
       "confidence": 0.99
     },
@@ -147,6 +149,7 @@
       {
         "start_sample": 0,
         "end_sample": 88200,
+        "music_end_sample": 0,
         "mean_rms_db": -68.01,
         "duration_seconds": 2.0,
         "confidence": 1.0
@@ -154,6 +157,7 @@
       {
         "start_sample": 441000,
         "end_sample": 538020,
+        "music_end_sample": 463050,
         "mean_rms_db": -68.05,
         "duration_seconds": 2.2,
         "confidence": 1.0
@@ -161,6 +165,7 @@
       {
         "start_sample": 846720,
         "end_sample": 956970,
+        "music_end_sample": 868770,
         "mean_rms_db": -68.05,
         "duration_seconds": 2.5,
         "confidence": 1.0
@@ -255,8 +260,9 @@
   "clicks": {
     "meta": {
       "analyzer": "clicks",
-      "version": "1.0",
+      "version": "1.1",
       "params": {
+        "silence_min_seconds": 2.0,
         "threshold_mad": 6.0,
         "max_width_ms": 3.0,
         "highpass_hz": 3000.0,
@@ -277,6 +283,8 @@
       "counts": [0, 5, 0, 2, 0, 0, 0]
     },
     "density_per_minute": [7.0],
+    "silence_rate_per_minute": 0.0,
+    "programme_rate_per_minute": 28.0,
     "positions_sample": [145527, 224907, 348387, 540210, 626217, 707802, 844500],
     "positions_truncated": false
   },

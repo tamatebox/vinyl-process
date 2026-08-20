@@ -87,6 +87,7 @@
       ]
     },
     "enabled": true,
+    "total_tracks": null,
     "album": "Test Pressing",
     "album_artist": "Synthetic Ensemble",
     "artist": "Synthetic Ensemble",

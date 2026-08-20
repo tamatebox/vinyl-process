@@ -111,7 +111,9 @@ ban-relative-imports = "all"
 
 # --------------------------------------------------------------------------- #
 [tool.mypy]
-python_version = "3.11"
+# No python_version pin: mypy follows the running interpreter, so it agrees with
+# the dependency set that interpreter actually resolved (numpy >= 2.5 requires
+# 3.12 and its stubs use PEP 695 syntax). CI's 3.11 job keeps 3.11 honest.
 files = ["src", "tests", "scripts"]
 strict = true
 warn_unreachable = true
