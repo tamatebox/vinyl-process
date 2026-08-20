@@ -58,10 +58,30 @@ That buys the three properties this project is built around:
 | Layer | May | Must never |
 |---|---|---|
 | Analyzer | read audio, measure, attach confidence | decide processing, write plans, modify audio |
-| Planning skill | read analysis / metadata / preferences, write plan sections | read or write audio samples, run DSP |
+| Planning skill | read analysis / metadata / preferences, write plan sections | produce album audio, run pipeline DSP, ship a decision resting on an unrecorded measurement |
 | DSP engine | transform audio exactly as parameterised | choose parameters, read `analysis.json`, use randomness or the wall clock |
 
-These are enforced mechanically, not by convention:
+The planning row used to read "never read or write audio samples". That is too
+absolute in two places, and stating it absolutely made things worse rather than
+safer, so both exceptions are named here instead.
+
+**A skill may measure raw audio, as a probe.** Neither level nor spectrum settles
+where a side's music ends, and a skill forbidden to look will cut in the wrong
+place — this happened in both directions on one 12" (see the `periodicity`
+analyzer). What it must never do is *decide* on an ad-hoc reading and leave it in
+a scratch file: the moment such a measurement changes a boundary, it becomes an
+analyzer with a ground-truth test, and the plan cites the recorded section
+instead. Otherwise the plan's `rationale` quotes numbers no one can reproduce,
+the next record needs the same rediscovery, and the reading itself was never
+tested — three that felt solid turned out wrong when they were.
+
+**A skill may write a disposable listening copy**, such as the flat-gain
+`review/split-loud/`. It carries no manifest, is never fed to a later stage and is
+never compared against; it exists so a person can hear a tail. Everything that
+reaches `album/` still comes from the executor and from the plan alone.
+
+Neither exception is enforced by anything. They are habits, which is why they are
+written down. The rest are enforced mechanically, not by convention:
 `tests/contracts/test_layer_boundaries.py` assigns every module to a layer and
 fails the build on a forbidden import. Notably the executor may not import
 `analyzer` or `config`: if it needed a measurement or a preference to proceed,

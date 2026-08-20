@@ -16,6 +16,14 @@
   wall clock in audio paths. Same audio + same plan → bit-identical output.
 - Analyzers report facts, never advice. "clipping: 2 regions" yes; "re-record at a
   lower gain" no — that is a decision.
+- **Measuring while planning is allowed; leaving the measurement in a scratch file
+  is not.** Reaching for raw audio inside a `plan-*` skill is a signal that the
+  Analyzer has a gap, not a sin — the cut it produces may well be the right one.
+  But the reading is a *probe, not evidence*: the moment it changes a decision,
+  promote it to an analyzer with a ground-truth test and re-derive the decision
+  from `analysis.json` before the plan ships. A plan may only cite what
+  `analysis.json` records. Ad-hoc numbers have nothing behind them and have been
+  wrong.
 - Positions in contracts are integer sample indices, never seconds.
 
 ## Working here
