@@ -110,6 +110,26 @@ depart from one of them deserves a named reason in `decision.rationale`.
    information, and cannot retrofit an archival capture. Reducing 24 → 16 puts the
    file below that minimum: it is a deliverable, needs the user's word, and gets
    `"tpdf"` with it.
+
+   **A gain does not change this answer, and that is worth spelling out because it
+   reads as though it should.** On a 16-bit capture with `normalize` enabled, every
+   sample leaves the 16-bit grid — the gain is not a power of two — so exporting at
+   the capture's own depth re-quantises the whole programme rather than passing it
+   through. The tempting conclusion is to widen the export to avoid that. The
+   arithmetic says otherwise: rounding to 16 bit contributes noise near −101 dBFS
+   (−96 dBFS with TPDF), while the capture's *own* quantisation noise, lifted by the
+   same gain, is already above it — at a gain of +9 dB it sits near −92 dBFS. So
+   widening the export avoids an error smaller than the one the capture cannot shed,
+   and on a needledrop both are tens of dB under the surface noise. Match the
+   capture, take the `"tpdf"` from step 4, and record in the rationale that the gain
+   was considered. This arithmetic is derived here, not cited; what is cited is that
+   the depth should match the capture and that dither goes with a reduction.
+
+   **With `normalize` disabled the case is different and stronger**: nothing scales
+   the programme, so a 16-bit capture exported at 16 bit with `"none"` is lossless
+   by the citation in *Outside references* — bar the samples a repair stage or a
+   fade actually changed, which is a small and stated fraction rather than all of
+   them.
 3. **Sample rate**: `null` (keep the source rate) for archival — 48 kHz is the
    cited floor and 96 kHz the cited upper guide, so a capture at either is already
    where it should be and there is nothing to gain by moving it. Resample only on an

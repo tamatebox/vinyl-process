@@ -344,6 +344,21 @@ Then read the receipt, not just the audio:
 - The ceiling wins over the target when they conflict, and the executor warns.
   That is deliberate ([adr/0007](../../../docs/adr/0007-a-level-target-needs-a-true-peak-ceiling.md)),
   not something to work around by raising the ceiling.
+- **The gain does not branch on the capture's bit depth; its export consequence
+  does.** The arithmetic is identical at any depth because the pipeline works in
+  float64 and quantises once. Two things follow and both get asked about. First,
+  the gain cannot expose the capture's own quantisation noise on a needledrop: a
+  16-bit capture carries it near −101 dBFS, the gain lifts it by exactly the gain,
+  and the record's surface noise sits tens of dB above it and rises by the same
+  amount — so there is no "be conservative on a 16-bit source" rule to apply, and
+  inventing one costs level for nothing. Second, what the gain *does* change is
+  that every sample leaves the capture's quantisation grid, which turns the export
+  depth into a live decision on a 16-bit capture where it was not one before. That
+  decision belongs to [plan-export](../plan-export/SKILL.md) step 2, and the answer
+  there is still to match the capture — say in the rationale that the gain was
+  considered and did not move it, because the obvious wrong turn is to widen the
+  export to "protect" a signal whose noise floor is 40-odd dB above the question
+  ([adr/0019](../../../docs/adr/0019-a-stage-is-parameterised-on-its-own-input.md)).
 - **LUFS is `album_lufs` and nothing else.** `album_gated_rms` remains a level in
   dBFS measured over the programme — BS.1770's gates, none of its K-weighting
   ([adr/0008](../../../docs/adr/0008-album-gated-rms-is-a-separate-mode.md)) — so
