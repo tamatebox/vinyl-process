@@ -85,11 +85,13 @@ rounding. The asymmetry in this engine is all in the *repair* (AR prediction,
 Hermite's one-sided tangents), which is not what the technique addresses.
 
 **Uncalibrated numbers in this skill**, named so nobody mistakes them for
-practice: `max_click_width_ms` **2.0** (and **4.0** for a populated width
-histogram), `strength` **0.6–0.8** for conservative intent, the **−30 dBFS** line
-this skill calls "the audible band", and the **~5 ms** span-merge at the
-checkpoint. All in-house. The repair-rate band is the only calibrated figure here,
-which is exactly why the checkpoint leads with it.
+practice: `max_click_width_ms` **2.0**, which is the model's default and not a
+measured figure; the **−30 dBFS** line this skill calls "the audible band"; and
+the **~5 ms** span-merge at the checkpoint. All in-house, and all thresholds for
+*when to look*, not values to write into a plan. The repair-rate band is the only
+calibrated figure here, which is exactly why the checkpoint leads with it — and
+why `strength` and a raised click width now send you to a measurement instead of
+to a number.
 
 ## Inputs
 
@@ -266,15 +268,23 @@ values disagree, believe the samples.**
    between the two sides of one record. State in the rationale which rung you
    chose, what its two rates were, and that you verified its gap detections by
    ear.
-4. **max_click_width_ms** — 2.0 default. Go up to 4.0 only when the width
-   histogram is populated above 1 ms. On `native` this value is also the rejection
+4. **max_click_width_ms** — the model's default is 2.0. Raise it only when
+   `width_histogram` actually has counts above it, and only to where those counts
+   stop: the value is a rejection rule, so raising it past the damage admits
+   programme material. No source gives a figure — read the histogram, and say in
+   the rationale that the width came from this pressing's own distribution. On `native` this value is also the rejection
    rule — anything wider is treated as programme material, not damage — and it is
    what the AR order and window are derived from. On `ffmpeg` it is neither: it maps
    to `adeclick`'s analysis *window*, clamped to 10–100 ms and never narrower than
    four click widths, so nothing is rejected for being wide. Do not read a width
    across engines any more than a threshold.
-5. **Strength** — 1.0 for obvious damage; 0.6–0.8 for `conservative` intent or
-   sparse damage on precious material.
+5. **Strength** — leave it at **1.0** unless you can say what a partial repair
+   buys. Nothing calibrates the blend: a fraction of a repair leaves a fraction of
+   the click, and no source here says which fraction is inaudible. When the intent
+   is `conservative`, move the **threshold** instead — a higher rung detects less,
+   and its effect has a calibrated readout in the manifest's repair rate, which
+   `strength` has none of. Say in the rationale which dial you moved and why.
+   (`ffmpeg` refuses `strength` below 1.0 outright.)
 6. **params** — the escape hatch for engine-specific knobs, recorded in the plan
    so the run stays reproducible. `block_ratio` accepts `interpolator`
    (`ar` | `hermite` | `linear`, default `ar`), `detect_ms` (0.2), `context_ms`

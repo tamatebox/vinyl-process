@@ -81,10 +81,12 @@ transfers — as with `declick`, and for the same reason.
 
 ## Inputs
 
-**Uncalibrated numbers in this skill**: the ladder of starting thresholds in
-*Choosing the threshold*, and `strength` **0.6–0.8** for cautious material. Both
-in-house. The 1–3 sample width and the repair-rate band are cited; nothing else
-here is.
+**Uncalibrated numbers in this skill**: the starting threshold in *Choosing the
+threshold*, which is a seed for the loop and carries no claim about any pressing —
+the cited repair-rate band is what stops the loop, and the measured rate is what
+goes in the rationale. The 1–3 sample width and that band are cited; nothing else
+here is. `strength` has no in-house figure on purpose: see *Choosing the
+threshold*, step 7.
 
 From `analysis.json`:
 
@@ -160,6 +162,10 @@ rather than a count.
    condition above.
 5. Confirm by ear on a voice and a cymbal, which is where over-repair shows first.
 6. State the rung, the measured rate, and the band in `decision.rationale`.
+7. **Leave `strength` at 1.0.** A partial repair leaves a fraction of each event,
+   and nothing here calibrates which fraction is inaudible — a lower threshold with
+   a full repair is measurable in the rate, a blended repair is not. Cautious means
+   a *larger* threshold, which this loop already reads off the manifest.
 
 Do **not** iterate towards "no crackle audible". The detector's statistic is a
 ratio against the local neighbourhood, so there is always a lower threshold that
@@ -174,7 +180,7 @@ finds more, and the music runs out before the crackle does.
   "algorithm": "curvature_ratio",     // names the detector, per adr/0010
   "threshold": 5.0,                   // curvature ratio; smaller = more aggressive
   "max_event_width_samples": 3,       // 1-3 is what crackle is; lint warns above
-  "strength": 1.0,                    // 0.6-0.8 for cautious material
+  "strength": 1.0,                    // leave it: the threshold is the calibrated dial
   "params": {},                       // context_ms (5.0), interpolator (linear|hermite)
   "decision": { "skill": "plan-decrackle", "rationale": "…", "confidence": 0.8,
                 "inputs": ["analysis.json#clicks", "manifest#decrackle-repair-rate"] }
