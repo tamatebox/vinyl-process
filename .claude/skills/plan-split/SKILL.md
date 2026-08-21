@@ -70,11 +70,16 @@ design, with no encoder delay to compensate, so a leading margin here buys
 nothing mechanical and is purely a listening choice.
 
 **Uncalibrated numbers in this skill**, named so nobody mistakes them for
-practice. The **0.3–0.5 s tail** after `music_end_sample`; the **de-click edge
-fade** (20 ms in, 50–80 ms out — a discontinuity fix, not an LP fade); the
-**~5 s** at which a duration disagreement is worth reporting; and the **±5 %**
-drift tolerance in step 3. Each is in-house judgement. Where one of them decides a
+practice. The **~5 s** at which a duration disagreement is worth reporting, and
+the **±5 %** drift tolerance in step 3 — both thresholds for *when to report*,
+not lengths to cut at. Each is in-house judgement. Where one of them decides a
 boundary, say so in `decision.rationale` rather than quoting it as a rule.
+
+Two figures this skill used to give have been withdrawn rather than softened,
+because they prescribed a length with nothing behind them: the tail after
+`music_end_sample`, which now follows the chosen fade-out, and the de-click edge
+fade, which is now a criterion confirmed by ear. Both are stated where they are
+used.
 
 ## Inputs
 
@@ -132,9 +137,8 @@ That is what `lead_out_start_sample` gets wrong.
 **Brightness fails, and fails convincingly.** A scuffed lead-in groove is
 *bright* — measured on two sides at **20-25 dB above the run-out** in the 3-8 kHz
 band, above the music as well. Brightness reads as programme and it is not:
-abrasion is impulsive and impulses are broadband. So a
-whole-file `spectral` figure settles nothing, and neither does "is this stretch
-bright".
+abrasion is impulsive and impulses are broadband. So a whole-file `spectral`
+figure settles nothing, and neither does "is this stretch bright".
 
 What works is not the *tilt* of the spectrum but a **step in one band while its
 neighbours hold still**, which is `band_profile`, and a **period**, which is
@@ -145,51 +149,9 @@ neighbours hold still**, which is `band_profile`, and a **period**, which is
 | level-matched with a quiet outro or a run-out — is it still the track? | `periodicity` |
 | a band-limited entrance the broadband level cannot see | `band_profile` |
 
-**`band_profile` is what finds an entrance.** Surface noise piles its energy into
-one band — on a played LP usually the lowest, because unequalised groove noise
-rises about 3 dB/octave and RIAA playback then boosts the bass and cuts the
-treble — and *that* band sets the broadband level. On one 12" a clean run-out fell
-monotonically from -71 dBFS in 40-150 Hz to -93 dBFS in 3-8 kHz. So an intro
-sitting 20-30 dB above the surface in 400-3000 Hz moves `rms_profile` by a
-fraction of a dB, which is why `silence` misses it. Per band, in one 0.2 s frame:
-
-- the entrance is a **step in a band with its neighbours unmoved** — measured
-  once as the 400-1000 and 1000-3000 Hz bands up 14-19 dB in a single frame while
-  the two bands below them did not budge. Crackle cannot make that shape: it is
-  broadband, so it lifts several bands at once.
-- compare a band against **its own `floor_db`**, never another band's, and treat
-  `floor_db` as a percentile of the whole file rather than as the level of
-  silence — on a side that is mostly music it *is* a music level, so read steps
-  between frames, not absolute headroom.
-- a **single frame** that lifts one band is a tick, not an entrance. Require the
-  lift to persist.
-- the tilt still tells you *which kind* of surface you are looking at — falling
-  towards the top means smooth groove noise, a lifted top band means abrasion —
-  but never whether the stretch is programme.
-
-**Periodicity is what settles a tail.** A groove defect repeats once per revolution —
-1.8 s at 33 1/3 rpm, 1.333 s at 45 — and never on the beat. For a window in
-`periodicity.windows[]`:
-
-- compare each `revolution[].r` against the window's own `peaks[0].r`. Where a
-  revolution correlation rivals the top peak, the window is the pressing.
-- otherwise check that `peaks[0].period_seconds` is `programme_period_seconds` or
-  a simple multiple or division of it, and that its prominence above
-  `baseline_r` is in the region of `programme_peak_prominence`.
-- where nothing correlates strongly — every `r` small, whatever the level — there
-  is no music there either. Silence and damage both look like this.
-
-Two readings that look sound and are not. `baseline_r` **is not** a surface
-marker: on the same side the crackling lead-in sat at 0.17-0.23 while the
-run-out, whose tick is far cleaner, sat at -0.03, and quiet programme reached
-0.24. Subtract it, do not threshold on it. And a single correlation taken at
-`programme_period_seconds` is not a discriminator either: on a second side the
-whole-programme estimate landed on the bar while individual windows expressed
-the sub-beat, and the comparison separated nothing.
-
-Expect the beat to show *more* strongly in a quiet passage than in the loud body
-of the same track — the surface stops masking it. A faint stretch that locks to
-the grid harder than the track does is still that track.
+How to read either one, and two readings that look sound and are not, are in
+[references/surface-or-programme.md](references/surface-or-programme.md). Open it
+when a boundary is genuinely in doubt.
 
 **When periodicity is not available**, this question has no reliable answer here.
 The section is absent if its analyzer failed (`analyzers[]` says so) and
@@ -199,8 +161,8 @@ first — it is cheap, and so is `analyze --analyzers band_profile` when the dou
 is an entrance rather than a tail. If neither can be had, do not fall back on
 level or brightness, which is what this section exists to rule out: keep the
 longer cut, drop `decision.confidence` accordingly, and say in the rationale that
-the boundary is unconfirmed. Erring long ships fadeable surface noise; erring short truncates a
-track.
+the boundary is unconfirmed. Erring long ships fadeable surface noise; erring
+short truncates a track.
 
 ## Procedure
 
@@ -232,7 +194,13 @@ track.
      duration-derived position, snapped to the nearest `rms_valley`.
 5. **Place each cut from `music_end_sample`, never from `start_sample`.** A
    reasonable shape for a side of separate tracks:
-   - `end_sample` = the gap's `music_end_sample` + a tail of 0.3–0.5 s;
+   - `end_sample` = the gap's `music_end_sample` + a tail. **No source gives a
+     length for it** — Audacity's 0.5 s places the label relative to the *next*
+     track's start and says nothing about what follows the previous one. So derive
+     it from the fade you are about to choose: the tail must be at least as long as
+     the fade-out, or the fade eats the last of the music. Take the fade decision
+     first (under *Rules*), then make the tail fit it, and say in the rationale
+     that the tail followed the fade rather than a figure;
    - `start_sample` = the entrance − a margin, where "the entrance" is the gap's
      `music_start_sample` unless `band_profile` shows a band-limited element
      starting earlier (see *Surface or programme?*), in which case it is the first
@@ -302,6 +270,14 @@ track.
   ]
 }
 ```
+
+Run `vinyl-process lint` before shipping. The findings that belong to this
+section are `track-past-end`, `fade-longer-than-track`, `gapless-fade`,
+`hard-cut`, `short-track`, `track-into-runout` and `unsplit-multitrack`. The
+first three are errors and stop the run. `track-into-runout` is the one to read
+against the record rather than the plan: it measures how far the last cut
+reaches into trailing silence, and this skill's own rule is that erring long is
+the safer direction, so an `info` there can be the intended answer.
 
 ## Checkpoint
 
@@ -475,8 +451,13 @@ still play first.
 - **Both edges need a fade, and the length depends on which of two jobs it is
   doing.** A vinyl cut lands in surface noise rather than silence, so a hard edge
   is a step discontinuity and therefore an audible click. Removing *just that*
-  takes very little: 20 ms in with 50–80 ms out is enough, and it is the right
-  answer when the margin is short enough to be inaudible anyway.
+  takes very little — tens of milliseconds, not hundreds — and it is the right
+  answer when the margin is short enough to be inaudible anyway. **No source gives
+  a figure for this job**: LP practice fades for the other one, and its numbers are
+  an order of magnitude longer. The criterion is the only thing that transfers —
+  long enough that the step is no longer heard as a click, short enough that it is
+  not shaping the record — so confirm it by ear on the join and record the value as
+  chosen rather than sourced.
 
   But the margin is groove noise, not silence, and once it is long enough to hear,
   the fade has a second job — bringing that noise in and out instead of switching

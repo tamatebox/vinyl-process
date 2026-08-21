@@ -97,9 +97,10 @@ that rather than approximating it with a gain.
 practice: the **−9 LUFS** line above which `lint` calls an `album_lufs` target
 unreachable, the **0.5 dB** proximity at which the stage is not worth running, the
 **0.3 dB** `true_peak_db − peak_db` gap that triggers a ceiling on a peak mode,
-the **−2.0** ceiling suggested for a user who transcodes to lossy, and the "keep
-at least **1 dB**" floor under *Rules*. All in-house. Only the target band is
-cited.
+and the "keep at least **1 dB**" floor under *Rules*. All in-house. Only the
+target band is cited — and note that the band is a band of *targets* in dBFS, so
+it does not transfer to a ceiling in dBTP, which is why this skill no longer names
+a ceiling for a lossy transcode.
 
 ## Inputs
 
@@ -195,7 +196,13 @@ only for a reason you can name.
   when `true_peak_db` is `null`, since then you cannot know that it is not.
 - Do not set it *below* the target on a peak mode — the ceiling would win and the
   target would be decoration.
-- −2.0 if the user has said they transcode to lossy for a car or a phone.
+- **Lower it when the user transcodes to lossy**, because the encoder
+  reconstructs the waveform and can lift inter-sample peaks above where the FLAC
+  sat. **How much lower, no source here says.** Audacity's −2 dB is the same
+  number but a different quantity — a peak *target* in dBFS, not a true-peak
+  ceiling in dBTP — so the citation does not carry across. Pick a value inside the
+  cited −1 to −3 band, name the transcode in the rationale, and say the figure was
+  chosen rather than sourced.
 
 ### Wasted headroom
 
@@ -237,8 +244,9 @@ about — it is a turntable or a pressing problem, and it belongs upstream in
 
 Run `vinyl-process lint` before shipping. The findings that belong to this section
 are `rms-without-peak-ceiling`, `ungated-rms`, `no-headroom`,
-`normalize-clipped-source`, `true-peak-over-full-scale` and
-`thin-true-peak-headroom`. None of them is cosmetic.
+`normalize-clipped-source`, `true-peak-over-full-scale`,
+`thin-true-peak-headroom` and, on `album_lufs` alone, `lufs-target-is-loud`.
+None of them is cosmetic.
 
 ## Checkpoint
 

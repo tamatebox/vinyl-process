@@ -148,6 +148,12 @@ depart from one of them deserves a named reason in `decision.rationale`.
 }
 ```
 
+Run `vinyl-process lint` before shipping. The findings that belong to this
+section are `filename-template`, `filename-collision`, `pointless-dither`,
+`resampling` and `speed-and-resample`. The last two are `info`: they say the
+audio will be resampled, once or twice, which is a cost to accept knowingly
+rather than an error. Leaving `sample_rate` null avoids both.
+
 ## Checkpoint
 
 This section needs no stop of its own. State the outcome in the final summary —

@@ -22,3 +22,5 @@ edited after acceptance — a reversal is a new record that supersedes the old o
 | [0014](0014-album-lufs-ships-with-its-conformance-tests.md) | `album_lufs` ships with its conformance tests |
 | [0015](0015-a-mono-record-has-two-observations-of-one-signal.md) | A mono record has two observations of one signal |
 | [0016](0016-a-pre-split-stage-may-remap-time.md) | A pre-split stage may remap time; plan positions do not move |
+| [0017](0017-a-skill-is-authored-against-a-rule-file.md) | A skill is authored against a rule file, not by imitation |
+| [0018](0018-the-receipt-retains-the-plan-that-produced-it.md) | The receipt retains the plan that produced it |

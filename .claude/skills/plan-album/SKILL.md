@@ -87,7 +87,7 @@ One directory per record, holding everything about it and nothing else:
   <recording>.flac            the capture, one file per side, name untouched
   analysis-<stem>.json        one per recording, named after it
   plan-<side>.json            one per recording — plan-side-a.json, plan-side-b.json
-  review/                     renders made to answer a checkpoint; throwaway
+  review/                     renders made to answer a checkpoint
     split/                      split only                    → checkpoint 2
     prefilter/                  + prefilter, when enabled     → its own checkpoint
     declick/                    + declick                     → checkpoint 3
@@ -97,6 +97,16 @@ One directory per record, holding everything about it and nothing else:
       plots/                      the figures for that render (see below)
   album/                      the finished tracks + manifest-side-<side>.json
 ```
+
+Every render also writes **the plan that produced it**, beside its manifest:
+`manifest-side-a.json` is paired with `manifest-side-a.plan.json`. The rungs share
+one `plan-<side>.json`, which you edit between them, so that file only ever holds
+the *last* thing tried — the copies are where the earlier rungs survive. **Quote a
+rung's parameters from its copy, never from the plan file**, and when a rung wins,
+say which copy it was: a digest cannot be read backwards, and four declick
+thresholds have already been rendered, judged and lost this way
+([adr/0018](../../../docs/adr/0018-the-receipt-retains-the-plan-that-produced-it.md)).
+The audio under `review/` is throwaway; those copies are not.
 
 A single-file album collapses this to `analysis.json`, `processing_plan.json`,
 `review/`, `album/` and `manifest.json`. The commands below are written for
@@ -389,6 +399,15 @@ vinyl-process lint processing_plan.json --audio <recording> --analysis analysis.
 Fix every `error`. Explain or fix every `warning`. `info` findings are
 observations — `resampling`, `ungated-rms` — and need no action beyond mentioning
 them if they were not deliberate.
+
+Each stage skill names the findings for its own section. The ones that belong to
+no stage are yours, because you assembled the blocks they check:
+`schema-version`, `missing-audio`, `source-mismatch`, `source-length-mismatch`,
+`analysis-mismatch`, `analysis-digest-drift`, `unknown-engine`,
+`engine-unavailable` and `engine-capability`. All but `analysis-digest-drift` are
+errors. Every one of them means the plan is paired with the wrong file, the wrong
+analysis or an engine that will not run it — never that a decision was poor — so
+re-derive the block rather than adjusting a stage.
 
 > **Checkpoint 6 — the final gate.** One line per stage with its on/off state and
 > what it will do (`split: 5 tracks`, `declick: off`, `normalize: album_peak

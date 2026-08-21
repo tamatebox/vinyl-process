@@ -226,6 +226,12 @@ mismatch as a fact to resolve rather than as a rejection.
 }
 ```
 
+Run `vinyl-process lint` before shipping. The findings that belong to this
+section are `missing-title`, `no-album-title` and `orphan-metadata`. The last
+means this section names tracks the `split` section does not cut — on a
+two-sided album that is normal for `total_tracks`, and a defect for
+`metadata.tracks`.
+
 ## Checkpoint
 
 A wrong release makes every tag wrong, and it is cheap to check. Present:
