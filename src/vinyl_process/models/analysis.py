@@ -7,6 +7,9 @@ partial document — consumers must handle absent sections.
 
 The document contains no timestamps by default, so analysing the same file
 twice yields byte-identical JSON.
+
+The annotated walk-through of every field is ``docs/data-contracts.md``; this
+module is the source it describes.
 """
 
 from __future__ import annotations

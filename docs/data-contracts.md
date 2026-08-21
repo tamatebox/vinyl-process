@@ -433,6 +433,13 @@ Written next to the exported album. This is the receipt.
 }
 ```
 
+A copy of the plan is written beside the manifest — `manifest.json` is paired with
+`manifest.plan.json` — and is byte-identical to the plan file, so its SHA-256 is
+the `plan.sha256` above. `plan.path` and `source.path` are recorded as they were
+given, so both are relative to whatever directory ran `execute`; the copy is the
+half that stays findable
+([adr/0018](adr/0018-the-receipt-retains-the-plan-that-produced-it.md)).
+
 `started_at` / `completed_at` / `environment` are informational and are the only
 fields allowed to differ between two runs of the same plan. Everything else —
 `run_key`, `applied_gain_db`, every output digest — must match, and

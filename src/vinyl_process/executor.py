@@ -70,6 +70,16 @@ logger = get_logger(__name__)
 MANIFEST_NAME = "manifest.json"
 
 
+def plan_copy_name(manifest_name: str = MANIFEST_NAME) -> str:
+    """Filename of the plan copy that sits beside ``manifest_name``.
+
+    ``manifest.json`` -> ``manifest.plan.json``; ``manifest-side-a.json`` ->
+    ``manifest-side-a.plan.json``. Derived from the manifest name so that two
+    sides, or two rungs of a review ladder, never collide in one directory.
+    """
+    return f"{Path(manifest_name).stem}.plan.json"
+
+
 def execute_plan(
     plan: ProcessingPlan,
     output_dir: str | Path,
@@ -182,9 +192,34 @@ class _Execution:
                 f"{manifest_path} already exists; pass overwrite=True (CLI: --overwrite), "
                 "or give this run its own --manifest name"
             )
+        self._retain_plan()
         manifest_path.write_text(manifest.model_dump_json(indent=2) + "\n", encoding="utf-8")
         logger.info("wrote %s", manifest_path)
         return manifest
+
+    def _retain_plan(self) -> None:
+        """Keep the plan that produced this render, beside its receipt.
+
+        The manifest records the plan's *path and digest*, and a digest is
+        one-way: once the plan file is edited or discarded, nothing recovers the
+        parameters that ran. That has already cost this archive — four declick
+        thresholds were rendered on one pressing, judged by ear, and lost,
+        leaving four distinct ``params_digest`` values and no route back to the
+        numbers.
+
+        The copy is byte-identical to the plan file whenever there was one, so
+        its own SHA-256 equals ``manifest.plan.sha256`` and ``verify`` can tell
+        the right plan from a later edit. Where the plan came from memory rather
+        than a file, the model is serialised instead: the digest will not match,
+        and the parameters are still what mattered.
+        """
+        self.output_dir.mkdir(parents=True, exist_ok=True)
+        path = self.output_dir / plan_copy_name(self.manifest_name)
+        if self.plan_path is not None and self.plan_path.is_file():
+            path.write_bytes(self.plan_path.read_bytes())
+        else:
+            path.write_text(self.plan.model_dump_json(indent=2) + "\n", encoding="utf-8")
+        logger.info("retained %s", path)
 
     # ------------------------------------------------------------------ #
     def _tracks(self, audio: AudioBuffer) -> list[TrackBoundary]:

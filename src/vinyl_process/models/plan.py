@@ -6,6 +6,9 @@ nothing subjective: **if a value is a choice, it must appear here.**
 Each section carries an optional :class:`StageDecision` so the plan records not
 only *what* was chosen but *who* chose it and *why* — the audit trail that makes
 a 20-year-old archive re-derivable.
+
+The annotated walk-through of every field is ``docs/data-contracts.md``; this
+module is the source it describes.
 """
 
 from __future__ import annotations

@@ -4,6 +4,9 @@ Two runs of the same plan against the same source must produce manifests with
 identical ``run_key``, identical ``applied_gain_db`` and identical output
 digests. Only ``started_at`` / ``completed_at`` / ``environment`` may differ,
 and none of them can affect audio.
+
+The annotated walk-through of every field is ``docs/data-contracts.md``; this
+module is the source it describes.
 """
 
 from __future__ import annotations

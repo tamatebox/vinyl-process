@@ -10,6 +10,7 @@ from click.testing import CliRunner
 
 from tests.fixtures.synth import SyntheticRecording
 from vinyl_process.cli import main
+from vinyl_process.hashing import digest_file
 from vinyl_process.models.analysis import AnalysisDocument
 from vinyl_process.models.plan import ProcessingPlan
 
@@ -166,6 +167,44 @@ def test_verify_detects_tampering(
     assert "differs" in result.output
 
 
+def test_execute_retains_the_plan_beside_the_manifest(
+    cli: CliRunner, plan_file: Path, recording: SyntheticRecording, tmp_path: Path
+) -> None:
+    """A digest is one-way, so the receipt is incomplete without the plan itself."""
+    album = tmp_path / "album"
+    invoke(
+        cli,
+        "execute",
+        str(plan_file),
+        "--audio",
+        str(recording.path),
+        "-o",
+        str(album),
+        "--manifest",
+        "manifest-side-a.json",
+    )
+    copy = album / "manifest-side-a.plan.json"
+    assert copy.is_file(), "the plan that produced this render was not retained"
+    assert copy.read_bytes() == plan_file.read_bytes(), "the copy must be byte-identical"
+    recorded = json.loads((album / "manifest-side-a.json").read_text())["plan"]["sha256"]
+    assert digest_file(copy) == recorded
+
+
+def test_verify_uses_the_retained_plan_when_the_recorded_path_is_gone(
+    cli: CliRunner, plan_file: Path, recording: SyntheticRecording, tmp_path: Path
+) -> None:
+    """The recorded path is relative to whatever ran execute; the copy is not."""
+    album = tmp_path / "album"
+    invoke(cli, "execute", str(plan_file), "--audio", str(recording.path), "-o", str(album))
+    manifest_path = album / "manifest.json"
+    payload = json.loads(manifest_path.read_text())
+    payload["plan"]["path"] = "gone.json"
+    manifest_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    result = invoke(cli, "verify", str(manifest_path), "--audio", str(recording.path))
+    assert "reproduced" in result.output
+
+
 def test_verify_needs_a_findable_plan(
     cli: CliRunner, plan_file: Path, recording: SyntheticRecording, tmp_path: Path
 ) -> None:
@@ -175,9 +214,31 @@ def test_verify_needs_a_findable_plan(
     payload = json.loads(manifest_path.read_text())
     payload["plan"]["path"] = "gone.json"
     manifest_path.write_text(json.dumps(payload), encoding="utf-8")
+    (album / "manifest.plan.json").unlink()
 
     result = invoke(cli, "verify", str(manifest_path), expect=66)
     assert "cannot find the plan" in result.output
+
+
+def test_verify_says_the_plan_changed_rather_than_that_the_output_differs(
+    cli: CliRunner, plan_file: Path, recording: SyntheticRecording, tmp_path: Path
+) -> None:
+    """A lost plan and lost determinism are different failures and must read so.
+
+    Without the digest check, ``verify`` re-executes whatever plan it found and
+    reports an output mismatch — which says the pipeline stopped reproducing when
+    what really happened is that the plan the render used was not kept.
+    """
+    album = tmp_path / "album"
+    invoke(cli, "execute", str(plan_file), "--audio", str(recording.path), "-o", str(album))
+    copy = album / "manifest.plan.json"
+    edited = json.loads(copy.read_text())
+    edited["notes"] = "edited after the render"
+    copy.write_text(json.dumps(edited, indent=2), encoding="utf-8")
+
+    result = invoke(cli, "verify", str(album / "manifest.json"), expect=66)
+    assert "is not the plan this manifest was written from" in result.output
+    assert "differs" not in result.output
 
 
 # --------------------------------------------------------------------------- #
