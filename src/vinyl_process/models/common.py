@@ -12,7 +12,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from vinyl_process.errors import ContractError
 
-SCHEMA_VERSION = "3.5"
+SCHEMA_VERSION = "3.6"
 """``MAJOR.MINOR``. Additive changes bump MINOR; breaking changes bump MAJOR.
 
 3.0 because ``silence.regions[].music_start_sample`` is required: a 2.x
@@ -37,7 +37,10 @@ default, so a 3.3 plan validates unchanged and executes to the same bytes.
 3.5 adds ``analysis.peaks.lufs`` (optional, ``None`` on a recording shorter than
 one gating block) and the ``album_lufs`` value of ``normalize.mode``. Both are
 additive: an older plan names an older mode and produces the same gain, and an
-older analysis simply omits the field."""
+older analysis simply omits the field.
+
+3.6 adds ``processing_plan.mono_merge``: optional, disabled by default, so a 3.5
+plan validates unchanged and executes to the same bytes."""
 
 Confidence = Annotated[float, Field(ge=0.0, le=1.0)]
 """How much a measurement can be trusted. 0 = worthless, 1 = certain."""

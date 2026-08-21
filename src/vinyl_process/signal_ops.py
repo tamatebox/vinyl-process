@@ -314,6 +314,81 @@ def loudness_lufs(samples: np.ndarray, sample_rate: int) -> float:
     return loudness_of_blocks(loudness_block_powers(samples, sample_rate))
 
 
+# --------------------------------------------------------------------------- #
+# mono groove-wall merge
+# --------------------------------------------------------------------------- #
+MONO_LEVEL_FLOOR = 1e-3
+"""Fraction of the file's own RMS below which the level tracker stops tracking.
+
+Not a branch: the floor is added to both channels' level estimates, so where the
+material is effectively silent the two estimates converge on it and the ratio
+degrades gracefully to unity. Without it a lead-in — two near-zero numbers divided
+by each other — would produce arbitrary gains."""
+
+
+def level_matched_mono_merge(
+    samples: np.ndarray, sample_rate: int, window_seconds: float
+) -> tuple[npt.NDArray[np.float64], float, float]:
+    """Merge a stereo capture of a *mono* record into one signal, level-matched.
+
+    A mono groove is cut laterally, so both walls carry the same signal: "the
+    electrical output which goes to the audio system will be the same in each
+    channel" (ClickRepair 3.9). The damage is not shared to the same degree — "one
+    wall of the groove is often less damaged than the other" — so averaging the two
+    walls adds the signal coherently and the wall-specific damage incoherently,
+    which is where the improvement comes from. Anything purely vertical, being
+    out of phase between the walls, cancels outright.
+
+    The complication the reference names is level: "It is nearly always the case
+    that the two channels of data, even if they are highly correlated (as they
+    should be), are at different recording levels" — 1.4 dB across one whole
+    transfer in its worked example. So the merge tracks the two levels with a
+    moving average and matches them, targeting their mean, "which means that the
+    louder channel will be reduced, the softer one amplified".
+
+    ``window_seconds`` must be **long**. That is the only thing protecting the
+    merge from following the damage rather than the recording: the same source
+    notes that "significant level changes will normally be associated with major
+    damage — for example a bad scratch", and shows a 10 dB instantaneous
+    difference at one. A window of a second barely moves for an event lasting
+    milliseconds. It is also what keeps the tracker's own artefacts "at a very low
+    level and in the frequency range 0-20 Hz": a moving average of length *T*
+    band-limits the gain modulation to roughly 1/*T* Hz, so 0-20 Hz needs *T* of at
+    least about 50 ms, and inaudibility needs considerably more.
+
+    Returns the merged mono signal shaped ``(frames, 1)`` and the smallest and
+    largest gain applied to either channel, so the caller can report how hard the
+    tracker worked.
+    """
+    data = np.asarray(samples, dtype=np.float64)
+    if data.ndim == 1:
+        data = data[:, None]
+    if data.shape[1] < 2:
+        return np.ascontiguousarray(data[:, :1]), 1.0, 1.0
+
+    walls = data[:, :2]
+    window = max(1, round(window_seconds * sample_rate))
+    floor = MONO_LEVEL_FLOOR * float(np.sqrt(np.mean(walls**2) + EPS))
+
+    squared = walls**2
+    cumulative = np.concatenate([np.zeros((1, 2)), np.cumsum(squared, axis=0)])
+    half = window // 2
+    starts = np.clip(np.arange(walls.shape[0]) - half, 0, walls.shape[0])
+    ends = np.clip(starts + window, 0, walls.shape[0])
+    starts = np.minimum(starts, ends)
+    counts = np.maximum(ends - starts, 1)[:, None]
+    levels = np.sqrt((cumulative[ends] - cumulative[starts]) / counts) + floor
+
+    target = levels.mean(axis=1, keepdims=True)
+    gains = target / levels
+    merged = (walls * gains).mean(axis=1, keepdims=True)
+    return (
+        np.ascontiguousarray(merged, dtype=np.float64),
+        float(np.min(gains)),
+        float(np.max(gains)),
+    )
+
+
 def runs_of_true(flags: np.ndarray) -> list[tuple[int, int]]:
     """Contiguous ``True`` runs of a boolean array as ``[start, end)`` pairs."""
     if flags.size == 0:

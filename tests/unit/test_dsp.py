@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import shutil
+from typing import Literal
 
 import numpy as np
 import pytest
@@ -19,10 +20,11 @@ from vinyl_process.errors import (
 from vinyl_process.models.plan import (
     DeclickPlan,
     DecracklePlan,
+    MonoMergePlan,
     PrefilterPlan,
     TrackBoundary,
 )
-from vinyl_process.signal_ops import amplitude_to_db
+from vinyl_process.signal_ops import amplitude_to_db, level_matched_mono_merge
 
 SAMPLE_RATE = 44100
 HAVE_FFMPEG = shutil.which("ffmpeg") is not None
@@ -511,4 +513,144 @@ def test_decrackle_is_deterministic() -> None:
     section = DecracklePlan(enabled=True, threshold=3.0)
     first = NativeEngine().decrackle(audio, section)
     second = NativeEngine().decrackle(audio, section)
+    assert np.array_equal(first.samples, second.samples)
+
+
+# --------------------------------------------------------------------------- #
+# mono merge
+# --------------------------------------------------------------------------- #
+def mono_walls(
+    seconds: float = 5.0, offset_db: float = 1.4, noise: float = 0.01, seed: int = 7
+) -> tuple[AudioBuffer, np.ndarray]:
+    """A stereo capture of a mono record: one signal, two walls, two noise beds.
+
+    ``offset_db`` is the reference's own measured example — "the level difference
+    was 1.4 dB over the entire transfer".
+    """
+    rng = np.random.default_rng(seed)
+    frames = round(seconds * SAMPLE_RATE)
+    t = np.arange(frames) / SAMPLE_RATE
+    signal = 0.3 * np.sin(2 * np.pi * 440 * t)
+    left = signal + noise * rng.standard_normal(frames)
+    right = (signal + noise * rng.standard_normal(frames)) * 10 ** (-offset_db / 20.0)
+    return AudioBuffer(np.column_stack([left, right]), SAMPLE_RATE), signal
+
+
+def coherent_snr_db(measured: np.ndarray, signal: np.ndarray) -> float:
+    """SNR against the best-fit scalar multiple of ``signal``.
+
+    The merge deliberately lands at the *mean* of the two input levels, so an
+    absolute comparison would measure that level offset rather than the noise the
+    fold is supposed to reduce.
+    """
+    scale = float((measured @ signal) / (signal @ signal))
+    error = measured - scale * signal
+    return float(
+        amplitude_to_db(np.sqrt(np.mean((scale * signal) ** 2)))
+        - amplitude_to_db(np.sqrt(np.mean(error**2)))
+    )
+
+
+def test_mono_merge_is_a_native_capability_and_not_an_ffmpeg_one() -> None:
+    assert "mono_merge" in NativeEngine().capabilities()
+    assert "mono_merge" not in get_engine("ffmpeg").capabilities()
+
+
+def test_merging_two_walls_buys_three_decibels() -> None:
+    """The signal adds coherently, the wall-specific damage does not."""
+    audio, signal = mono_walls()
+    merged = NativeEngine().mono_merge(audio, MonoMergePlan(enabled=True))
+
+    one_wall = coherent_snr_db(audio.samples[:, 0], signal)
+    both = coherent_snr_db(merged.samples[:, 0], signal)
+    assert both - one_wall == pytest.approx(3.01, abs=0.3)
+
+
+def test_the_merge_writes_the_same_data_to_both_channels() -> None:
+    """The reference keeps the file stereo: "the same data is written to both
+    channels of the output file"."""
+    audio, _signal = mono_walls()
+    merged = NativeEngine().mono_merge(audio, MonoMergePlan(enabled=True))
+    assert merged.num_channels == 2
+    assert np.array_equal(merged.samples[:, 0], merged.samples[:, 1])
+
+
+def test_the_level_match_lands_between_the_two_walls() -> None:
+    """ "The louder channel will be reduced, the softer one amplified."" """
+    audio, _signal = mono_walls(offset_db=1.4)
+    merged = NativeEngine().mono_merge(audio, MonoMergePlan(enabled=True))
+
+    def rms_db(x: np.ndarray) -> float:
+        return float(amplitude_to_db(np.sqrt(np.mean(x**2))))
+
+    left, right = rms_db(audio.samples[:, 0]), rms_db(audio.samples[:, 1])
+    assert right < rms_db(merged.samples[:, 0]) < left
+
+
+def test_vertical_out_of_phase_noise_cancels() -> None:
+    """A lateral cut never carried vertical motion, so it is noise by definition —
+    and being out of phase between the walls, the fold removes it outright."""
+    frames = SAMPLE_RATE * 5
+    t = np.arange(frames) / SAMPLE_RATE
+    signal = 0.3 * np.sin(2 * np.pi * 440 * t)
+    vertical = 0.02 * np.random.default_rng(11).standard_normal(frames)
+    audio = AudioBuffer(np.column_stack([signal + vertical, signal - vertical]), SAMPLE_RATE)
+
+    merged = NativeEngine().mono_merge(audio, MonoMergePlan(enabled=True))
+    before = coherent_snr_db(audio.samples[:, 0], signal)
+    after = coherent_snr_db(merged.samples[:, 0], signal)
+    assert after > before + 40.0
+
+
+def test_a_long_window_does_not_follow_a_scratch() -> None:
+    """The safety property the citation's "long scale" is really buying.
+
+    "Significant level changes will normally be associated with major damage — for
+    example a bad scratch", and the manual shows the two channels' peaks differing
+    by 10 dB at one. A tracker short enough to follow that would duck the
+    *undamaged* wall while the damage passes: it would both modulate the good
+    channel and preserve the bad one. A one-second average barely moves for an
+    event lasting milliseconds.
+
+    Measured on the gain span itself, which is what the manifest reports.
+    """
+    audio, _signal = mono_walls()
+    scratched = audio.samples.copy()
+    start = SAMPLE_RATE * 2
+    scratched[start : start + 300, 0] += 0.6
+
+    def span_db(window_seconds: float) -> float:
+        _merged, low, high = level_matched_mono_merge(scratched, SAMPLE_RATE, window_seconds)
+        return float(amplitude_to_db(high)) - float(amplitude_to_db(low))
+
+    clean_span = span_db(1.0)
+    _merged, low, high = level_matched_mono_merge(audio.samples, SAMPLE_RATE, 1.0)
+    undamaged_span = float(amplitude_to_db(high)) - float(amplitude_to_db(low))
+
+    # A second's average hardly notices the scratch: the span stays where the
+    # transfer's own 1.4 dB offset puts it.
+    assert clean_span == pytest.approx(undamaged_span, abs=0.5)
+    # Ten milliseconds does notice, and swings several times as far.
+    assert span_db(0.01) > clean_span + 5.0
+
+
+def test_taking_one_wall_copies_it_to_both_channels() -> None:
+    audio, _signal = mono_walls()
+    strategies: tuple[tuple[Literal["left", "right"], int], ...] = (("left", 0), ("right", 1))
+    for strategy, index in strategies:
+        merged = NativeEngine().mono_merge(audio, MonoMergePlan(enabled=True, strategy=strategy))
+        assert np.array_equal(merged.samples[:, 0], audio.samples[:, index])
+        assert np.array_equal(merged.samples[:, 1], audio.samples[:, index])
+
+
+def test_a_single_channel_capture_passes_through_unchanged() -> None:
+    mono = AudioBuffer(np.zeros((SAMPLE_RATE, 1)) + 0.1, SAMPLE_RATE)
+    assert NativeEngine().mono_merge(mono, MonoMergePlan(enabled=True)) is mono
+
+
+def test_mono_merge_is_deterministic() -> None:
+    audio, _signal = mono_walls()
+    section = MonoMergePlan(enabled=True)
+    first = NativeEngine().mono_merge(audio, section)
+    second = NativeEngine().mono_merge(audio, section)
     assert np.array_equal(first.samples, second.samples)

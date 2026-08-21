@@ -180,6 +180,7 @@
             "prefilter",
             "declick",
             "decrackle",
+            "mono_merge",
             "split",
             "normalize",
             "resample",
@@ -285,7 +286,7 @@
       "type": "string"
     },
     "schema_version": {
-      "default": "3.5",
+      "default": "3.6",
       "title": "Schema Version",
       "type": "string"
     },

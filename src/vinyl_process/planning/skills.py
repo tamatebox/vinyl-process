@@ -79,6 +79,16 @@ SKILLS: tuple[SkillSpec, ...] = (
         summary="Chooses the crackle threshold, event width and strength.",
     ),
     SkillSpec(
+        name="plan-mono-merge",
+        owns="mono_merge",
+        reads=(
+            "analysis.json#recording_info",
+            "analysis.json#source",
+            "release metadata",
+        ),
+        summary="Decides whether to fold a mono record's two groove walls, and how.",
+    ),
+    SkillSpec(
         name="plan-normalize",
         owns="normalize",
         reads=(

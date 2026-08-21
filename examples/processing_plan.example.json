@@ -1,5 +1,5 @@
 {
-  "schema_version": "3.5",
+  "schema_version": "3.6",
   "document_type": "processing_plan",
   "created_by": "plan-album",
   "source": {
@@ -79,6 +79,13 @@
     "max_event_width_samples": 3,
     "strength": 1.0,
     "params": {}
+  },
+  "mono_merge": {
+    "decision": null,
+    "enabled": false,
+    "engine": "native",
+    "strategy": "level_matched",
+    "level_window_seconds": 1.0
   },
   "normalize": {
     "decision": {

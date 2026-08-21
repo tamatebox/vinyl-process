@@ -1,7 +1,7 @@
 """Plan executor: runs a ``ProcessingPlan`` end to end, deterministically.
 
 Two phases. **Before the cuts**, on the whole side:
-``prefilter -> declick -> decrackle``. **After them**, per track:
+``prefilter -> declick -> decrackle -> mono_merge``. **After them**, per track:
 ``split -> normalize -> resample -> export -> tag -> manifest``.
 
 The pre-split order is practice's: discrete defects before continuous ones.
@@ -56,6 +56,7 @@ from vinyl_process.signal_ops import (
     EPS,
     amplitude_to_db,
     gated_rms_of_blocks,
+    level_matched_mono_merge,
     loudness_block_powers,
     loudness_of_blocks,
     rms_blocks,
@@ -143,6 +144,7 @@ class _Execution:
         audio = self._prefilter(audio)
         audio = self._declick(audio)
         audio = self._decrackle(audio)
+        audio = self._mono_merge(audio)
         # Post-split phase: one buffer per track.
         tracks = self._tracks(audio)
         buffers = self._split(audio, tracks)
@@ -255,6 +257,45 @@ class _Execution:
         return self._repaired(
             "decrackle", audio, engine.decrackle(audio, self.plan.decrackle), engine
         )
+
+    def _mono_merge(self, audio: AudioBuffer) -> AudioBuffer:
+        """Fold the two groove walls, last of the pre-split stages.
+
+        Last because the reference repairs the walls independently and merges
+        afterwards, and warns against merging "at any of the intermediate stages"
+        when a further repair pass follows. Here there is no further pass, so this
+        is the end of the phase.
+        """
+        merge = self.plan.mono_merge
+        if not merge.enabled:
+            self._record("mono_merge", "skipped", detail="mono_merge disabled")
+            return audio
+        if audio.num_channels < 2:
+            self._record(
+                "mono_merge",
+                "skipped",
+                detail=f"source has {audio.num_channels} channel(s); nothing to merge",
+            )
+            self.warnings.append(
+                "mono_merge is enabled but the source is not stereo, so there are no two "
+                "groove walls to fold; the audio passed through untouched"
+            )
+            return audio
+        engine = self._engine(merge.engine, "mono_merge")
+        detail = f"strategy={merge.strategy}"
+        if merge.strategy == "level_matched":
+            # Report how hard the level tracker worked. A wide span is the signature
+            # of a badly asymmetric transfer, or of the tracker following damage,
+            # and neither should have to be discovered by listening.
+            _merged, low, high = level_matched_mono_merge(
+                audio.samples, audio.sample_rate, merge.level_window_seconds
+            )
+            detail += (
+                f" window={merge.level_window_seconds:g}s "
+                f"gain={float(amplitude_to_db(low)):+.2f}..{float(amplitude_to_db(high)):+.2f} dB"
+            )
+        self._record("mono_merge", "applied", engine=engine, section=merge, detail=detail)
+        return engine.mono_merge(audio, merge)
 
     def _repaired(
         self,

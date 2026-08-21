@@ -16,6 +16,7 @@ cuts; the rest run per track.
 | `prefilter` | Remove DC and/or high-pass the subsonic band, on the whole side |
 | `declick` | Detect and repair impulsive damage with the plan's parameters |
 | `decrackle` | Repair a bed of 1-3 sample events, per sample rather than collectively |
+| `mono_merge` | Fold a mono record's two groove walls onto one signal, level-matched |
 | `split` | Cut the source into tracks at sample-exact boundaries, applying the plan's fades |
 | `gain` | Apply a gain in dB |
 
@@ -24,7 +25,7 @@ An engine implements only what it has. A partial engine is a first-class citizen
 ```sh
 $ vinyl-process engines
 ffmpeg [available] declick, gain (ffmpeg version 9.0.1 …)
-native [available] declick, decrackle, gain, prefilter, split (native 0.1.0 (numpy 2.4.6))
+native [available] declick, decrackle, gain, mono_merge, prefilter, split (native 0.1.0 …)
 ```
 
 ## Built-in engines
@@ -67,6 +68,14 @@ Pure numpy/scipy, no external binaries, every capability.
   is `linear` by default — across one to three samples a straight line between the
   survivors cannot leave the range they span — with `hermite` available. See
   [adr/0013](adr/0013-crackle-is-a-separate-stage-with-its-own-detector.md).
+- `mono_merge` — `strategy: left | right` copies one wall to both channels;
+  `level_matched` tracks each wall's level over `level_window_seconds` (1.0),
+  targets their mean and averages the two. The level floor is a fraction of the
+  file's own RMS, added to both estimates, so the ratio degrades to unity in
+  silence rather than to noise. Measured on synthesised walls: **+3.02 dB** of SNR
+  against one wall (coherent ideal 3.01), and out-of-phase content cancels
+  outright. Output stays stereo with the same data in both channels. See
+  [adr/0015](adr/0015-a-mono-record-has-two-observations-of-one-signal.md).
 - `gain` — multiply by `10^(dB/20)`.
 
 What is established, on real audio rather than injected damage:

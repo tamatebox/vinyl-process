@@ -201,6 +201,39 @@ class DecracklePlan(EngineSection):
 
 
 # --------------------------------------------------------------------------- #
+# mono merge
+# --------------------------------------------------------------------------- #
+class MonoMergePlan(EngineSection):
+    """Fold a stereo capture of a **mono** record onto one signal.
+
+    A mono groove is cut laterally, so both walls carry the same signal and the
+    two channels are two observations of it. Damage is not shared to the same
+    degree — one wall is often less damaged than the other — so this is a real
+    redundancy the rest of the pipeline does not exploit.
+
+    Last in the pre-split phase, after ``declick`` and ``decrackle``, because the
+    reference is explicit that the walls are repaired independently first and
+    merged afterwards. Optional and disabled by default: on a stereo record this
+    stage destroys the image, so it is never something to leave on by habit.
+    """
+
+    enabled: bool = False
+
+    strategy: Literal["level_matched", "left", "right"] = "level_matched"
+    """``level_matched`` tracks the two walls' levels and merges them, which is the
+    documented default. ``left`` and ``right`` take one wall and write it to both
+    channels — the reference's own first option, for a record where one wall is
+    plainly the better one and merging would only average the good with the bad.
+    Which wall that is, is a listening decision, so it belongs here."""
+
+    level_window_seconds: float = Field(default=1.0, gt=0.0)
+    """The moving average the level match is computed over. Must be **long**: it is
+    the only thing keeping the tracker from following a scratch rather than the
+    recording, and it is what holds its own artefacts below audibility. See
+    ``plan-mono-merge`` for what is cited and what is not."""
+
+
+# --------------------------------------------------------------------------- #
 # normalize
 # --------------------------------------------------------------------------- #
 class NormalizePlan(EngineSection):
@@ -319,6 +352,9 @@ class ProcessingPlan(VersionedDocument):
     declick: DeclickPlan
     decrackle: DecracklePlan = Field(default_factory=DecracklePlan)
     """Optional and disabled by default, like every stage added after 3.2."""
+
+    mono_merge: MonoMergePlan = Field(default_factory=MonoMergePlan)
+    """Optional and disabled by default. Last of the pre-split stages."""
 
     normalize: NormalizePlan
     metadata: MetadataPlan

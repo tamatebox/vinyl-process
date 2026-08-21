@@ -93,6 +93,7 @@ def test_manifest_records_every_stage_and_the_environment(
         "prefilter",
         "declick",
         "decrackle",
+        "mono_merge",
         "split",
         "normalize",
         "resample",
@@ -100,14 +101,16 @@ def test_manifest_records_every_stage_and_the_environment(
         "metadata",
     }
     # The receipt lists the stages in the order they ran, pre-split phase first.
-    assert [record.stage for record in manifest.stages][:4] == [
+    assert [record.stage for record in manifest.stages][:5] == [
         "prefilter",
         "declick",
         "decrackle",
+        "mono_merge",
         "split",
     ]
     assert stages["prefilter"].status == "skipped"
     assert stages["decrackle"].status == "skipped"
+    assert stages["mono_merge"].status == "skipped"
     # A repair stage says how much of the audio it actually changed.
     assert "repaired" in stages["declick"].detail
     assert stages["split"].status == "applied"
@@ -611,3 +614,41 @@ def test_album_lufs_pools_the_album_rather_than_measuring_each_track(
     manifest = run(ProcessingPlan.model_validate(payload), recording, tmp_path / "album")
     assert manifest.applied_gain_db is not None
     assert manifest.applied_track_gains_db is None
+
+
+def test_mono_merge_runs_last_in_the_pre_split_phase(
+    plan: ProcessingPlan, recording: SyntheticRecording, tmp_path: Path
+) -> None:
+    """The walls are repaired independently first, then folded — the reference's
+    own order, and the reason the manifest has to show it."""
+    payload = plan.model_dump(mode="json")
+    payload["mono_merge"] = {"enabled": True, "engine": "native"}
+    payload["decrackle"] = {"enabled": True, "engine": "native", "threshold": 3.0}
+    folded = ProcessingPlan.model_validate(payload)
+
+    manifest = run(folded, recording, tmp_path / "album")
+    order = [record.stage for record in manifest.stages]
+    assert order.index("declick") < order.index("mono_merge")
+    assert order.index("decrackle") < order.index("mono_merge")
+    assert order.index("mono_merge") < order.index("split")
+
+    stages = {record.stage: record for record in manifest.stages}
+    assert stages["mono_merge"].status == "applied"
+    assert "strategy=level_matched" in stages["mono_merge"].detail
+    assert "gain=" in stages["mono_merge"].detail
+
+    # Every exported track carries the same data in both channels.
+    for output in manifest.outputs:
+        samples, _rate = sf.read(output.path, dtype="float64", always_2d=True)
+        assert np.array_equal(samples[:, 0], samples[:, 1])
+
+
+def test_a_mono_merged_run_reproduces_bit_for_bit(
+    plan: ProcessingPlan, recording: SyntheticRecording, tmp_path: Path
+) -> None:
+    payload = plan.model_dump(mode="json")
+    payload["mono_merge"] = {"enabled": True, "engine": "native"}
+    folded = ProcessingPlan.model_validate(payload)
+    first = run(folded, recording, tmp_path / "one")
+    second = run(folded, recording, tmp_path / "two")
+    assert first.output_digests() == second.output_digests()

@@ -443,6 +443,51 @@
       "title": "MetadataPlan",
       "type": "object"
     },
+    "MonoMergePlan": {
+      "additionalProperties": false,
+      "description": "Fold a stereo capture of a **mono** record onto one signal.\n\nA mono groove is cut laterally, so both walls carry the same signal and the\ntwo channels are two observations of it. Damage is not shared to the same\ndegree \u2014 one wall is often less damaged than the other \u2014 so this is a real\nredundancy the rest of the pipeline does not exploit.\n\nLast in the pre-split phase, after ``declick`` and ``decrackle``, because the\nreference is explicit that the walls are repaired independently first and\nmerged afterwards. Optional and disabled by default: on a stereo record this\nstage destroys the image, so it is never something to leave on by habit.",
+      "properties": {
+        "decision": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/StageDecision"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "enabled": {
+          "default": false,
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "engine": {
+          "default": "native",
+          "title": "Engine",
+          "type": "string"
+        },
+        "level_window_seconds": {
+          "default": 1.0,
+          "exclusiveMinimum": 0.0,
+          "title": "Level Window Seconds",
+          "type": "number"
+        },
+        "strategy": {
+          "default": "level_matched",
+          "enum": [
+            "level_matched",
+            "left",
+            "right"
+          ],
+          "title": "Strategy",
+          "type": "string"
+        }
+      },
+      "title": "MonoMergePlan",
+      "type": "object"
+    },
     "NormalizePlan": {
       "additionalProperties": false,
       "properties": {
@@ -818,6 +863,9 @@
     "metadata": {
       "$ref": "#/$defs/MetadataPlan"
     },
+    "mono_merge": {
+      "$ref": "#/$defs/MonoMergePlan"
+    },
     "normalize": {
       "$ref": "#/$defs/NormalizePlan"
     },
@@ -830,7 +878,7 @@
       "$ref": "#/$defs/PrefilterPlan"
     },
     "schema_version": {
-      "default": "3.5",
+      "default": "3.6",
       "title": "Schema Version",
       "type": "string"
     },

@@ -1265,7 +1265,7 @@
       "default": null
     },
     "schema_version": {
-      "default": "3.5",
+      "default": "3.6",
       "title": "Schema Version",
       "type": "string"
     },

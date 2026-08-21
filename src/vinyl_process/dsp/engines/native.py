@@ -16,6 +16,7 @@ from vinyl_process.errors import ExecutionError
 from vinyl_process.models.plan import (
     DeclickPlan,
     DecracklePlan,
+    MonoMergePlan,
     PrefilterPlan,
     TrackBoundary,
 )
@@ -24,6 +25,7 @@ from vinyl_process.signal_ops import (
     click_events_block,
     confirm_clicks_sinusoidal,
     crackle_events_curvature,
+    level_matched_mono_merge,
     remove_dc,
     repair_clicks,
     repair_clicks_ar,
@@ -72,7 +74,7 @@ class NativeEngine(DspEngine):
     name = "native"
 
     def capabilities(self) -> frozenset[Capability]:
-        return frozenset({"prefilter", "split", "declick", "decrackle", "gain"})
+        return frozenset({"prefilter", "split", "declick", "decrackle", "mono_merge", "gain"})
 
     def version(self) -> str:
         return f"native {__version__} (numpy {np.__version__})"
@@ -226,6 +228,26 @@ class NativeEngine(DspEngine):
             f"engine 'native' has no decrackle interpolator {interpolator!r}; "
             "available: linear, hermite"
         )
+
+    def mono_merge(self, audio: AudioBuffer, plan: MonoMergePlan) -> AudioBuffer:
+        """Fold the two groove walls onto one signal, written to both channels.
+
+        Both channels, not one, because the reference keeps the file stereo — "the
+        same data is written to both channels of the output file" — and because
+        collapsing the channel count here would surprise every later stage.
+        """
+        if audio.num_channels < 2:
+            # Already one wall's worth of data. Nothing to merge, and saying so is
+            # better than silently duplicating a channel.
+            return audio
+        if plan.strategy in ("left", "right"):
+            index = 0 if plan.strategy == "left" else 1
+            wall = audio.samples[:, index : index + 1]
+            return audio.with_samples(np.repeat(wall, audio.num_channels, axis=1))
+        merged, _low, _high = level_matched_mono_merge(
+            audio.samples, audio.sample_rate, plan.level_window_seconds
+        )
+        return audio.with_samples(np.repeat(merged, audio.num_channels, axis=1))
 
     def apply_gain(self, audio: AudioBuffer, gain_db: float) -> AudioBuffer:
         return audio.with_samples(audio.samples * (10.0 ** (gain_db / 20.0)))

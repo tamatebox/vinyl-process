@@ -465,3 +465,70 @@ def test_pitch_protection_together_with_decrackle_warns(plan: ProcessingPlan) ->
 
 def test_a_sane_decrackle_section_reports_nothing(plan: ProcessingPlan) -> None:
     assert codes(validate_plan(decrackled(plan, threshold=5.0))) == set()
+
+
+# --------------------------------------------------------------------------- #
+# mono merge
+# --------------------------------------------------------------------------- #
+def folded(plan: ProcessingPlan, **section: Any) -> ProcessingPlan:
+    def replace(payload: dict[str, Any]) -> None:
+        payload["mono_merge"] = {"enabled": True, "engine": "native", **section}
+
+    return mutated(plan, replace)
+
+
+def test_an_absent_mono_merge_section_is_valid_and_silent(plan: ProcessingPlan) -> None:
+    payload = plan.model_dump(mode="json")
+    payload.pop("mono_merge")
+    revived = ProcessingPlan.model_validate(payload)
+    assert revived.mono_merge.enabled is False
+    assert validate_plan(revived) == []
+
+
+def test_a_sane_mono_merge_section_reports_nothing(plan: ProcessingPlan) -> None:
+    assert codes(validate_plan(folded(plan))) == set()
+
+
+def test_a_short_level_window_warns(plan: ProcessingPlan) -> None:
+    findings = validate_plan(folded(plan, level_window_seconds=0.01))
+    assert "mono-merge-window-short" in codes(findings)
+
+
+def test_taking_one_wall_is_not_held_to_the_window_rule(plan: ProcessingPlan) -> None:
+    """There is no level tracker on a strategy that copies a channel."""
+    findings = validate_plan(folded(plan, strategy="left", level_window_seconds=0.001))
+    assert "mono-merge-window-short" not in codes(findings)
+
+
+def test_merging_a_source_with_one_channel_warns(plan: ProcessingPlan) -> None:
+    def one_channel(payload: dict[str, Any]) -> None:
+        payload["mono_merge"] = {"enabled": True, "engine": "native"}
+        payload["source"]["channels"] = 1
+
+    assert "mono-merge-without-two-walls" in codes(validate_plan(mutated(plan, one_channel)))
+
+
+def with_correlation(analysis: AnalysisDocument, value: float) -> AnalysisDocument:
+    recording_info = analysis.recording_info
+    assert recording_info is not None, "the fixture analysis must carry recording_info"
+    return analysis.model_copy(
+        update={"recording_info": recording_info.model_copy(update={"channel_correlation": value})}
+    )
+
+
+def test_merging_stereo_material_warns_when_the_analysis_is_available(
+    plan: ProcessingPlan, recording: SyntheticRecording, analysis: AnalysisDocument
+) -> None:
+    """The one catastrophic mistake this stage can make, and lint is the only
+    place that can see both the plan and the measurement."""
+    stereo = with_correlation(analysis, 0.42)
+    findings = validate_plan(folded(plan), audio_path=recording.path, analysis=stereo)
+    assert "mono-merge-on-stereo-material" in codes(findings)
+
+
+def test_a_genuinely_mono_capture_does_not_warn(
+    plan: ProcessingPlan, recording: SyntheticRecording, analysis: AnalysisDocument
+) -> None:
+    mono = with_correlation(analysis, 0.999)
+    findings = validate_plan(folded(plan), audio_path=recording.path, analysis=mono)
+    assert "mono-merge-on-stereo-material" not in codes(findings)

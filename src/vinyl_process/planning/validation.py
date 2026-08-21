@@ -39,6 +39,23 @@ SUBSONIC_BAND_HZ = (20.0, 30.0)
 workflow, step 8: 20-30 Hz at 24 dB/octave). ``plan-prefilter`` carries the
 citation; these bounds exist only so ``lint`` can say when a plan has left it."""
 
+MONO_MIN_WINDOW_SECONDS = 0.05
+"""Floor for the mono merge's level-tracking window, **derived** rather than cited.
+
+ClickRepair states only that its moving average is "calculated over a long scale,
+so as not to introduce audible effects" and that the resulting artefacts sit "in
+the frequency range 0-20 Hz". A moving average of length T band-limits the gain
+modulation it produces to roughly 1/T Hz, so 0-20 Hz requires T of at least about
+50 ms. That is a floor and not a recommendation: inaudibility needs considerably
+more, which is why the default is 1.0 s."""
+
+MONO_CORRELATION_FLOOR = 0.9
+"""Below this the two channels do not look like two walls of one mono groove.
+
+In-house, and a warning rather than an error: a mono pressing with heavily
+independent surface damage can read lower, and someone may be folding a stereo
+record deliberately."""
+
 LUFS_LOUDEST_SENSIBLE_DB = -9.0
 """Above this a LUFS target stops being reachable on ordinary material without the
 true-peak ceiling capping the gain. EBU R 128 delivers at -23.0 LUFS and streaming
@@ -83,6 +100,7 @@ def validate_plan(
     findings += _check_engines(plan)
     findings += _check_prefilter(plan)
     findings += _check_decrackle(plan)
+    findings += _check_mono_merge(plan)
     findings += _check_tracks(plan)
     findings += _check_cuts(plan)
     findings += _check_naming(plan)
@@ -126,6 +144,7 @@ def _check_engines(plan: ProcessingPlan) -> list[Finding]:
         ("split", plan.split.enabled, plan.split.engine, "split"),
         ("declick", plan.declick.enabled, plan.declick.engine, "declick"),
         ("decrackle", plan.decrackle.enabled, plan.decrackle.engine, "decrackle"),
+        ("mono_merge", plan.mono_merge.enabled, plan.mono_merge.engine, "mono_merge"),
         (
             "normalize",
             plan.normalize.enabled and plan.normalize.mode != "none",
@@ -253,6 +272,36 @@ def _check_decrackle(plan: ProcessingPlan) -> list[Finding]:
                 "manual warns that pitch protection together with de-crackling 'may seriously "
                 "impair de-crackling'. Run them in separate passes or expect less repair",
                 "decrackle.enabled",
+            )
+        )
+    return findings
+
+
+def _check_mono_merge(plan: ProcessingPlan) -> list[Finding]:
+    """Folding a *stereo* record to mono is the failure this stage can cause."""
+    merge = plan.mono_merge
+    if not merge.enabled:
+        return []
+    findings: list[Finding] = []
+    if plan.source.channels < 2:
+        findings.append(
+            Finding(
+                "warning",
+                "mono-merge-without-two-walls",
+                f"mono_merge is enabled but the source has {plan.source.channels} channel(s); "
+                "there are no two groove walls to fold and the stage will do nothing",
+                "mono_merge.enabled",
+            )
+        )
+    if merge.strategy == "level_matched" and merge.level_window_seconds < MONO_MIN_WINDOW_SECONDS:
+        findings.append(
+            Finding(
+                "warning",
+                "mono-merge-window-short",
+                f"level_window_seconds is {merge.level_window_seconds:g}; below about "
+                f"{MONO_MIN_WINDOW_SECONDS:g} s the level tracker starts following the damage "
+                "rather than the recording, and its own modulation rises into the audible band",
+                "mono_merge.level_window_seconds",
             )
         )
     return findings
@@ -565,6 +614,7 @@ def _check_against_analysis(
         )
         return findings
     findings += _check_normalize_against_analysis(plan, analysis)
+    findings += _check_mono_merge_against_analysis(plan, analysis)
     if plan.split.enabled and analysis.boundaries is not None:
         lead_out = analysis.boundaries.lead_out_start_sample
         last = plan.split.tracks[-1].end_sample
@@ -579,6 +629,34 @@ def _check_against_analysis(
                 )
             )
     return findings
+
+
+def _check_mono_merge_against_analysis(
+    plan: ProcessingPlan, analysis: AnalysisDocument
+) -> list[Finding]:
+    """Does this recording actually look like a mono groove?
+
+    The one thing the stage can get catastrophically wrong is being enabled on a
+    stereo record, where it destroys the image and nothing downstream notices.
+    ``recording_info.channel_correlation`` is the measurement that answers it, and
+    ``lint`` is the only place in the pipeline that can see both the plan and the
+    analysis.
+    """
+    if not plan.mono_merge.enabled or analysis.recording_info is None:
+        return []
+    correlation = analysis.recording_info.channel_correlation
+    if correlation is None or correlation >= MONO_CORRELATION_FLOOR:
+        return []
+    return [
+        Finding(
+            "warning",
+            "mono-merge-on-stereo-material",
+            f"channel_correlation is {correlation:.3f}, below {MONO_CORRELATION_FLOOR:g} — the "
+            "two channels do not look like two walls of one mono groove. Folding a stereo "
+            "record to mono destroys its image, and nothing downstream will notice",
+            "mono_merge.enabled",
+        )
+    ]
 
 
 def _predicted_gain_db(plan: ProcessingPlan, analysis: AnalysisDocument) -> float | None:

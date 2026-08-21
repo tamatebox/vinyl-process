@@ -27,8 +27,8 @@ Recording is out of scope.
                            │  processing_plan.json
 ┌──────────────────────────▼──────────────────────────────────┐
 │ DSP Executor (Python, src/vinyl_process/dsp + executor.py)   │
-│   executes — prefilter, declick, decrackle, split, gain,      │
-│              resample, export, tag                            │
+│   executes — prefilter, declick, decrackle, mono_merge,       │
+│              split, gain, resample, export, tag               │
 │   deterministic: same audio + same plan → same bytes         │
 │   output: audio files + manifest.json                        │
 └─────────────────────────────────────────────────────────────┘
@@ -165,6 +165,9 @@ load source
             ─▶ decrackle  (the 1-3 sample bed, per-sample rather than collective;
                            after declick, because discrete defects come before
                            continuous ones. Disabled by default)
+            ─▶ mono_merge (fold a mono record's two groove walls onto one signal,
+                           level-matched. Last, because the walls are repaired
+                           independently first. Disabled by default)
   post-split phase — one buffer per track
             ─▶ split      (sample-exact cuts + the fades the plan asked for)
             ─▶ normalize  (strategy, target and ceiling from the plan; gain
@@ -429,8 +432,19 @@ end to end for determinism.
   repair, then fade" as a sequence, because the fades are attributes of
   `split.tracks[]` rather than a stage of their own — it no longer matters, since
   nothing runs between the cut and the fade.
-- **No de-hum, de-clip, azimuth or speed correction stages.** `prefilter` and
-  `decrackle` are the pre-split stages that exist. `clipping` measures a clipped
+- **A mono record's redundancy is used at the merge and nowhere else.**
+  `mono_merge` folds the two groove walls, which buys about 3 dB against one wall
+  and cancels vertical noise outright
+  ([adr/0015](adr/0015-a-mono-record-has-two-observations-of-one-signal.md)). What
+  still ignores the redundancy is `declick`: it detects on the channel **mean** and
+  repairs every channel over the same span, where the reference makes "decisions on
+  click detection and repair in the two channels… independently". On a mono record
+  that repairs the clean wall along with the damaged one, which is the opposite of
+  what two observations are for. Per-channel detection would change output bytes
+  for any plan with declick enabled, so it needs its own decision rather than being
+  slipped in.
+- **No de-hum, de-clip, azimuth or speed correction stages.** `prefilter`,
+  `decrackle` and `mono_merge` are the pre-split stages that exist. `clipping` measures a clipped
   transfer but nothing repairs one: ffmpeg's `adeclip` makes the implementation
   nearly free, which is the trap — no reference was found for how far
   reconstruction may credibly go, and a stage with an uncalibrated skill would get

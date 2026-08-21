@@ -23,13 +23,14 @@ from vinyl_process.errors import EngineUnavailableError, UnsupportedOperationErr
 from vinyl_process.models.plan import (
     DeclickPlan,
     DecracklePlan,
+    MonoMergePlan,
     PrefilterPlan,
     TrackBoundary,
 )
 
-Capability = Literal["prefilter", "split", "declick", "decrackle", "gain"]
+Capability = Literal["prefilter", "split", "declick", "decrackle", "mono_merge", "gain"]
 ALL_CAPABILITIES: frozenset[Capability] = frozenset(
-    {"prefilter", "split", "declick", "decrackle", "gain"}
+    {"prefilter", "split", "declick", "decrackle", "mono_merge", "gain"}
 )
 
 
@@ -61,6 +62,9 @@ class DspEngine(ABC):
 
     def decrackle(self, audio: AudioBuffer, plan: DecracklePlan) -> AudioBuffer:
         raise UnsupportedOperationError(f"engine {self.name!r} does not support decrackle")
+
+    def mono_merge(self, audio: AudioBuffer, plan: MonoMergePlan) -> AudioBuffer:
+        raise UnsupportedOperationError(f"engine {self.name!r} does not support mono_merge")
 
     def apply_gain(self, audio: AudioBuffer, gain_db: float) -> AudioBuffer:
         raise UnsupportedOperationError(f"engine {self.name!r} does not support gain")

@@ -218,6 +218,7 @@ def test_engines_listing(cli: CliRunner) -> None:
         "split",
         "declick",
         "decrackle",
+        "mono_merge",
         "gain",
     }
     assert native["available"] is True

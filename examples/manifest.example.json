@@ -1,5 +1,5 @@
 {
-  "schema_version": "3.5",
+  "schema_version": "3.6",
   "document_type": "manifest",
   "generated_by": "vinyl-process 0.1.0",
   "run_key": "0000000000000000000000000000000000000000000000000000000000000000",
@@ -39,6 +39,14 @@
       "engine_version": null,
       "params_digest": null,
       "detail": "decrackle disabled"
+    },
+    {
+      "stage": "mono_merge",
+      "status": "skipped",
+      "engine": null,
+      "engine_version": null,
+      "params_digest": null,
+      "detail": "mono_merge disabled"
     },
     {
       "stage": "split",

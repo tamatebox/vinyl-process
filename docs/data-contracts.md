@@ -33,7 +33,7 @@ happened.
 
 ```jsonc
 {
-  "schema_version": "3.5",
+  "schema_version": "3.6",
   "document_type": "analysis",
   "generated_by": "vinyl-process 0.1.0",
   "source": { "path": "side-a.wav", "sha256": "…", "sample_rate": 44100,
@@ -245,7 +245,7 @@ block: which skill decided, why, how confident it was, and what it consulted.
 
 ```jsonc
 {
-  "schema_version": "3.5",
+  "schema_version": "3.6",
   "document_type": "processing_plan",
   "created_by": "plan-album",
   "source": { …same shape as analysis.source; sha256 is verified before running… },
@@ -312,6 +312,17 @@ block: which skill decided, why, how confident it was, and what it consulted.
     "params": {}                     // context_ms (5.0), interpolator (linear|hermite)
   },
 
+  // Optional, disabled by default. A mono groove is cut laterally, so both walls
+  // carry the same signal and a stereo capture holds two observations of it. Last
+  // of the pre-split stages: the walls are repaired independently first. adr/0015.
+  "mono_merge": {
+    "enabled": false,
+    "engine": "native",              // only 'native' implements mono_merge
+    "strategy": "level_matched",     // level_matched | left | right
+    "level_window_seconds": 1.0      // must be long: a short tracker follows a
+                                     // scratch instead of the transfer
+  },
+
   "normalize": {
     "enabled": true, "engine": "native",
     "mode": "album_peak",             // album_peak | album_gated_rms | album_rms |
@@ -371,7 +382,7 @@ Written next to the exported album. This is the receipt.
 
 ```jsonc
 {
-  "schema_version": "3.5",
+  "schema_version": "3.6",
   "document_type": "manifest",
   "generated_by": "vinyl-process 0.1.0",
   "run_key": "…",                    // digest over (source digest, plan digest)

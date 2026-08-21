@@ -18,14 +18,15 @@ StageName = Literal[
     "prefilter",
     "declick",
     "decrackle",
+    "mono_merge",
     "split",
     "normalize",
     "resample",
     "export",
     "metadata",
 ]
-"""In pipeline order. ``prefilter``, ``declick`` and ``decrackle`` run **before**
-``split``: repair works on the whole side, the way restoration practice orders it
+"""In pipeline order. ``prefilter``, ``declick``, ``decrackle`` and ``mono_merge``
+run **before** ``split``: repair works on the whole side, the way restoration practice orders it
 — discrete defects before continuous ones — and a noise profile taken from the
 medium's own groove is still reachable at that point.
 See ``docs/adr/0012-the-executor-has-a-pre-split-phase.md``."""
