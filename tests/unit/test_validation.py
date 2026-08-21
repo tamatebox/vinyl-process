@@ -532,3 +532,57 @@ def test_a_genuinely_mono_capture_does_not_warn(
     mono = with_correlation(analysis, 0.999)
     findings = validate_plan(folded(plan), audio_path=recording.path, analysis=mono)
     assert "mono-merge-on-stereo-material" not in codes(findings)
+
+
+# --------------------------------------------------------------------------- #
+# speed
+# --------------------------------------------------------------------------- #
+def sped(plan: ProcessingPlan, **section: Any) -> ProcessingPlan:
+    def replace(payload: dict[str, Any]) -> None:
+        payload["speed"] = {"enabled": True, "engine": "native", **section}
+
+    return mutated(plan, replace)
+
+
+def test_an_absent_speed_section_is_valid_and_silent(plan: ProcessingPlan) -> None:
+    payload = plan.model_dump(mode="json")
+    payload.pop("speed")
+    revived = ProcessingPlan.model_validate(payload)
+    assert revived.speed.enabled is False
+    assert validate_plan(revived) == []
+
+
+def test_speed_without_both_rpm_is_fatal(plan: ProcessingPlan) -> None:
+    findings = validate_plan(sped(plan, played_rpm=78.0))
+    assert "speed-without-both-rpm" in codes(findings)
+    with pytest.raises(PlanValidationError, match="not executable"):
+        raise_for_errors(findings)
+
+
+def test_a_speed_pair_that_changes_nothing_warns(plan: ProcessingPlan) -> None:
+    findings = validate_plan(sped(plan, played_rpm=33.3333, intended_rpm=33.3333))
+    assert "speed-no-op" in codes(findings)
+
+
+def test_a_gross_speed_correction_warns(plan: ProcessingPlan) -> None:
+    """45 played as 33 is not a trim; it is a different transfer."""
+    findings = validate_plan(sped(plan, played_rpm=45.0, intended_rpm=33.3333))
+    assert "speed-correction-is-gross" in codes(findings)
+
+
+def test_a_small_speed_correction_reports_nothing(plan: ProcessingPlan) -> None:
+    assert codes(validate_plan(sped(plan, played_rpm=33.4, intended_rpm=33.3333))) == set()
+
+
+def test_correcting_speed_and_resampling_is_reported(plan: ProcessingPlan) -> None:
+    def both(payload: dict[str, Any]) -> None:
+        payload["speed"] = {
+            "enabled": True,
+            "engine": "native",
+            "played_rpm": 33.4,
+            "intended_rpm": 33.3333,
+        }
+        payload["export"]["sample_rate"] = 48000
+
+    findings = validate_plan(mutated(plan, both))
+    assert "speed-and-resample" in codes(findings)

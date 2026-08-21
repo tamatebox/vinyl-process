@@ -25,12 +25,13 @@ from vinyl_process.models.plan import (
     DecracklePlan,
     MonoMergePlan,
     PrefilterPlan,
+    SpeedPlan,
     TrackBoundary,
 )
 
-Capability = Literal["prefilter", "split", "declick", "decrackle", "mono_merge", "gain"]
+Capability = Literal["prefilter", "split", "declick", "decrackle", "mono_merge", "speed", "gain"]
 ALL_CAPABILITIES: frozenset[Capability] = frozenset(
-    {"prefilter", "split", "declick", "decrackle", "mono_merge", "gain"}
+    {"prefilter", "split", "declick", "decrackle", "mono_merge", "speed", "gain"}
 )
 
 
@@ -65,6 +66,9 @@ class DspEngine(ABC):
 
     def mono_merge(self, audio: AudioBuffer, plan: MonoMergePlan) -> AudioBuffer:
         raise UnsupportedOperationError(f"engine {self.name!r} does not support mono_merge")
+
+    def change_speed(self, audio: AudioBuffer, plan: SpeedPlan) -> AudioBuffer:
+        raise UnsupportedOperationError(f"engine {self.name!r} does not support speed")
 
     def apply_gain(self, audio: AudioBuffer, gain_db: float) -> AudioBuffer:
         raise UnsupportedOperationError(f"engine {self.name!r} does not support gain")

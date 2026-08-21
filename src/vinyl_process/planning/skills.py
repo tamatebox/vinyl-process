@@ -89,6 +89,17 @@ SKILLS: tuple[SkillSpec, ...] = (
         summary="Decides whether to fold a mono record's two groove walls, and how.",
     ),
     SkillSpec(
+        name="plan-speed",
+        owns="speed",
+        reads=(
+            "analysis.json#periodicity",
+            "analysis.json#source",
+            "release metadata",
+            "the person who made the transfer",
+        ),
+        summary="Records the replay speed that was used and the one intended.",
+    ),
+    SkillSpec(
         name="plan-normalize",
         owns="normalize",
         reads=(

@@ -1,7 +1,8 @@
 """Plan executor: runs a ``ProcessingPlan`` end to end, deterministically.
 
 Two phases. **Before the cuts**, on the whole side:
-``prefilter -> declick -> decrackle -> mono_merge``. **After them**, per track:
+``prefilter -> declick -> decrackle -> mono_merge -> speed``. **After them**,
+per track:
 ``split -> normalize -> resample -> export -> tag -> manifest``.
 
 The pre-split order is practice's: discrete defects before continuous ones.
@@ -24,6 +25,7 @@ of every file produced.
 
 from __future__ import annotations
 
+import math
 import platform
 import sys
 from datetime import UTC, datetime
@@ -59,6 +61,7 @@ from vinyl_process.signal_ops import (
     level_matched_mono_merge,
     loudness_block_powers,
     loudness_of_blocks,
+    map_sample_position,
     rms_blocks,
     true_peak,
 )
@@ -123,6 +126,8 @@ class _Execution:
         self.applied_gain_db: float | None = None
         self.applied_track_gains_db: list[float] | None = None
         self.applied_true_peak_db: float | None = None
+        self.time_ratio: float = 1.0
+        """How the pre-split phase rescaled time, for mapping plan positions."""
 
     # ------------------------------------------------------------------ #
     def run(self) -> ExecutionManifest:
@@ -145,6 +150,7 @@ class _Execution:
         audio = self._declick(audio)
         audio = self._decrackle(audio)
         audio = self._mono_merge(audio)
+        audio = self._speed(audio)
         # Post-split phase: one buffer per track.
         tracks = self._tracks(audio)
         buffers = self._split(audio, tracks)
@@ -182,9 +188,32 @@ class _Execution:
 
     # ------------------------------------------------------------------ #
     def _tracks(self, audio: AudioBuffer) -> list[TrackBoundary]:
+        """The plan's boundaries, as the plan states them: source sample indices.
+
+        These are what the manifest reports and what a reader compares against
+        ``analysis.json``. Where the pre-split phase rescaled time, the *cut*
+        happens somewhere else — see :meth:`_cut_positions`.
+        """
         if self.plan.split.enabled:
             return list(self.plan.split.tracks)
-        return [TrackBoundary(index=1, start_sample=0, end_sample=audio.num_frames)]
+        source_frames = round(audio.num_frames / self.time_ratio) or audio.num_frames
+        return [TrackBoundary(index=1, start_sample=0, end_sample=source_frames)]
+
+    def _cut_positions(self, track: TrackBoundary, frames: int) -> TrackBoundary:
+        """``track`` mapped from the source timeline into the buffer's own.
+
+        A no-op unless a pre-split stage rescaled time, which today only ``speed``
+        does. The fades are in milliseconds and so need no mapping: a 250 ms fade
+        is 250 ms of the audio that ships.
+        """
+        if self.time_ratio == 1.0:
+            return track
+        return track.model_copy(
+            update={
+                "start_sample": map_sample_position(track.start_sample, self.time_ratio, frames),
+                "end_sample": map_sample_position(track.end_sample, self.time_ratio, frames),
+            }
+        )
 
     def _prefilter(self, audio: AudioBuffer) -> AudioBuffer:
         prefilter = self.plan.prefilter
@@ -223,8 +252,15 @@ class _Execution:
             self._record("split", "skipped", detail="split disabled; the source is one track")
             return [audio]
         engine = self._engine(self.plan.split.engine, "split")
-        self._record("split", "applied", engine=engine, section=self.plan.split)
-        return engine.split(audio, tracks)
+        detail = ""
+        if self.time_ratio != 1.0:
+            detail = (
+                f"cut positions mapped from the source timeline by x{self.time_ratio:.6f} "
+                "(a pre-split stage rescaled time; the plan's positions are unchanged)"
+            )
+        self._record("split", "applied", engine=engine, section=self.plan.split, detail=detail)
+        mapped = [self._cut_positions(track, audio.num_frames) for track in tracks]
+        return engine.split(audio, mapped)
 
     def _declick(self, audio: AudioBuffer) -> AudioBuffer:
         """Repair the whole side, before the cuts.
@@ -296,6 +332,48 @@ class _Execution:
             )
         self._record("mono_merge", "applied", engine=engine, section=merge, detail=detail)
         return engine.mono_merge(audio, merge)
+
+    def _speed(self, audio: AudioBuffer) -> AudioBuffer:
+        """Correct the replay speed, last of the pre-split stages.
+
+        Last on purpose. Every repair stage ahead of it works on the transfer's
+        own samples, so the parameters chosen against ``analysis.json`` still
+        describe what the engine sees, and nothing is repaired on interpolated
+        audio. Only the cut sees the corrected timeline.
+
+        It is the first stage that changes the *length* of the buffer, which makes
+        a plan position and the sample to cut at two different things. The plan's
+        positions stay indices into the source — ``self.time_ratio`` is how the
+        executor maps them, and the manifest still reports the source index. See
+        ``docs/adr/0016-a-pre-split-stage-may-remap-time.md``.
+        """
+        speed = self.plan.speed
+        if not speed.enabled:
+            self._record("speed", "skipped", detail="speed disabled")
+            return audio
+        ratio = speed.ratio
+        if ratio is None:
+            raise ExecutionError(
+                "speed is enabled but played_rpm and intended_rpm are not both set"
+            )
+        engine = self._engine(speed.engine, "speed")
+        corrected = engine.change_speed(audio, speed)
+        # The realised ratio, not the requested one: the resampler works on a
+        # rational, and the receipt should say what actually happened.
+        realised = corrected.num_frames / max(audio.num_frames, 1)
+        self.time_ratio = realised
+        self._record(
+            "speed",
+            "applied",
+            engine=engine,
+            section=speed,
+            detail=(
+                f"{speed.played_rpm:g} -> {speed.intended_rpm:g} rpm "
+                f"(x{ratio:.6f}); {audio.num_frames} -> {corrected.num_frames} frames, "
+                f"pitch {-1200 * math.log2(ratio):+.1f} cents"
+            ),
+        )
+        return corrected
 
     def _repaired(
         self,

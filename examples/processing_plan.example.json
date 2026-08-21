@@ -1,5 +1,5 @@
 {
-  "schema_version": "3.6",
+  "schema_version": "3.7",
   "document_type": "processing_plan",
   "created_by": "plan-album",
   "source": {
@@ -86,6 +86,13 @@
     "engine": "native",
     "strategy": "level_matched",
     "level_window_seconds": 1.0
+  },
+  "speed": {
+    "decision": null,
+    "enabled": false,
+    "engine": "native",
+    "played_rpm": null,
+    "intended_rpm": null
   },
   "normalize": {
     "decision": {

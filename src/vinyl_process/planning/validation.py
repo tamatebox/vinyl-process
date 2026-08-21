@@ -12,6 +12,7 @@ runs the subset that needs no analysis document and refuses to execute on error.
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
@@ -38,6 +39,16 @@ SUBSONIC_BAND_HZ = (20.0, 30.0)
 """The cited practice for a subsonic high-pass on an LP transfer (Audacity's LP
 workflow, step 8: 20-30 Hz at 24 dB/octave). ``plan-prefilter`` carries the
 citation; these bounds exist only so ``lint`` can say when a plan has left it."""
+
+SPEED_GROSS_CENTS = 100.0
+"""Above a semitone, a speed correction is not a trim — it is a different transfer.
+
+IASA-TC04 is clear that the fix belongs at replay: "it is imperative that the disc
+be replayed for transfer as close to the original recording speed as is possible",
+and where a reduced-speed replay is deliberate it should be "coupled with a doubled
+sample rate" at capture. A gross correction here means the analyzer, the click
+detector and every filter ahead of this stage all saw the wrong spectrum. The
+100-cent line is this project's own; the argument behind it is not."""
 
 MONO_MIN_WINDOW_SECONDS = 0.05
 """Floor for the mono merge's level-tracking window, **derived** rather than cited.
@@ -101,6 +112,7 @@ def validate_plan(
     findings += _check_prefilter(plan)
     findings += _check_decrackle(plan)
     findings += _check_mono_merge(plan)
+    findings += _check_speed(plan)
     findings += _check_tracks(plan)
     findings += _check_cuts(plan)
     findings += _check_naming(plan)
@@ -145,6 +157,7 @@ def _check_engines(plan: ProcessingPlan) -> list[Finding]:
         ("declick", plan.declick.enabled, plan.declick.engine, "declick"),
         ("decrackle", plan.decrackle.enabled, plan.decrackle.engine, "decrackle"),
         ("mono_merge", plan.mono_merge.enabled, plan.mono_merge.engine, "mono_merge"),
+        ("speed", plan.speed.enabled, plan.speed.engine, "speed"),
         (
             "normalize",
             plan.normalize.enabled and plan.normalize.mode != "none",
@@ -302,6 +315,62 @@ def _check_mono_merge(plan: ProcessingPlan) -> list[Finding]:
                 f"{MONO_MIN_WINDOW_SECONDS:g} s the level tracker starts following the damage "
                 "rather than the recording, and its own modulation rises into the audible band",
                 "mono_merge.level_window_seconds",
+            )
+        )
+    return findings
+
+
+def _check_speed(plan: ProcessingPlan) -> list[Finding]:
+    """Speed correction is exact arithmetic; what it can get wrong is the pair."""
+    speed = plan.speed
+    if not speed.enabled:
+        return []
+    if speed.played_rpm is None or speed.intended_rpm is None:
+        return [
+            Finding(
+                "error",
+                "speed-without-both-rpm",
+                "speed is enabled but played_rpm and intended_rpm are not both set. The pair "
+                "is the decision, and it is what records the chosen replay speed in the plan",
+                "speed.played_rpm",
+            )
+        ]
+    findings: list[Finding] = []
+    ratio = speed.ratio
+    assert ratio is not None
+    cents = abs(1200.0 * math.log2(ratio))
+    if ratio == 1.0:
+        findings.append(
+            Finding(
+                "warning",
+                "speed-no-op",
+                "played_rpm equals intended_rpm, so the stage will resample by 1 and change "
+                "nothing; disable the section instead",
+                "speed.enabled",
+            )
+        )
+    elif cents > SPEED_GROSS_CENTS:
+        findings.append(
+            Finding(
+                "warning",
+                "speed-correction-is-gross",
+                f"{speed.played_rpm:g} -> {speed.intended_rpm:g} rpm is {cents:.0f} cents. A "
+                "correction this large means every earlier stage — and the analysis the plan "
+                "was written from — saw the wrong spectrum. Practice is to replay at the right "
+                "speed, or to pair a reduced-speed transfer with a matching sample rate at "
+                "capture time",
+                "speed.intended_rpm",
+            )
+        )
+    if plan.export.sample_rate is not None:
+        findings.append(
+            Finding(
+                "info",
+                "speed-and-resample",
+                "the plan both corrects speed and resamples on export, so the audio is "
+                "resampled twice; the second pass is avoidable only by leaving "
+                "export.sample_rate null",
+                "export.sample_rate",
             )
         )
     return findings

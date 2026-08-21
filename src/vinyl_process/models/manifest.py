@@ -19,16 +19,20 @@ StageName = Literal[
     "declick",
     "decrackle",
     "mono_merge",
+    "speed",
     "split",
     "normalize",
     "resample",
     "export",
     "metadata",
 ]
-"""In pipeline order. ``prefilter``, ``declick``, ``decrackle`` and ``mono_merge``
-run **before** ``split``: repair works on the whole side, the way restoration practice orders it
-— discrete defects before continuous ones — and a noise profile taken from the
-medium's own groove is still reachable at that point.
+"""In pipeline order. ``prefilter``, ``declick``, ``decrackle``, ``mono_merge``
+and ``speed`` run **before** ``split``: repair works on the whole side, the way
+restoration practice orders it — discrete defects before continuous ones — and a
+noise profile taken from the medium's own groove is still reachable at that point.
+``speed`` is last of them, and is the only stage that rescales time; plan positions
+stay indices into the source and the executor maps them
+(``docs/adr/0016-a-pre-split-stage-may-remap-time.md``).
 See ``docs/adr/0012-the-executor-has-a-pre-split-phase.md``."""
 StageStatus = Literal["applied", "skipped"]
 

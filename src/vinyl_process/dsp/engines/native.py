@@ -18,6 +18,7 @@ from vinyl_process.models.plan import (
     DecracklePlan,
     MonoMergePlan,
     PrefilterPlan,
+    SpeedPlan,
     TrackBoundary,
 )
 from vinyl_process.signal_ops import (
@@ -30,6 +31,7 @@ from vinyl_process.signal_ops import (
     repair_clicks,
     repair_clicks_ar,
     repair_clicks_linear,
+    resample_by_ratio,
     subsonic_highpass,
 )
 
@@ -74,7 +76,9 @@ class NativeEngine(DspEngine):
     name = "native"
 
     def capabilities(self) -> frozenset[Capability]:
-        return frozenset({"prefilter", "split", "declick", "decrackle", "mono_merge", "gain"})
+        return frozenset(
+            {"prefilter", "split", "declick", "decrackle", "mono_merge", "speed", "gain"}
+        )
 
     def version(self) -> str:
         return f"native {__version__} (numpy {np.__version__})"
@@ -248,6 +252,23 @@ class NativeEngine(DspEngine):
             audio.samples, audio.sample_rate, plan.level_window_seconds
         )
         return audio.with_samples(np.repeat(merged, audio.num_channels, axis=1))
+
+    def change_speed(self, audio: AudioBuffer, plan: SpeedPlan) -> AudioBuffer:
+        """Resample by the speed ratio, keeping the sample rate.
+
+        A speed error scales time and inverse-scales pitch together, and a
+        resample is the only operation that undoes exactly that. Time-stretching
+        or pitch-shifting would each fix one half and break the other.
+        """
+        ratio = plan.ratio
+        if ratio is None:
+            raise ExecutionError(
+                "speed is enabled but played_rpm and intended_rpm are not both set. "
+                "The pair is the decision, and it is also what documents the chosen "
+                "replay speed in the plan"
+            )
+        corrected, _fraction = resample_by_ratio(audio.samples, ratio)
+        return audio.with_samples(corrected)
 
     def apply_gain(self, audio: AudioBuffer, gain_db: float) -> AudioBuffer:
         return audio.with_samples(audio.samples * (10.0 ** (gain_db / 20.0)))

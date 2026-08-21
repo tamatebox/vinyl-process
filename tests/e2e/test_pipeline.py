@@ -94,6 +94,7 @@ def test_manifest_records_every_stage_and_the_environment(
         "declick",
         "decrackle",
         "mono_merge",
+        "speed",
         "split",
         "normalize",
         "resample",
@@ -101,16 +102,18 @@ def test_manifest_records_every_stage_and_the_environment(
         "metadata",
     }
     # The receipt lists the stages in the order they ran, pre-split phase first.
-    assert [record.stage for record in manifest.stages][:5] == [
+    assert [record.stage for record in manifest.stages][:6] == [
         "prefilter",
         "declick",
         "decrackle",
         "mono_merge",
+        "speed",
         "split",
     ]
     assert stages["prefilter"].status == "skipped"
     assert stages["decrackle"].status == "skipped"
     assert stages["mono_merge"].status == "skipped"
+    assert stages["speed"].status == "skipped"
     # A repair stage says how much of the audio it actually changed.
     assert "repaired" in stages["declick"].detail
     assert stages["split"].status == "applied"
@@ -651,4 +654,59 @@ def test_a_mono_merged_run_reproduces_bit_for_bit(
     folded = ProcessingPlan.model_validate(payload)
     first = run(folded, recording, tmp_path / "one")
     second = run(folded, recording, tmp_path / "two")
+    assert first.output_digests() == second.output_digests()
+
+
+def test_speed_correction_moves_the_audio_but_not_the_plans_positions(
+    plan: ProcessingPlan, recording: SyntheticRecording, tmp_path: Path
+) -> None:
+    """The property that lets a boundary agreed at checkpoint 2 survive this stage.
+
+    Plan positions are indices into the source recording and stay that way; the
+    executor maps them into the corrected timeline when it cuts. So the manifest
+    still reports the source index, while the exported track is longer by the
+    ratio (adr/0016).
+    """
+    ratio = 34.0 / 33.3333
+    payload = plan.model_dump(mode="json")
+    payload["speed"] = {
+        "enabled": True,
+        "engine": "native",
+        "played_rpm": 34.0,
+        "intended_rpm": 33.3333,
+    }
+    corrected = ProcessingPlan.model_validate(payload)
+
+    plain = run(plan, recording, tmp_path / "plain")
+    fast = run(corrected, recording, tmp_path / "corrected")
+
+    order = [record.stage for record in fast.stages]
+    assert order.index("mono_merge") < order.index("speed") < order.index("split")
+    stages = {record.stage: record for record in fast.stages}
+    assert stages["speed"].status == "applied"
+    assert "34 -> 33.3333 rpm" in stages["speed"].detail
+    assert "cents" in stages["speed"].detail
+    assert "mapped from the source timeline" in stages["split"].detail
+
+    for before, after in zip(plain.outputs, fast.outputs, strict=True):
+        # The plan's positions are untouched…
+        assert after.source_start_sample == before.source_start_sample
+        assert after.source_end_sample == before.source_end_sample
+        # …and the audio really is longer by the ratio.
+        assert after.num_samples == pytest.approx(before.num_samples * ratio, rel=1e-3)
+
+
+def test_a_speed_corrected_run_reproduces_bit_for_bit(
+    plan: ProcessingPlan, recording: SyntheticRecording, tmp_path: Path
+) -> None:
+    payload = plan.model_dump(mode="json")
+    payload["speed"] = {
+        "enabled": True,
+        "engine": "native",
+        "played_rpm": 78.0,
+        "intended_rpm": 76.0,
+    }
+    corrected = ProcessingPlan.model_validate(payload)
+    first = run(corrected, recording, tmp_path / "one")
+    second = run(corrected, recording, tmp_path / "two")
     assert first.output_digests() == second.output_digests()

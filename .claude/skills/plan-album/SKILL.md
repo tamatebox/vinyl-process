@@ -1,6 +1,6 @@
 ---
 name: plan-album
-description: Orchestrate planning for a raw vinyl recording — run the analyzer, apply the plan-* stage skills (prefilter, split, declick, decrackle, mono-merge, normalize, metadata, export), assemble and lint processing_plan.json, then execute it. Use when the user wants to process a raw vinyl recording end to end.
+description: Orchestrate planning for a raw vinyl recording — run the analyzer, apply the plan-* stage skills (prefilter, split, declick, decrackle, mono-merge, speed, normalize, metadata, export), assemble and lint processing_plan.json, then execute it. Use when the user wants to process a raw vinyl recording end to end.
 ---
 
 # Plan Album
@@ -306,9 +306,10 @@ before continuous ones, level last (*Outside references*).
 | 3 | `declick` | [plan-declick](../plan-declick/SKILL.md) | pre-split |
 | 4 | `decrackle` | [plan-decrackle](../plan-decrackle/SKILL.md) | pre-split |
 | 5 | `mono_merge` | [plan-mono-merge](../plan-mono-merge/SKILL.md) | pre-split |
-| 6 | `normalize` | [plan-normalize](../plan-normalize/SKILL.md) | post-split |
-| 7 | `metadata` | [plan-metadata](../plan-metadata/SKILL.md) | post-split |
-| 8 | `export` | [plan-export](../plan-export/SKILL.md) | post-split |
+| 6 | `speed` | [plan-speed](../plan-speed/SKILL.md) | pre-split |
+| 7 | `normalize` | [plan-normalize](../plan-normalize/SKILL.md) | post-split |
+| 8 | `metadata` | [plan-metadata](../plan-metadata/SKILL.md) | post-split |
+| 9 | `export` | [plan-export](../plan-export/SKILL.md) | post-split |
 
 **Decide in that order; the executor runs in its own.** `prefilter` and `declick`
 act on the whole side before the cuts, but `split` is decided second because
@@ -318,8 +319,8 @@ orders, and only the second one is
 [adr/0012](../../../docs/adr/0012-the-executor-has-a-pre-split-phase.md).
 
 **Route past a disabled stage in one line, not with a checkpoint.** `prefilter`
-, `decrackle` and `mono_merge` are all off by default and most records should
-leave them off; "prefilter: off, rumble is −48 dB and there is no DC offset",
+, `decrackle`, `mono_merge` and `speed` are all off by default and most records
+should leave them off; "prefilter: off, rumble is −48 dB and there is no DC offset",
 "decrackle: off, the complaint is discrete ticks rather than texture" and
 "mono_merge: off, this is a stereo pressing" are the whole of each. Open a
 checkpoint only when a measurement, or the listener's own description, argues for
@@ -427,14 +428,22 @@ decision people notice afterwards and cannot undo without re-running.
   validation error because the contract forbids unknown fields. Use
   `write_tags: false` there instead.
 
-  `prefilter`, `decrackle` and `mono_merge` are **optional and disabled by
-  default**, and every stage added after schema 3.2 will be. That is what keeps the bump minor and every archived plan
+  `prefilter`, `decrackle`, `mono_merge` and `speed` are **optional and disabled
+  by default**, and every stage added after schema 3.2 will be. That is what keeps the bump minor and every archived plan
   re-executable ([adr/0012](../../../docs/adr/0012-the-executor-has-a-pre-split-phase.md)).
   Write the section out anyway once you have considered it, with the `rationale`
   saying you decided against — an omitted section and a considered "no" are
   indistinguishable in the file otherwise.
 - The plan must stand alone: someone with only the recording and the plan must be
   able to reproduce the album exactly.
+- **A plan position is always an index into the source recording**, even when
+  `speed` has rescaled time: the executor maps positions at the cut and the
+  manifest still reports the source index
+  ([adr/0016](../../../docs/adr/0016-a-pre-split-stage-may-remap-time.md)). So a
+  boundary agreed at checkpoint 2 survives a speed correction decided afterwards.
+  What does *not* survive is a **duration** quoted from `analysis.json`: the
+  analyzer measured the uncorrected transfer, so say which timeline a figure is in
+  whenever `speed` is enabled.
 - One recording per plan. A two-sided album is two recordings, two analyses and
   two plans exported into the same album directory:
   - side B's `split.tracks[].index` continues the album numbering (6, 7, …) and

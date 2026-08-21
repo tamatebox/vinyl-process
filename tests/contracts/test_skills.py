@@ -18,6 +18,7 @@ PLAN_SECTIONS = (
     "declick",
     "decrackle",
     "mono_merge",
+    "speed",
     "normalize",
     "metadata",
     "export",

@@ -12,7 +12,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from vinyl_process.errors import ContractError
 
-SCHEMA_VERSION = "3.6"
+SCHEMA_VERSION = "3.7"
 """``MAJOR.MINOR``. Additive changes bump MINOR; breaking changes bump MAJOR.
 
 3.0 because ``silence.regions[].music_start_sample`` is required: a 2.x
@@ -40,7 +40,13 @@ additive: an older plan names an older mode and produces the same gain, and an
 older analysis simply omits the field.
 
 3.6 adds ``processing_plan.mono_merge``: optional, disabled by default, so a 3.5
-plan validates unchanged and executes to the same bytes."""
+plan validates unchanged and executes to the same bytes.
+
+3.7 adds ``processing_plan.speed``, on the same terms. It is the first stage
+that changes the *length* of the audio, so it is the first to make a plan
+position and the sample the executor cuts at two different things: positions
+stay indices into the **source**, and the executor maps them through the
+correction. See ``docs/adr/0016-a-pre-split-stage-may-remap-time.md``."""
 
 Confidence = Annotated[float, Field(ge=0.0, le=1.0)]
 """How much a measurement can be trusted. 0 = worthless, 1 = certain."""

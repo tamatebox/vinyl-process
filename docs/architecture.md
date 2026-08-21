@@ -28,7 +28,7 @@ Recording is out of scope.
 ┌──────────────────────────▼──────────────────────────────────┐
 │ DSP Executor (Python, src/vinyl_process/dsp + executor.py)   │
 │   executes — prefilter, declick, decrackle, mono_merge,       │
-│              split, gain, resample, export, tag               │
+│              speed, split, gain, resample, export, tag        │
 │   deterministic: same audio + same plan → same bytes         │
 │   output: audio files + manifest.json                        │
 └─────────────────────────────────────────────────────────────┘
@@ -166,8 +166,11 @@ load source
                            after declick, because discrete defects come before
                            continuous ones. Disabled by default)
             ─▶ mono_merge (fold a mono record's two groove walls onto one signal,
-                           level-matched. Last, because the walls are repaired
-                           independently first. Disabled by default)
+                           level-matched, after the walls are repaired
+                           independently. Disabled by default)
+            ─▶ speed      (resample a transfer played at the wrong speed. Last, so
+                           every repair works on the transfer's own samples; the
+                           only stage that rescales time. Disabled by default)
   post-split phase — one buffer per track
             ─▶ split      (sample-exact cuts + the fades the plan asked for)
             ─▶ normalize  (strategy, target and ceiling from the plan; gain
@@ -180,7 +183,11 @@ load source
             ─▶ manifest.json
 ```
 
-The two phases are [adr/0012](adr/0012-the-executor-has-a-pre-split-phase.md).
+The two phases are [adr/0012](adr/0012-the-executor-has-a-pre-split-phase.md), and
+a pre-split stage that rescales time is
+[adr/0016](adr/0016-a-pre-split-stage-may-remap-time.md): **plan positions stay
+indices into the source** and the executor maps them at the cut, so a boundary
+agreed at a checkpoint still means what it meant.
 Practice orders it this way — DC offset, subsonic filter, clicks, and only then
 track labels — and it is also the only ordering in which a noise profile taken
 from the medium's own unmodulated groove is reachable at all, since `split`
@@ -443,8 +450,19 @@ end to end for determinism.
   what two observations are for. Per-channel detection would change output bytes
   for any plan with declick enabled, so it needs its own decision rather than being
   slipped in.
-- **No de-hum, de-clip, azimuth or speed correction stages.** `prefilter`,
-  `decrackle` and `mono_merge` are the pre-split stages that exist. `clipping` measures a clipped
+- **Speed can be corrected, but not measured here.** `speed` resamples a transfer
+  played at the wrong rate, and carries the two rpm figures so the plan documents
+  the chosen replay speed as IASA-TC04 requires. What the codebase cannot do is
+  *find* the deviation: `periodicity` correlates at the **configured** nominal
+  periods (1.8 s, 1.3333 s) and never searches for the period the platter actually
+  ran at, so it answers "is this once per revolution" and not "how fast was the
+  platter". The deviation has to come from a strobe, a test record, a reference
+  tone or a judgement, and `plan-speed` refuses to guess. Practice would rather it
+  never reached this stage at all — "it is imperative that the disc be replayed for
+  transfer as close to the original recording speed as is possible" — so `lint`
+  warns above a semitone, where everything upstream saw the wrong spectrum.
+- **No de-hum, de-clip or azimuth stages.** `prefilter`, `decrackle`,
+  `mono_merge` and `speed` are the pre-split stages that exist. `clipping` measures a clipped
   transfer but nothing repairs one: ffmpeg's `adeclip` makes the implementation
   nearly free, which is the trap — no reference was found for how far
   reconstruction may credibly go, and a stage with an uncalibrated skill would get

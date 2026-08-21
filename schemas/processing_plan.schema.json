@@ -652,6 +652,61 @@
       "title": "SourceInfo",
       "type": "object"
     },
+    "SpeedPlan": {
+      "additionalProperties": false,
+      "description": "Correct a transfer played at the wrong speed.\n\nThe two speeds are carried rather than a bare ratio, because a plan is where\nthe choice has to be recorded: IASA-TC04 asks that \"the chosen replay speed\nshould be documented in accompanying metadata. This is particularly important\nwhere any doubt remains as to the actual recording speed\" \u2014 and on a 78 there\nnearly always is, since \"it was very often the case that coarse groove shellac\ndiscs were not recorded at precisely 78rpm\".\n\nThe ratio is derived from the pair, which is arithmetic rather than a choice.\nNothing here is measured by this codebase: the deviation comes from a strobe,\na test record, a reference tone or a judgement about the music, and\n``plan-speed`` is required to say which.\n\nLast of the pre-split stages, so every repair works on the transfer's own\nsamples and only the cut sees the corrected timeline.",
+      "properties": {
+        "decision": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/StageDecision"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "enabled": {
+          "default": false,
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "engine": {
+          "default": "native",
+          "title": "Engine",
+          "type": "string"
+        },
+        "intended_rpm": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0.0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Intended Rpm"
+        },
+        "played_rpm": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0.0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Played Rpm"
+        }
+      },
+      "title": "SpeedPlan",
+      "type": "object"
+    },
     "SplitPlan": {
       "additionalProperties": false,
       "properties": {
@@ -878,12 +933,15 @@
       "$ref": "#/$defs/PrefilterPlan"
     },
     "schema_version": {
-      "default": "3.6",
+      "default": "3.7",
       "title": "Schema Version",
       "type": "string"
     },
     "source": {
       "$ref": "#/$defs/SourceInfo"
+    },
+    "speed": {
+      "$ref": "#/$defs/SpeedPlan"
     },
     "split": {
       "$ref": "#/$defs/SplitPlan"

@@ -33,7 +33,7 @@ happened.
 
 ```jsonc
 {
-  "schema_version": "3.6",
+  "schema_version": "3.7",
   "document_type": "analysis",
   "generated_by": "vinyl-process 0.1.0",
   "source": { "path": "side-a.wav", "sha256": "…", "sample_rate": 44100,
@@ -245,7 +245,7 @@ block: which skill decided, why, how confident it was, and what it consulted.
 
 ```jsonc
 {
-  "schema_version": "3.6",
+  "schema_version": "3.7",
   "document_type": "processing_plan",
   "created_by": "plan-album",
   "source": { …same shape as analysis.source; sha256 is verified before running… },
@@ -267,6 +267,17 @@ block: which skill decided, why, how confident it was, and what it consulted.
     // asked for. 6 | 12 | 18 | 24 | 30 | 36.
   },
 
+  // Optional, disabled by default. The two speeds are carried rather than a ratio
+  // because the plan is where the chosen replay speed has to be documented
+  // (IASA-TC04 5.2.5). Last of the pre-split stages, and the only one that
+  // rescales time — split positions below stay SOURCE indices. adr/0016.
+  "speed": {
+    "enabled": false,
+    "engine": "native",              // only 'native' implements speed
+    "played_rpm": null,              // what the turntable actually ran at
+    "intended_rpm": null             // what the record wanted; ratio = played/intended
+  },
+
   "split": {
     "enabled": true,
     "engine": "native",
@@ -274,6 +285,9 @@ block: which skill decided, why, how confident it was, and what it consulted.
                   "inputs": ["analysis.json#boundaries", "discogs:release/1873013"] },
     "tracks": [ { "index": 1, "start_sample": 88200, "end_sample": 445410,
                   "fade_in_ms": 20.0, "fade_out_ms": 30.0 } ]
+    // Positions are indices into the SOURCE recording, always — even when `speed`
+    // has rescaled time, in which case the executor maps them at the cut and the
+    // manifest still reports the source index (adr/0016).
     // index is the position on the *album*: side B continues where side A
     // stopped (6, 7, …), so both sides export into one directory. Indices must
     // be contiguous and ascending within a plan; gaps between tracks are legal
@@ -382,7 +396,7 @@ Written next to the exported album. This is the receipt.
 
 ```jsonc
 {
-  "schema_version": "3.6",
+  "schema_version": "3.7",
   "document_type": "manifest",
   "generated_by": "vinyl-process 0.1.0",
   "run_key": "…",                    // digest over (source digest, plan digest)

@@ -21,3 +21,4 @@ edited after acceptance — a reversal is a new record that supersedes the old o
 | [0013](0013-crackle-is-a-separate-stage-with-its-own-detector.md) | Crackle is a separate stage with its own detector |
 | [0014](0014-album-lufs-ships-with-its-conformance-tests.md) | `album_lufs` ships with its conformance tests |
 | [0015](0015-a-mono-record-has-two-observations-of-one-signal.md) | A mono record has two observations of one signal |
+| [0016](0016-a-pre-split-stage-may-remap-time.md) | A pre-split stage may remap time; plan positions do not move |

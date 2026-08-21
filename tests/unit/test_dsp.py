@@ -22,6 +22,7 @@ from vinyl_process.models.plan import (
     DecracklePlan,
     MonoMergePlan,
     PrefilterPlan,
+    SpeedPlan,
     TrackBoundary,
 )
 from vinyl_process.signal_ops import amplitude_to_db, level_matched_mono_merge
@@ -653,4 +654,48 @@ def test_mono_merge_is_deterministic() -> None:
     section = MonoMergePlan(enabled=True)
     first = NativeEngine().mono_merge(audio, section)
     second = NativeEngine().mono_merge(audio, section)
+    assert np.array_equal(first.samples, second.samples)
+
+
+# --------------------------------------------------------------------------- #
+# speed
+# --------------------------------------------------------------------------- #
+def test_speed_is_a_native_capability_and_not_an_ffmpeg_one() -> None:
+    assert "speed" in NativeEngine().capabilities()
+    assert "speed" not in get_engine("ffmpeg").capabilities()
+
+
+def test_correcting_a_fast_transfer_lengthens_it_and_lowers_the_pitch() -> None:
+    audio = tone(seconds=4.0)
+    corrected = NativeEngine().change_speed(
+        audio, SpeedPlan(enabled=True, played_rpm=34.0, intended_rpm=33.3333)
+    )
+    ratio = 34.0 / 33.3333
+    assert corrected.num_frames == pytest.approx(audio.num_frames * ratio, rel=1e-4)
+
+    window = corrected.samples[SAMPLE_RATE : SAMPLE_RATE * 3, 0]
+    spectrum = np.abs(np.fft.rfft(window))
+    peak_hz = int(np.argmax(spectrum)) * SAMPLE_RATE / window.size
+    assert peak_hz == pytest.approx(440.0 / ratio, rel=1e-3)
+
+
+def test_correcting_a_slow_transfer_shortens_it() -> None:
+    audio = tone(seconds=4.0)
+    corrected = NativeEngine().change_speed(
+        audio, SpeedPlan(enabled=True, played_rpm=33.0, intended_rpm=33.3333)
+    )
+    assert corrected.num_frames < audio.num_frames
+
+
+def test_speed_refuses_a_half_stated_pair() -> None:
+    audio = tone()
+    with pytest.raises(ExecutionError, match="not both set"):
+        NativeEngine().change_speed(audio, SpeedPlan(enabled=True, played_rpm=78.0))
+
+
+def test_speed_is_deterministic() -> None:
+    audio = tone(seconds=2.0)
+    section = SpeedPlan(enabled=True, played_rpm=78.0, intended_rpm=76.0)
+    first = NativeEngine().change_speed(audio, section)
+    second = NativeEngine().change_speed(audio, section)
     assert np.array_equal(first.samples, second.samples)

@@ -181,6 +181,7 @@
             "declick",
             "decrackle",
             "mono_merge",
+            "speed",
             "split",
             "normalize",
             "resample",
@@ -286,7 +287,7 @@
       "type": "string"
     },
     "schema_version": {
-      "default": "3.6",
+      "default": "3.7",
       "title": "Schema Version",
       "type": "string"
     },

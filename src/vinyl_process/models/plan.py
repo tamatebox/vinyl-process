@@ -94,6 +94,50 @@ class PrefilterPlan(EngineSection):
 
 
 # --------------------------------------------------------------------------- #
+# speed
+# --------------------------------------------------------------------------- #
+class SpeedPlan(EngineSection):
+    """Correct a transfer played at the wrong speed.
+
+    The two speeds are carried rather than a bare ratio, because a plan is where
+    the choice has to be recorded: IASA-TC04 asks that "the chosen replay speed
+    should be documented in accompanying metadata. This is particularly important
+    where any doubt remains as to the actual recording speed" — and on a 78 there
+    nearly always is, since "it was very often the case that coarse groove shellac
+    discs were not recorded at precisely 78rpm".
+
+    The ratio is derived from the pair, which is arithmetic rather than a choice.
+    Nothing here is measured by this codebase: the deviation comes from a strobe,
+    a test record, a reference tone or a judgement about the music, and
+    ``plan-speed`` is required to say which.
+
+    Last of the pre-split stages, so every repair works on the transfer's own
+    samples and only the cut sees the corrected timeline.
+    """
+
+    enabled: bool = False
+
+    played_rpm: float | None = Field(default=None, gt=0.0)
+    """The speed the turntable actually ran at during the transfer."""
+
+    intended_rpm: float | None = Field(default=None, gt=0.0)
+    """The speed the record should have been played at. Both are required when the
+    stage is enabled; ``lint`` refuses a half-stated pair."""
+
+    @property
+    def ratio(self) -> float | None:
+        """How much longer the corrected audio is: ``played / intended``.
+
+        Played fast means the disc turned more times per second than it should
+        have, so the transfer came out short and sharp and the correction stretches
+        it — a ratio above 1. Played slow is the mirror.
+        """
+        if self.played_rpm is None or self.intended_rpm is None:
+            return None
+        return self.played_rpm / self.intended_rpm
+
+
+# --------------------------------------------------------------------------- #
 # split
 # --------------------------------------------------------------------------- #
 class TrackBoundary(ContractModel):
@@ -354,7 +398,12 @@ class ProcessingPlan(VersionedDocument):
     """Optional and disabled by default, like every stage added after 3.2."""
 
     mono_merge: MonoMergePlan = Field(default_factory=MonoMergePlan)
-    """Optional and disabled by default. Last of the pre-split stages."""
+    """Optional and disabled by default."""
+
+    speed: SpeedPlan = Field(default_factory=SpeedPlan)
+    """Optional and disabled by default. **Last** of the pre-split stages, and
+    the only one that changes the timeline — see
+    ``docs/adr/0016-a-pre-split-stage-may-remap-time.md``."""
 
     normalize: NormalizePlan
     metadata: MetadataPlan

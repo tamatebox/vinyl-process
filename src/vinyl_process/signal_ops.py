@@ -11,6 +11,7 @@ Every function here is deterministic: no randomness, no wall clock.
 from __future__ import annotations
 
 from collections.abc import Sequence
+from fractions import Fraction
 
 import numpy as np
 import numpy.typing as npt
@@ -387,6 +388,67 @@ def level_matched_mono_merge(
         float(np.min(gains)),
         float(np.max(gains)),
     )
+
+
+# --------------------------------------------------------------------------- #
+# speed correction
+# --------------------------------------------------------------------------- #
+SPEED_MAX_DENOMINATOR = 20_000
+"""Largest denominator when a speed ratio is approximated as a rational.
+
+``resample_poly`` needs an integer up/down pair. Every ratio that comes from a
+pair of nominal turntable speeds is already simple — 80/78 is 40/39, half speed is
+1/2, 45 against 33 1/3 is 27/20 — so the bound only matters for a *measured*
+deviation.
+
+It is 20 000 rather than something smaller because a smaller bound silently
+discards small corrections instead of approximating them. Measured: at a bound of
+1000, a ratio of 1.00042 (0.73 cents) rounds to **exactly 1** — the stage would
+report itself applied and change nothing. At 20 000 the same ratio comes out
+2382/2381, within 8e-9, and a thirty-second stereo buffer resamples in 0.04 s, so a
+whole side is a few seconds. :func:`resample_by_ratio` still refuses a correction
+that collapses to unity, because no bound removes that possibility entirely."""
+
+
+def resample_by_ratio(
+    samples: np.ndarray, ratio: float, max_denominator: int = SPEED_MAX_DENOMINATOR
+) -> tuple[npt.NDArray[np.float64], Fraction]:
+    """Stretch or compress ``samples`` in time by ``ratio``, keeping the rate.
+
+    This is what a speed error *is*: the disc turned at the wrong rate, so the
+    whole recording is uniformly scaled in time and inversely in pitch. Correcting
+    it is therefore a resample and nothing more — no time-stretching, no pitch
+    shifting, both of which would break the one relationship a speed error
+    preserves.
+
+    Returns the corrected samples and the exact rational used, so the caller can
+    report what was actually applied rather than what was asked for.
+    """
+    values = np.asarray(samples, dtype=np.float64)
+    if values.ndim == 1:
+        values = values[:, None]
+    fraction = Fraction(ratio).limit_denominator(max_denominator)
+    if fraction == 1 and ratio != 1.0:
+        raise ValueError(
+            f"a speed ratio of {ratio!r} is finer than the resampler's rational grid "
+            f"(denominators up to {max_denominator}) and would round away to no correction "
+            "at all; state a coarser ratio or leave the stage disabled"
+        )
+    if values.size == 0 or fraction == 1:
+        return np.ascontiguousarray(values), fraction
+    resampled = resample_poly(values, fraction.numerator, fraction.denominator, axis=0)
+    return np.ascontiguousarray(resampled, dtype=np.float64), fraction
+
+
+def map_sample_position(position: int, ratio: float, limit: int) -> int:
+    """Carry a position from the source timeline into a speed-corrected one.
+
+    Plan positions are indices into the **source** recording and stay that way —
+    that is the promise ``adr/0002`` makes and ``adr/0016`` keeps. When a
+    pre-split stage rescales time, the executor maps them; nothing in the plan
+    changes meaning.
+    """
+    return int(min(max(round(position * ratio), 0), limit))
 
 
 def runs_of_true(flags: np.ndarray) -> list[tuple[int, int]]:

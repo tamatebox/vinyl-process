@@ -19,12 +19,14 @@ from vinyl_process.signal_ops import (
     gated_rms_of_blocks,
     highpass,
     local_bounds,
+    map_sample_position,
     merge_runs,
     onset_coincidence,
     onset_flux,
     periodicity_peaks,
     phase_concentration,
     repair_clicks,
+    resample_by_ratio,
     rms_blocks,
     runs_of_true,
     sinusoidal_residual,
@@ -748,3 +750,76 @@ def test_crackle_detector_is_a_noop_on_degenerate_input() -> None:
     assert crackle_events_curvature(np.zeros(2), 3.0, 3, sample_rate=SAMPLE_RATE) == []
     assert crackle_events_curvature(tonal(0.1), 0.0, 3, sample_rate=SAMPLE_RATE) == []
     assert crackle_events_curvature(tonal(0.1), 3.0, 0, sample_rate=SAMPLE_RATE) == []
+
+
+# --------------------------------------------------------------------------- #
+# speed correction
+# --------------------------------------------------------------------------- #
+def test_resampling_by_a_ratio_scales_time_and_pitch_together() -> None:
+    """What a speed error *is*, and therefore what undoing it must do.
+
+    A disc turning fast compresses time and raises pitch by the same factor. So
+    the corrected audio must be longer by the ratio and lower in pitch by it — not
+    one or the other, which is what time-stretching and pitch-shifting each do.
+    """
+    seconds, hz, ratio = 4.0, 1000.0, 1.05
+    frames = round(seconds * SAMPLE_RATE)
+    t = np.arange(frames) / SAMPLE_RATE
+    signal = np.sin(2 * np.pi * hz * t)[:, None]
+
+    corrected, fraction = resample_by_ratio(signal, ratio)
+    assert corrected.shape[0] == pytest.approx(frames * ratio, rel=1e-4)
+    assert float(fraction) == pytest.approx(ratio, rel=1e-6)
+
+    # The tone came down by exactly the ratio.
+    window = corrected[SAMPLE_RATE : SAMPLE_RATE * 3, 0]
+    spectrum = np.abs(np.fft.rfft(window))
+    peak_hz = int(np.argmax(spectrum)) * SAMPLE_RATE / window.size
+    assert peak_hz == pytest.approx(hz / ratio, rel=1e-3)
+
+
+def test_a_ratio_of_one_is_a_no_op() -> None:
+    signal = tonal(1.0)[:, None]
+    corrected, fraction = resample_by_ratio(signal, 1.0)
+    assert fraction == 1
+    assert np.array_equal(corrected, signal)
+
+
+@pytest.mark.parametrize(
+    ("ratio", "expected"),
+    [(0.5, "1/2"), (80 / 78, "40/39"), (45 / (100 / 3), "27/20"), (1.004, "251/250")],
+)
+def test_real_speed_pairs_land_on_simple_rationals(ratio: float, expected: str) -> None:
+    """Every ratio that comes from a pair of turntable speeds is already simple,
+    which is why bounding the denominator costs nothing."""
+    assert str(resample_by_ratio(np.zeros((0, 1)), ratio)[1]) == expected
+
+
+def test_the_rational_approximation_is_far_below_any_real_deviation() -> None:
+    for ratio in (1.0013, 0.9987, 1.00042):
+        fraction = resample_by_ratio(np.zeros((0, 1)), ratio)[1]
+        assert abs(float(fraction) - ratio) / ratio < 1e-6
+
+
+def test_a_correction_too_fine_for_the_grid_is_refused_rather_than_rounded_away() -> None:
+    """The failure a coarser bound produced: the stage reports itself applied and
+    changes nothing at all. Better to refuse than to lie in the receipt."""
+    with pytest.raises(ValueError, match="round away"):
+        resample_by_ratio(np.zeros((100, 1)), 1.0 + 1e-9)
+
+
+def test_mapping_a_position_carries_it_into_the_corrected_timeline() -> None:
+    """Plan positions stay source indices; this is how the executor reads them."""
+    assert map_sample_position(1000, 1.0, 10_000) == 1000
+    assert map_sample_position(1000, 1.05, 10_000) == 1050
+    assert map_sample_position(1000, 0.5, 10_000) == 500
+    # …and never past the end of the buffer it is being applied to.
+    assert map_sample_position(20_000, 1.05, 10_000) == 10_000
+    assert map_sample_position(-5, 1.0, 10_000) == 0
+
+
+def test_speed_correction_is_deterministic() -> None:
+    signal = tonal(2.0)[:, None]
+    first, _f = resample_by_ratio(signal, 1.004)
+    second, _s = resample_by_ratio(signal, 1.004)
+    assert np.array_equal(first, second)

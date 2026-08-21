@@ -17,6 +17,7 @@ cuts; the rest run per track.
 | `declick` | Detect and repair impulsive damage with the plan's parameters |
 | `decrackle` | Repair a bed of 1-3 sample events, per sample rather than collectively |
 | `mono_merge` | Fold a mono record's two groove walls onto one signal, level-matched |
+| `speed` | Resample a transfer played at the wrong speed, keeping the sample rate |
 | `split` | Cut the source into tracks at sample-exact boundaries, applying the plan's fades |
 | `gain` | Apply a gain in dB |
 
@@ -25,7 +26,7 @@ An engine implements only what it has. A partial engine is a first-class citizen
 ```sh
 $ vinyl-process engines
 ffmpeg [available] declick, gain (ffmpeg version 9.0.1 …)
-native [available] declick, decrackle, gain, mono_merge, prefilter, split (native 0.1.0 …)
+native [available] declick, decrackle, gain, mono_merge, prefilter, speed, split (native …)
 ```
 
 ## Built-in engines
@@ -76,6 +77,12 @@ Pure numpy/scipy, no external binaries, every capability.
   against one wall (coherent ideal 3.01), and out-of-phase content cancels
   outright. Output stays stereo with the same data in both channels. See
   [adr/0015](adr/0015-a-mono-record-has-two-observations-of-one-signal.md).
+- `speed` — resample by `played_rpm / intended_rpm`, keeping the sample rate, so
+  time and pitch scale together the way a speed error made them. The ratio is
+  approximated as a rational with denominator up to 20 000; a ratio that would
+  collapse to 1 on that grid is **refused** rather than silently applied as a
+  no-op, which is what a coarser bound did. See
+  [adr/0016](adr/0016-a-pre-split-stage-may-remap-time.md).
 - `gain` — multiply by `10^(dB/20)`.
 
 What is established, on real audio rather than injected damage:
