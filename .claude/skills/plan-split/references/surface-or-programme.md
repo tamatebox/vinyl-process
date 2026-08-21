@@ -63,3 +63,35 @@ uncalibrated: that unequalised groove noise **rises about 3 dB/octave**, and the
 **14-19 dB** step that marked an entrance. Both are one 12"'s measurement or an
 unsourced rule of thumb, so read them as the shape to look for and not as a
 threshold to apply.
+
+## `run_out` — the trailing edge, measured rather than read
+
+`run_out.start_sample` is this whole question already answered for the one
+boundary where it comes up every time: where the last track ends. It is the two
+instruments above combined — `periodicity` supplies an **anchor**, the last window
+whose own top autocorrelation peak still beats the platter's revolution
+correlations, and `band_profile` refines that anchor forward to the first frame at
+which every band has arrived at the run-out's own level.
+
+**Evidence: one record, four sides.** On it the pair landed within 0.6 s of the
+answer derived by hand, against 5.0-9.3 s early for
+`boundaries.lead_out_start_sample` and up to 27 s late for
+`silence.regions[-1].music_end_sample` — the latter because that region held the
+run-out *and* the needle lift, and its reference is the region's minimum, which
+the lift owns. That is one record. It is a better starting point than either
+marker and it is not a settled figure, so check it as *SKILL.md* step 5 says: read
+`periodicity` past your own cut and prefer the longer of the two answers when they
+disagree.
+
+Two things it cannot do, both structural rather than provisional:
+
+- **the anchor is a 12 s window on a 4 s hop**, so without the band refinement the
+  answer is only that coarse. Where `band_profile` is absent the section reports
+  nothing rather than the anchor alone.
+- **it has no outside citation.** Trimming the run-out is standard practice and is
+  cited in the skill; locating it by correlating against the revolution period is
+  this repository's own construction, inherited from `periodicity`, which was
+  itself built in-house. The phenomenon behind it — a groove defect struck once per
+  turn — is common knowledge; using it as a boundary detector is not what the
+  field's tools do, and they detect track breaks from level with a person
+  adjusting them.

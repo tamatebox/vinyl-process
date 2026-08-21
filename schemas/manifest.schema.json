@@ -287,7 +287,7 @@
       "type": "string"
     },
     "schema_version": {
-      "default": "3.7",
+      "default": "3.8",
       "title": "Schema Version",
       "type": "string"
     },

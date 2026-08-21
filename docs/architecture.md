@@ -351,14 +351,27 @@ end to end for determinism.
   coincidence above 2 — the detector was following the beat at every threshold, and
   the answer was to leave repair off. Separating surface from programme more
   reliably than an energy ratio would be a new algorithm id.
-- **The playable region is a level threshold, so a quiet passage can end a side
-  early.** `lead_out_start_sample` is where the level last crossed the silence
-  threshold. On material that drops out by design — dub, electronic — that fires
-  at the drop rather than at the run-out: on one tested side it landed 22 s
-  before the music actually stopped, and cutting there would have truncated the
-  track. `periodicity` is the cross-check, since a run-out groove repeats once per
-  revolution while a quiet outro keeps the beat. `lead_in_end_sample` has the
-  mirror problem and comes back `null` when no leading silence is found at all.
+- **The playable region is a level threshold, and the side's end is no longer
+  measured by one.** `lead_out_start_sample` is where the level last crossed the
+  silence threshold. On material that drops out by design — dub, electronic —
+  that fires at the drop rather than at the run-out: on one tested side it landed
+  22 s before the music actually stopped, and on two sides of another it fired
+  9.3 s and 5.0 s early, inside a closing fade. `silence`'s own
+  `regions[-1].music_end_sample` fails in the opposite direction and worse,
+  because a trailing region routinely holds *two* floors — the run-out groove and
+  the needle lift after it — and its reference is the region's minimum, which the
+  lift owns: on three of that record's four sides the answer came back at the end
+  of the file, 27 s late on side D.
+
+  **`run_out.start_sample` is the measurement to use instead**, and it is
+  `periodicity` and `band_profile` read together: the platter, not the level,
+  separates a run-out from a quiet outro. The pair landed within 0.6 s on all four
+  sides. What remains a limitation is that it needs both of those analyzers, so a
+  partial document has no answer, and that its anchor is a 12 s window — the band
+  refinement is what buys the precision back. `lead_in_end_sample` still has the
+  mirror problem at the head and comes back `null` when no leading silence is
+  found at all; nothing measures the *start* of the music the way `run_out`
+  measures the end.
 - **Wide damage is not repaired at all.** Events wider than
   `max_click_width_ms` are rejected as programme material rather than bridged,
   because at that width the detector cannot tell the two apart — so a scratch

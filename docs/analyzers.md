@@ -21,6 +21,7 @@ anything outside its context.
 | `spectral` | — | centroid, roll-off, rumble, hiss, band energies |
 | `transients` | — | onset density per second |
 | `periodicity` | `silence` | onset-envelope autocorrelation per window: the strongest periods, the baseline they stand on, and the correlation at each turntable speed's revolution period |
+| `run_out` | `band_profile`, `periodicity` | where the music stops and the run-out groove begins — the anchor `periodicity` gives, refined to a frame by `band_profile` |
 
 `vinyl-process analyzers --json` prints this with each analyzer's version and
 default parameters.

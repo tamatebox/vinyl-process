@@ -87,17 +87,18 @@ From `analysis.json`:
 
 - `boundaries.candidates[]` — `{sample, method, confidence}` with methods
   `silence`, `rms_valley`, `spectral_change`
+- `run_out.start_sample` — **where the music stops**, from `periodicity` and
+  `band_profile` rather than from a level. Evidence is **one record, four sides**,
+  so prefer it and still check it; see
+  [references/surface-or-programme.md](references/surface-or-programme.md).
+  `null` where the recording ends in music or either analyzer is absent.
 - `boundaries.lead_in_end_sample`, `boundaries.lead_out_start_sample` — the
-  playable region; the trailing silence is the run-out groove. **Both are level
-  thresholds and both can be wrong.** On material that drops out by design — dub,
-  electronic — `lead_out_start_sample` fires at the drop rather than at the
-  run-out: on one tested side it landed 22 s before the music stopped, and taking
-  it at face value would have truncated the track. `lead_in_end_sample` comes back
-  `null` when there is no leading silence to find, and `lead_out_start_sample`
-  does the same when the recording ends in music. Check both against
-  `periodicity` before trusting either, and read *both* as absent rather than as
-  zero: a `null` marker means the side has no detected edge there, which changes
-  where track 1 starts and where the last one ends (see Rules).
+  playable region, and **both are level thresholds that can be wrong**; prefer
+  `run_out` at the trailing edge. On material that drops out by design —
+  dub, electronic — `lead_out_start_sample` fires at the drop, 22 s before the
+  music stopped on one tested side. Read a `null` as absent, not as zero: the side
+  has no detected edge there (see Rules). Nothing replaces `lead_in_end_sample`,
+  so the head still needs `band_profile` by hand.
 - `periodicity.windows[]` — the answer to "is this stretch music or surface?",
   which level and spectrum cannot give. See *Surface or programme?* below.
   `programme_period_seconds` and `programme_peak_prominence` are `null` when no
@@ -131,8 +132,8 @@ have none, ask the user for the track count before guessing.
 Every hard boundary on a record comes down to this question, and the two obvious
 ways to answer it both fail.
 
-**Level fails** because a quiet outro and a run-out groove sit at the same level.
-That is what `lead_out_start_sample` gets wrong.
+**Level fails** because a quiet outro and a run-out groove sit at the same level —
+what `lead_out_start_sample` gets wrong, and why `run_out` exists.
 
 **Brightness fails, and fails convincingly.** A scuffed lead-in groove is
 *bright* — measured on two sides at **20-25 dB above the run-out** in the 3-8 kHz
@@ -234,13 +235,14 @@ short truncates a track.
    was that much too long
    ([adr/0011](../../../docs/adr/0011-a-job-directory-holds-no-scripts.md) records
    how that reached the album unchallenged).
-   Confirm the cut against `periodicity` past it, not against `rms_profile` — a
-   flat plateau at the surface level can be the track itself (a dub side ran 22 s
-   of outro through one, with the beat still going, after the level threshold had
-   already called it the run-out). Read the windows after your cut: still on
-   `programme_period_seconds` means the track is still playing, so extend; taken
-   over by `revolution` means the run-out, so the cut stands. See *Surface or
-   programme?*.
+   **Start the last track's end from `run_out.start_sample`** where it is present,
+   and then check it — the evidence behind that measurement is **one record, four
+   sides**, so it is a better starting point than the level markers and not yet a
+   settled one. Check it the way you would without it: against `periodicity` past
+   your cut, never against `rms_profile`, whose flat plateau at the surface level
+   can be the track itself. Still on `programme_period_seconds` means the track is
+   playing, so extend; taken over by `revolution` means the cut stands. Where they
+   disagree, say so in the rationale and prefer the longer cut.
 
    **If no silence region opens after the last track began**, the recording ends in
    music or in undetected surface: close it at `source.num_samples`, check the last

@@ -12,7 +12,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from vinyl_process.errors import ContractError
 
-SCHEMA_VERSION = "3.7"
+SCHEMA_VERSION = "3.8"
 """``MAJOR.MINOR``. Additive changes bump MINOR; breaking changes bump MAJOR.
 
 3.0 because ``silence.regions[].music_start_sample`` is required: a 2.x

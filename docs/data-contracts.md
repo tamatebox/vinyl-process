@@ -143,6 +143,11 @@ happened.
                                                       "period_seconds": 1.3333,
                                                       "r": 0.45 } ] } ] },
 
+  "run_out":       { "start_sample": 37440000,     // where the music stops and the
+                                                  // run-out groove begins
+                     "anchor_sample": 37248000,   // the periodicity window it came from
+                     "run_out_band_levels_db": [-75.32, -86.09, -88.56, -87.87, -93.22] },
+
   "warnings": ["clipping: 2 region(s), 31 sample(s) at full scale"]
 }
 ```
@@ -236,6 +241,33 @@ explainable years later. `meta.confidence` is `1.0` for direct measurements
 (peaks, channel levels), lower for estimators (0.75 for click statistics, 0.7 for
 the dynamic-range approximation) and computed per case for silence and clipping.
 `warnings` states facts, never advice — advice would be a decision.
+
+`run_out.start_sample` is the figure a **last cut** should be placed from, and it
+exists because the two markers that look like they answer the same question do
+not. `silence.regions[-1].music_end_sample` takes the first frame within 3 dB of
+the *quietest* level in its region, and a trailing region routinely holds two
+floors — the run-out groove, and the needle lift after it. The lift then owns the
+minimum and no frame of the run-out reaches it: measured on a 2xLP, the answer
+came back at the end of the file on three of four sides, **27 s** past the real
+music end on side D. `boundaries.lead_out_start_sample` fails from the other
+direction, as a level crossing: on the same record it fired **9.3 s** and
+**5.0 s** early, both times inside a closing fade.
+
+What separates a run-out from a quiet outro is not level but the platter, so this
+section reads `periodicity` and `band_profile` together. `periodicity` gives the
+**anchor** — the last window whose own top autocorrelation peak still beats the
+revolution correlations — and `band_profile` refines it to a frame, as the first
+point at which every band has arrived at the run-out's own level
+(`run_out_band_levels_db`, the median of each band over the file's tail; a median
+rather than a minimum is what keeps the lift out of it). The anchor is a window
+start, so it is always at or before `start_sample` and the two bracket the truth;
+`meta.confidence` is how wide that bracket is against the window length. On the
+record above the pair landed within **0.6 s** on all four sides.
+
+`start_sample` is `null` when there is no run-out to find — the recording ends in
+music, which shows up as the *last* `periodicity` window still looking like
+programme. It is `null` too when `band_profile` or `periodicity` is absent, since
+this section is only those two read together.
 
 ## processing_plan.json — Planning Skills → DSP Executor
 

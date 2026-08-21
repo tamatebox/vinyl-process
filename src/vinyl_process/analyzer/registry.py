@@ -62,6 +62,7 @@ def _ensure_builtins() -> None:
         periodicity,
         recording,
         rms,
+        run_out,
         silence,
         spectral,
         transients,

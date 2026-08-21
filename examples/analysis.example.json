@@ -1,5 +1,5 @@
 {
-  "schema_version": "3.7",
+  "schema_version": "3.8",
   "document_type": "analysis",
   "generated_by": "vinyl-process 0.1.0",
   "source": {
@@ -84,6 +84,13 @@
     },
     {
       "name": "recording_info",
+      "version": "1.0",
+      "status": "ok",
+      "message": null,
+      "duration_ms": null
+    },
+    {
+      "name": "run_out",
       "version": "1.0",
       "status": "ok",
       "message": null,
@@ -679,6 +686,22 @@
         ]
       }
     ]
+  },
+  "run_out": {
+    "meta": {
+      "analyzer": "run_out",
+      "version": "1.0",
+      "params": {
+        "programme_peak_factor": 1.5,
+        "trailing_seconds": 30.0,
+        "settle_margin_db": 3.0,
+        "smoothing_seconds": 1.0
+      },
+      "confidence": 0.0
+    },
+    "start_sample": null,
+    "anchor_sample": null,
+    "run_out_band_levels_db": [-105.97, -10.01, -17.06, -119.97, -120.0]
   },
   "warnings": []
 }

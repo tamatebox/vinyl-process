@@ -413,6 +413,46 @@ class PeriodicitySection(Section):
     windows: list[PeriodicityWindow]
 
 
+class RunOutSection(Section):
+    """Where the music stops and the run-out groove begins.
+
+    ``silence`` cannot answer this and does not claim to. Its
+    ``regions[-1].music_end_sample`` is the first frame within
+    ``settle_margin_db`` of the *quietest* level in the region, and a trailing
+    region routinely holds two floors: the run-out groove, and the needle lift
+    after it. Then the minimum belongs to the lift and no frame of the run-out
+    reaches it. Measured on a 2xLP whose sides D, B and C all did this, the answer
+    came back at the end of the file — **27 s** past the real music end on side D.
+    ``boundaries.lead_out_start_sample`` is no substitute either: it is a level
+    crossing, and it fired 9.3 s and 5.0 s early on two sides of the same record,
+    both times inside a closing fade.
+
+    What separates the two is not level. It is the platter: a groove defect
+    repeats once per revolution and music does not, so ``periodicity`` says where
+    the programme stopped, and ``band_profile`` refines that to a frame by asking
+    where every band has arrived at the run-out's own level. Both are measurements
+    already in the document; this section is the two of them read together.
+
+    ``start_sample`` is ``None`` when the recording has no run-out to find — it
+    ends in music, or `periodicity` found no window that looked like programme.
+    """
+
+    start_sample: int | None = Field(default=None, ge=0)
+    """First sample of the run-out groove, i.e. where the music has stopped. The
+    figure a last cut should be placed from."""
+
+    anchor_sample: int | None = Field(default=None, ge=0)
+    """Start of the last `periodicity` window whose own top autocorrelation peak
+    still beat the platter's revolution correlations — the coarse answer, before
+    `band_profile` refined it. Reported because the refinement can only move the
+    answer later, so the two together bracket it."""
+
+    run_out_band_levels_db: list[float] = Field(default_factory=list)
+    """The run-out's own level in each `band_profile` band, which is the reference
+    `start_sample` was measured against. Read it against the bands' `floor_db` to
+    see how far above the file's own floor this record's run-out sits."""
+
+
 # --------------------------------------------------------------------------- #
 # document
 # --------------------------------------------------------------------------- #
@@ -436,6 +476,7 @@ class AnalysisDocument(VersionedDocument):
     spectral: SpectralSection | None = None
     transients: TransientsSection | None = None
     periodicity: PeriodicitySection | None = None
+    run_out: RunOutSection | None = None
 
     warnings: list[str] = Field(default_factory=list)
 

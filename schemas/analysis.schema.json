@@ -776,6 +776,50 @@
       "title": "RmsProfileSection",
       "type": "object"
     },
+    "RunOutSection": {
+      "additionalProperties": false,
+      "description": "Where the music stops and the run-out groove begins.\n\n``silence`` cannot answer this and does not claim to. Its\n``regions[-1].music_end_sample`` is the first frame within\n``settle_margin_db`` of the *quietest* level in the region, and a trailing\nregion routinely holds two floors: the run-out groove, and the needle lift\nafter it. Then the minimum belongs to the lift and no frame of the run-out\nreaches it. Measured on a 2xLP whose sides D, B and C all did this, the answer\ncame back at the end of the file \u2014 **27 s** past the real music end on side D.\n``boundaries.lead_out_start_sample`` is no substitute either: it is a level\ncrossing, and it fired 9.3 s and 5.0 s early on two sides of the same record,\nboth times inside a closing fade.\n\nWhat separates the two is not level. It is the platter: a groove defect\nrepeats once per revolution and music does not, so ``periodicity`` says where\nthe programme stopped, and ``band_profile`` refines that to a frame by asking\nwhere every band has arrived at the run-out's own level. Both are measurements\nalready in the document; this section is the two of them read together.\n\n``start_sample`` is ``None`` when the recording has no run-out to find \u2014 it\nends in music, or `periodicity` found no window that looked like programme.",
+      "properties": {
+        "anchor_sample": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Anchor Sample"
+        },
+        "meta": {
+          "$ref": "#/$defs/SectionMeta"
+        },
+        "run_out_band_levels_db": {
+          "items": {
+            "type": "number"
+          },
+          "title": "Run Out Band Levels Db",
+          "type": "array"
+        },
+        "start_sample": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Start Sample"
+        }
+      },
+      "title": "RunOutSection",
+      "type": "object"
+    },
     "SectionMeta": {
       "additionalProperties": false,
       "description": "Provenance of one analyzer section.\n\nFilled in by the analyzer runner, except ``confidence``, which the analyzer\nitself sets when it can quantify how much its own output can be trusted.",
@@ -1264,8 +1308,19 @@
       ],
       "default": null
     },
+    "run_out": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/RunOutSection"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
     "schema_version": {
-      "default": "3.7",
+      "default": "3.8",
       "title": "Schema Version",
       "type": "string"
     },
