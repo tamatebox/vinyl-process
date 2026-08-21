@@ -159,8 +159,8 @@ once, and `vinyl-process verify` proves the run reproduces. That is checkpoint 7
 job.
 
 Say the difference out loud each time, in the checkpoint and not only in the
-plan's `rationale`. Burying it there is how it went unmentioned for three
-checkpoints on the album this rule came from.
+plan's `rationale`. Buried there it goes unread, and the person approves a render
+believing it is the deliverable.
 
 ```sh
 vinyl-process execute plan-side-a.json --audio <recording> \
@@ -352,6 +352,20 @@ predicted gain **5.6 dB** wrong and a repair workload overstated **fourfold**, o
 one pressing, both from numbers these skills asked for by name. Before quoting any
 measurement at a checkpoint, ask whether it describes what will be exported; where
 it does not, either restrict it to the cuts or say plainly which one it is.
+
+**Decide each stage on the audio that stage will actually receive.** The executor
+runs the stages in a fixed order, so everything after the first acts on the
+previous stage's output — while `analysis.json` only ever describes the capture. So
+before deciding stage N, render the rung that ends at N-1 and analyse *that*:
+`vinyl-process analyze review/declick/<track> --analyzers clicks,surface_noise`
+takes an exported file exactly like a capture. The ladder is the mechanism, which
+is the second reason every rung carries the stages already decided. Getting it
+wrong is silent — the plan lints and the run reproduces, and the parameter was
+aimed at damage an earlier stage had already removed
+([adr/0019](../../../docs/adr/0019-a-stage-is-parameterised-on-its-own-input.md)).
+`normalize` needs no such care: the executor measures the buffers it is about to
+write. `mono_merge` and `split` may read the capture because nothing ahead of them
+moves what they read — say which invariance, rather than leaving it assumed.
 
 Each stage skill states what its own checkpoint must show. In short:
 

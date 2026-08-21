@@ -21,9 +21,21 @@
   Analyzer has a gap, not a sin — the cut it produces may well be the right one.
   But the reading is a *probe, not evidence*: the moment it changes a decision,
   promote it to an analyzer with a ground-truth test and re-derive the decision
-  from `analysis.json` before the plan ships. A plan may only cite what
-  `analysis.json` records. Ad-hoc numbers have nothing behind them and have been
-  wrong.
+  from the analyzer's output before the plan ships. A plan may only cite what **an
+  analyzer recorded, in a document kept in the job directory** — the capture's
+  analysis, or a named analysis of a review rung. Ad-hoc numbers have nothing
+  behind them and have been wrong.
+- **A stage is parameterised on its own input, not on the capture.** The executor
+  runs the stages in a fixed order, so every stage after the first acts on the
+  previous stage's output — while `analysis.json` only ever describes the file that
+  came off the turntable. So for any stage that is not first, measure the review
+  rung that ends at the stage before it (`vinyl-process analyze` takes any exported
+  file); the ladder is the mechanism. Getting this wrong is silent: the plan lints,
+  the run reproduces, and the number was aimed at a defect population an earlier
+  stage had already removed. `normalize` is the exception and is solved in code —
+  the executor measures the buffers it is about to write. A stage that reads the
+  capture anyway must name the invariance that makes it safe
+  ([adr/0019](docs/adr/0019-a-stage-is-parameterised-on-its-own-input.md)).
 - **Best practice means analogue-ripping practice.** Where a decision needs an
   outside convention, research LP digitisation and needledrop sources and cite
   them in the `rationale`. Digital mastering and streaming-delivery conventions do

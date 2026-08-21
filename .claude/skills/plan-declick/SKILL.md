@@ -79,10 +79,10 @@ backwards, that becomes a slow attack with a sudden end", which its detector
 confuses less often. The benefit is about *false detection* and it requires a
 time-asymmetric detector. `block_ratio` is symmetric by construction: both the
 detect and the context window are centred means, and the high-pass ahead of them
-is zero-phase. Measured on one track: the same event count forward and reversed,
-all but one event identical to within two samples, and that one a single sample of
-rounding. The asymmetry in this engine is all in the *repair* (AR prediction,
-Hermite's one-sided tangents), which is not what the technique addresses.
+is zero-phase, so forward and reversed detection are the same operation by
+construction rather than by measurement. The asymmetry in this engine is all in
+the *repair* (AR prediction, Hermite's one-sided tangents), which is not what the
+technique addresses.
 
 **Uncalibrated numbers in this skill**, named so nobody mistakes them for
 practice: `max_click_width_ms` **2.0**, which is the model's default and not a
@@ -95,7 +95,13 @@ to a number.
 
 ## Inputs
 
-From `analysis.json`:
+From `analysis.json` — **or, where `prefilter` is enabled, from an analysis of
+`review/prefilter/`**, because this stage then receives filtered audio rather than
+the capture and its parameters belong to the audio it will actually see
+([adr/0019](../../../docs/adr/0019-a-stage-is-parameterised-on-its-own-input.md)).
+The sweep is close to invariant either way — detection runs on a 3 kHz high-passed
+copy and a subsonic filter acts two decades below it — but say which file the
+figures came from rather than leaving it to be assumed:
 
 - `clicks.threshold_sweep[]` — **read this first, and read it instead of the
   headline count.** Each rung gives `threshold`, `count` and the two rates below.
@@ -103,10 +109,12 @@ From `analysis.json`:
 - `clicks.silence_rate_per_minute` versus `clicks.programme_rate_per_minute` — the
   pair that makes the sweep legible. A worn pressing crackles in the inter-track
   gaps as much as under the music; a detector over-triggering on the material
-  fires only under the programme. The two readings are not subtle: a detector
-  following bass-heavy material has read two orders of magnitude more under the
-  programme than in the gaps, which would have meant interpolating tens of
-  thousands of musical transients.
+  fires only under the programme, and the readings are not subtle: a detector
+  following bass-heavy material has read a factor of over 100 more under the
+  programme than in the gaps on one measured side, which would have meant
+  interpolating musical transients wholesale. **Compare rates, never counts** — a
+  side's gaps are a small fraction of its running time, so counts favour the
+  programme by area alone whatever the rung is doing.
 - `clicks.count`, `clicks.rate_per_minute` — the rung named by
   `meta.params.threshold_ratio`, promoted for convenience. A reporting choice, not
   a recommendation: do not treat it as the answer.
@@ -156,11 +164,17 @@ rung and both have overturned a choice made on the rates alone:
 - `onset_coincidence` — how much more often than chance the rung's detections land
   on a rising edge. Near 1 means the detector is indifferent to note attacks;
   several times that means it is following them, and the repair would interpolate
-  over the attacks. It has overturned the rates test outright: a rung can beat its
-  own programme rate by more than 40 to 1 and still read close to 8, with its
-  detections spaced at the beat rather than at the platter. And a **whole sweep
-  reading above 2 is itself the answer** — no threshold on that pressing was safe,
-  and repair stayed off.
+  over the attacks. No source gives a value to reject at, and there is a
+  **confound to check before reading it as one**: `signal_ops.onset_coincidence`
+  compares the energy of the 10 ms *after* each position against the 10 ms before
+  it, on the full-band signal, and counts a rise over 6 dB. An isolated click in
+  an otherwise quiet gap therefore lands on a rising edge **of its own making**,
+  so on a side whose detections are mostly in the gaps the figure is inflated by
+  exactly the events repair is for. The tell is the shape of the sweep: if the
+  statistic rose as the threshold fell — more detections under the programme —
+  the detector is following the music, and if it *fell*, the high rungs are
+  reading isolated gap clicks. Read it that way, or with `revolution_lock`
+  alongside, rather than against a fixed number.
 - `revolution_lock` — Rayleigh's statistic for the detections folded onto the
   platter's period. Its null is exponential with mean 1 whatever the count, so
   rungs are comparable; 3 is suggestive and 5 strong. **A high value argues for
@@ -187,17 +201,19 @@ Now `positions_sample` is your rung's. Take a handful of the detections that fal
 inside a `silence.regions[]` gap, cut two seconds around each, amplify so the
 surface is audible at all, and listen for the click at the position claimed. A gap
 holds no programme material, so anything impulsive there is damage by definition —
-this is the only positive evidence available. On a well-chosen rung a spot check
-of a dozen gap detections has come back entirely real, which is the outcome to
-expect; anything less is a reason to move up the ladder. Amplitudes are not
+this is the only positive evidence available, so a detection there that no ear
+can find is a false positive and a reason to move up the ladder. Amplitudes are not
 recorded per detection (only as a histogram), so pick by position, not by loudness.
 
 Then say how much of it reaches the album. Detections in the dead middle of a gap,
 the lead-in and the run-out are dropped by the split and cost nothing to ignore;
-only the ones inside the exported cuts matter. Expect to lose a third to a half of
-them that way, and expect the survivors to be uneven: on one side more than half
-the in-cut detections fell in the fade-in and fade-out of a single quiet track.
-The surface is uniform; its visibility is not.
+only the ones inside the exported cuts matter. Count them against the cuts for
+this record and report the fraction — a third to a half has been lost that way on
+a measured side, and the proportion depends on how long the lead-in and run-out
+are, so it is a starting expectation and not a figure to quote. Expect the
+survivors to be uneven: on one side more than half the in-cut detections fell in
+the fade-in and fade-out of a single quiet track. Say where they fell. The surface
+is uniform; its visibility is not.
 
 **No gaps, no calibration.** A continuous side, a live recording or a gapless
 album gives the sweep nothing unmasked to measure: with no silent stretch of at
@@ -228,21 +244,20 @@ the cuts discard, and it therefore *overstates* the work reaching the album by
 however worn the unplayed parts are. And when `decrackle` also ran, **the band
 covers the pair**: quote both stages' figures and their sum.
 
-The failure mode this guards against has been measured twice on one record: a rung
-chosen by feel came out at **1 in 27 000** — more than an order of magnitude below
-the band's floor — and the verdict on it was "somewhat better", which is exactly
-what that number predicts. A rung two steps lower measured inside the band, and
-had been dismissed as over-repair against nothing at all. Neither choice was
-wrong by argument; both were made without the figure.
-
-Report the rate at the checkpoint. Below the band, say so and say what it implies:
-the repair is doing less than the listener will notice.
+Report the rate at the checkpoint, against the cited band and nothing else. Below
+the band, say so — and quote the condition the citation attaches to its floor:
+"**Unless** your records are in really good condition, it is unlikely that the
+repair rate will fall below about 1 in 1000-2000 samples." A rate under the floor
+is therefore either a rung doing less than the listener will notice, or a record
+in good condition, and the sweep's own rates are what tell the two apart. Do not
+resolve it by feel in either direction.
 
 **Do not measure the residual over a window wide enough to contain music.** Every
 attempt to quantify "is the click gone" over ±30 ms, or against a median taken
-over ±300 ms, reports the track's own high-frequency content instead: such a
-metric has read tens of dB of "residual" where the sample values showed a clean
-repair, and a whole sweep built on it was void. Judge at the detector's own scale
+over ±300 ms, reports the track's own high-frequency content instead — the window
+contains music, so that is what it measures, and such a metric has read tens of dB
+of "residual" where the sample values showed a clean repair. Judge at the
+detector's own scale
 — a few hundred microseconds against its immediate neighbourhood — keep a control
 set of positions where nothing was detected, and **when a figure and the sample
 values disagree, believe the samples.**
@@ -399,15 +414,14 @@ adjacent ones), then give:
   e.g. `1:40.41  −14.1 dB (click peak −9.3 dBFS)`;
 - **for a periodic defect, the runs where it is densest**, as a time range rather
   than a list, plus the phase. A strong `revolution_lock` shows up as a handful of
-  ticks spaced at exactly the platter period and all sitting within a few tens of
-  milliseconds of the same phase of it — one such diagnosis, sixty-odd events, was
-  settled in fifteen seconds of listening once two stretches were named. The phase
-  is the evidence in one line; a list of sixty positions is not;
+  ticks spaced at exactly the platter period and all sitting near the same phase
+  of it. The phase and a time range are the evidence in one line; a list of
+  positions is not;
 - **the album's peak, if the repair moved it.** A click is often the loudest
-  sample on a side, so removing one lowers the album peak — measured once at
-  **1.1 dB** from a single tick. Say so here, because that is gain
-  `plan-normalize` will find at the next checkpoint, and the two decisions
-  otherwise look unrelated;
+  sample on a side, so removing one lowers the album peak — by of the order of a
+  dB from a single tick, on one measured side. Measure the change on the render
+  rather than predicting it, and say so here: that is gain `plan-normalize` will
+  find at the next checkpoint, and the two decisions otherwise look unrelated;
 - **where the corrections are all small, say the difference may be inaudible and
   what follows from that.** A side whose largest correction is in the −20s of dB
   warrants the honest framing: if you hear nothing, either answer is fine; if you

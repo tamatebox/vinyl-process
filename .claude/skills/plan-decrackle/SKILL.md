@@ -88,7 +88,20 @@ goes in the rationale. The 1–3 sample width and that band are cited; nothing e
 here is. `strength` has no in-house figure on purpose: see *Choosing the
 threshold*, step 7.
 
-From `analysis.json`:
+**Measure these on the declicked render, not on the capture.** This stage runs
+third in the pre-split phase, after `declick`, so the capture's figures describe a
+defect population that no longer exists by the time it runs — on one transfer,
+three tracks' click counts fell from 11, 17 and 11 to 1, 2 and 0 across that one
+stage. Re-run the analyzers on the rung instead, which takes an exported file
+exactly like a capture
+([adr/0019](../../../docs/adr/0019-a-stage-is-parameterised-on-its-own-input.md)):
+
+```sh
+vinyl-process analyze review/declick/<track> \
+  --analyzers clicks,surface_noise,spectral -o analysis-declicked-<stem>.json
+```
+
+From that analysis:
 
 - `clicks.threshold_sweep[]` — read the **top** of the ladder, which is the
   opposite of what `plan-declick` reads. A pressing whose highest rungs still find

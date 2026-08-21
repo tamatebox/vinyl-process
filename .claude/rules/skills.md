@@ -72,6 +72,11 @@ ground-truth test and re-derive from `analysis.json`. A plan may cite only what
 - A number that came from a different **quantity** does not carry across. A peak
   target in dBFS is not a true-peak ceiling in dBTP; a sensitivity slider is not a
   ratio. Cite the quantity, not just the figure.
+- Say **which audio** a figure describes, not just which section. A stage that is
+  not first in the executor's order receives the previous stage's output, so its
+  `## Inputs` names an analysis of the rung that ends there rather than the
+  capture's — or names the invariance that makes the capture safe to read
+  (`docs/adr/0019-a-stage-is-parameterised-on-its-own-input.md`).
 
 ## Write instructions, not status
 

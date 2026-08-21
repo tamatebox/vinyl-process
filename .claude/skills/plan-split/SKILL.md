@@ -215,10 +215,10 @@ short truncates a track.
      the distance from one track's end to the next entrance varies across a single
      album by several hundred milliseconds, so one offset either clips an entrance
      or ships bare surface. And the ~50 ms this used to ask for is the *floor*:
-     enough to keep a de-click edge fade off the music, and nothing more. Asked to
-     judge it, a listener called 50 ms "stingy" across a whole record, which is
-     what the citation predicts. Going below 0.5 s is a listening decision to put
-     to the person, not a default to take quietly;
+     enough to keep a de-click edge fade off the music, and nothing more, which is
+     two orders of magnitude short of what the citation asks a margin to be. Going
+     below 0.5 s is a listening decision to put to the person, not a default to
+     take quietly;
    - the dead middle of the gap is simply not exported (the contract allows a gap
      between tracks), and the tail is clamped so it never reaches the next
      track's pre-roll.
@@ -403,7 +403,13 @@ still play first.
 
 ## Rules
 
-- Positions are integer samples into the *source* file. Never seconds.
+- Positions are integer samples into the *source* file. Never seconds. This is also
+  the invariance that lets this skill read the capture's `boundaries`, `silence`,
+  `band_profile` and `periodicity` although five stages run ahead of it: no
+  pre-split stage relocates what they measure, time rescaling included, because
+  the executor maps positions at the cut
+  ([adr/0016](../../../docs/adr/0016-a-pre-split-stage-may-remap-time.md),
+  [adr/0019](../../../docs/adr/0019-a-stage-is-parameterised-on-its-own-input.md)).
 - `index` is the track's position on the **album**, not within this plan: side B
   continues where side A stopped (6, 7, …) so both sides export into one directory
   with correct filenames and tags. Indices must be contiguous and ascending;
@@ -465,12 +471,14 @@ still play first.
   the fade has a second job — bringing that noise in and out instead of switching
   it on. That is what LP practice fades for, and it asks for far longer: a fade-in
   of "a fraction of a second" and a fade-out "typically a few seconds", applied
-  when "there is a lot of background noise" (see *Outside references*). 250 ms in
-  and 500 ms out has been adopted on a record here. Be exact about how that sits
-  against the citation: the fade-**in** is inside "a fraction of a second", while
-  500 ms is well **short** of "typically a few seconds" — it is a compromise
-  between the reference and a margin only half a second long, not the practice
-  figure. A margin the reference's length would want the reference's fade.
+  when "there is a lot of background noise" (see *Outside references*). Derive both
+  from the margin rather than from a figure in this file. The fade-**in** takes the
+  citation directly: "a fraction of a second". The fade-**out** cannot exceed the
+  tail, and the tail is what you chose in step 5 — so on a 0.5 s margin it is at
+  most 0.5 s, well **short** of "typically a few seconds". Say that shortfall out
+  loud in the rationale: it is a consequence of a half-second margin, not a
+  judgement about fades, and a margin the reference's length would want the
+  reference's fade.
 
   So choose the fade *with* the margin, not independently of it, and say which job
   it is doing. The constraint that survives either way: **keep each fade inside

@@ -97,7 +97,13 @@ line is entirely in-house.
 
 From `analysis.json`:
 
-- `recording_info.channel_correlation` — **the deciding measurement**. Two walls of
+- `recording_info.channel_correlation` — **the deciding measurement**, and one of
+  the few this stage may take from the capture even though four stages run ahead of
+  it. The invariance is worth naming rather than assuming
+  ([adr/0019](../../../docs/adr/0019-a-stage-is-parameterised-on-its-own-input.md)):
+  `prefilter`, `declick` and `decrackle` repair sparse defects and leave the two
+  walls' shared programme alone, so none of them can turn a stereo pressing into a
+  mono one or the reverse. Two walls of
   one mono groove are two observations of the same signal, so a mono capture reads
   very high; a stereo record reads well below. `lint` warns below 0.9
   (`mono-merge-on-stereo-material`) when it can see the analysis. It is `null` on a

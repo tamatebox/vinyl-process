@@ -86,6 +86,15 @@ depart from one of them deserves a named reason in `decision.rationale`.
   the rationale that the capture's depth was not known.
 - `analysis.json#source.sample_rate`
 - `normalize.peak_ceiling_db`, if you are considering a resample — see below
+- **`normalize.enabled` and its mode, because the depth is downstream of the
+  gain.** A gain that is not a power of two moves every sample off the capture's
+  quantisation grid, so exporting at the capture's own depth then *re-quantises the
+  whole album* and forces a dither decision that keeping the width avoids
+  entirely. On a 16-bit capture with `normalize` on, "keep the capture's depth" is
+  therefore not the neutral choice it looks like — it is a second quantisation of
+  the programme. Decide the depth after the gain, and say which way round you
+  reasoned
+  ([adr/0019](../../../docs/adr/0019-a-stage-is-parameterised-on-its-own-input.md)).
 
 ## Decision guide
 
