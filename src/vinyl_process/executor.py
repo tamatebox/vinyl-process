@@ -56,6 +56,8 @@ from vinyl_process.signal_ops import (
     EPS,
     amplitude_to_db,
     gated_rms_of_blocks,
+    loudness_block_powers,
+    loudness_of_blocks,
     rms_blocks,
     true_peak,
 )
@@ -333,6 +335,15 @@ class _Execution:
             blocks = [rms_blocks(b.samples, b.sample_rate) for b in buffers]
             pooled = np.concatenate(blocks) if blocks else np.zeros(0)
             gain = target - float(amplitude_to_db(gated_rms_of_blocks(pooled)))
+        elif mode == "album_lufs":
+            # BS.1770's own album rule, and the same pooling as album_gated_rms:
+            # every track's gating blocks go into one set before either gate, so
+            # the album is measured as one continuous piece of programme. The
+            # difference is the K-weighting, which is what makes the figure a
+            # loudness in LUFS rather than a level in dBFS.
+            powers = [loudness_block_powers(b.samples, b.sample_rate) for b in buffers]
+            pooled_powers = np.concatenate(powers) if powers else np.zeros(0)
+            gain = target - loudness_of_blocks(pooled_powers)
         elif mode == "album_rms":
             energy = sum(float(np.sum(buffer.samples**2)) for buffer in buffers)
             count = sum(buffer.samples.size for buffer in buffers)

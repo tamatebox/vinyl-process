@@ -284,6 +284,18 @@ class PeaksSection(Section):
     K-weighting. ``rms_db`` averages the inter-track gaps and the lead-in in
     too, so the two differ by however much silence the side carries."""
 
+    lufs: float | None = None
+    """Integrated loudness in **LUFS** — BS.1770's K-weighting, its channel
+    weighting and both its gates. The same geometry as ``gated_rms_db`` with the
+    filter that separates a level from a loudness, so the two differ by the
+    K-weighting's verdict on this material's spectrum: a bright side reads
+    *louder* in LUFS than its dBFS level suggests, a bass-heavy one quieter.
+
+    ``None`` when the recording is shorter than one 400 ms gating block. This is
+    the figure ``normalize.mode: album_lufs`` aims, and it is measured over the
+    whole recording, so it includes the lead-in and the run-out that the cuts
+    discard — the executor re-measures on the split audio."""
+
     crest_factor_db: float
 
 

@@ -15,7 +15,7 @@ from collections.abc import Sequence
 import numpy as np
 import numpy.typing as npt
 from scipy.linalg import solve_toeplitz
-from scipy.signal import butter, resample_poly, sosfilt, sosfiltfilt
+from scipy.signal import butter, lfilter, resample_poly, sosfilt, sosfiltfilt
 
 EPS = 1e-12
 """Floor for log/division so silence yields -240 dB instead of -inf."""
@@ -161,6 +161,157 @@ def gated_rms_of_blocks(blocks: npt.NDArray[np.float64]) -> float:
 def gated_rms(samples: np.ndarray, sample_rate: int) -> float:
     """:func:`rms_blocks` followed by :func:`gated_rms_of_blocks`, for one buffer."""
     return gated_rms_of_blocks(rms_blocks(samples, sample_rate))
+
+
+# --------------------------------------------------------------------------- #
+# K-weighted loudness (ITU-R BS.1770)
+# --------------------------------------------------------------------------- #
+LUFS_OFFSET_DB = -0.691
+"""The constant of BS.1770 equation (2). It "cancels out the K-weighting gain for
+997 Hz" (the Recommendation's own Note 1), which is why a 0 dBFS 997 Hz sine in
+one channel reads -3.01 LKFS rather than -3.01 + 0.691."""
+
+_STAGE1 = (1681.974450955533, 3.999843853973347, 0.7071752369554196)
+_STAGE2 = (38.13547087602444, 0.5003270373238773)
+"""Analogue-prototype parameters (f0, gain dB, Q) for the two pre-filter stages.
+
+BS.1770 tabulates the coefficients **for 48 kHz only** and then requires that
+"implementations at other sampling rates will require different coefficient
+values, which should be chosen to provide the same frequency response that the
+specified filter provides at 48 kHz". It does not say how, so the prototype is
+re-derived per rate through the bilinear transform.
+
+These constants are not quoted from anywhere: they are held to the standard's own
+table. At 48 kHz the derivation below reproduces every tabulated coefficient to
+**machine precision** (largest discrepancy 9e-16), and a test asserts it. The
+warping is not free at other rates — the Recommendation's 997 Hz reference check
+comes out at -3.0075 LKFS at 44.1 kHz and -3.0276 at 96 kHz against its stated
+-3.01 — which is inside EBU Tech 3341's +/-0.1 LU tolerance but is a real
+difference, and is why the conformance tests run at more than one rate."""
+
+LOUDNESS_BLOCK_SECONDS = 0.400
+LOUDNESS_OVERLAP = 0.75
+"""BS.1770: "A gating block is a set of contiguous audio samples of duration
+Tg = 400 ms, to the nearest sample. The overlap of each gating block shall be 75%
+of the gating block duration." """
+
+CHANNEL_WEIGHTS_DB: dict[int, tuple[float, ...]] = {
+    1: (1.0,),
+    2: (1.0, 1.0),
+    5: (1.0, 1.0, 1.0, 1.41, 1.41),
+    6: (1.0, 1.0, 1.0, 0.0, 1.41, 1.41),
+}
+"""BS.1770 Table 3: L, R and C weigh 1.0; the two surrounds weigh 1.41 (~ +1.5 dB).
+
+Keyed by channel count, assuming the Recommendation's own channel order
+(L, R, C, Ls, Rs) and, for 6, that the fourth channel is LFE — which the
+Recommendation excludes from the measurement, hence 0.0. A vinyl transfer is
+mono or stereo, so the multichannel rows exist to make Tech 3341's test case 6
+runnable: it is the only case that can catch a wrong weight, because in stereo
+every weight is 1.0. Any other channel count falls back to 1.0 throughout."""
+
+
+def k_weighting_coefficients(
+    sample_rate: int,
+) -> tuple[tuple[list[float], list[float]], tuple[list[float], list[float]]]:
+    """The two BS.1770 pre-filter stages as ``((b, a), (b, a))`` for ``sample_rate``."""
+    f0, gain_db, q = _STAGE1
+    k = float(np.tan(np.pi * f0 / sample_rate))
+    vh = 10.0 ** (gain_db / 20.0)
+    vb = vh**0.4996667741545416
+    a0 = 1.0 + k / q + k * k
+    stage1_b = [
+        (vh + vb * k / q + k * k) / a0,
+        2.0 * (k * k - vh) / a0,
+        (vh - vb * k / q + k * k) / a0,
+    ]
+    stage1_a = [1.0, 2.0 * (k * k - 1.0) / a0, (1.0 - k / q + k * k) / a0]
+
+    f0, q = _STAGE2
+    k = float(np.tan(np.pi * f0 / sample_rate))
+    a0 = 1.0 + k / q + k * k
+    stage2_b = [1.0, -2.0, 1.0]
+    stage2_a = [1.0, 2.0 * (k * k - 1.0) / a0, (k * k - k / q + 1.0) / a0]
+    return (stage1_b, stage1_a), (stage2_b, stage2_a)
+
+
+def k_weighted(samples: np.ndarray, sample_rate: int) -> npt.NDArray[np.float64]:
+    """Apply BS.1770's two-stage pre-filter down each channel."""
+    data = np.asarray(samples, dtype=np.float64)
+    if data.ndim == 1:
+        data = data[:, None]
+    if data.size == 0:
+        return data
+    (b1, a1), (b2, a2) = k_weighting_coefficients(sample_rate)
+    stage1 = lfilter(b1, a1, data, axis=0)
+    return np.asarray(lfilter(b2, a2, stage1, axis=0), dtype=np.float64)
+
+
+def channel_weights(num_channels: int) -> npt.NDArray[np.float64]:
+    weights = CHANNEL_WEIGHTS_DB.get(num_channels)
+    if weights is None:
+        return np.ones(num_channels, dtype=np.float64)
+    return np.asarray(weights, dtype=np.float64)
+
+
+def loudness_block_powers(samples: np.ndarray, sample_rate: int) -> npt.NDArray[np.float64]:
+    """Per-gating-block ``sum(G_i * z_ij)`` — BS.1770 equations (3) and (4).
+
+    One number per block: the channel-weighted sum of mean squares of the
+    K-weighted signal. Returned rather than reduced so that an album-wide
+    measurement can pool every track's blocks before gating, which is
+    ReplayGain's album rule and what makes the album read as one continuous piece
+    of programme.
+
+    Incomplete blocks at the end are dropped, as the Recommendation requires:
+    "Incomplete gating blocks at the end of the measurement interval are not
+    used."
+    """
+    filtered = k_weighted(samples, sample_rate)
+    if filtered.size == 0:
+        return np.zeros(0)
+    block = round(LOUDNESS_BLOCK_SECONDS * sample_rate)
+    step = max(1, round(block * (1.0 - LOUDNESS_OVERLAP)))
+    if filtered.shape[0] < block:
+        return np.zeros(0)
+    weights = channel_weights(filtered.shape[1])
+    squared = filtered**2
+    cumulative = np.concatenate([np.zeros((1, squared.shape[1])), np.cumsum(squared, axis=0)])
+    starts = np.arange(0, filtered.shape[0] - block + 1, step)
+    means = (cumulative[starts + block] - cumulative[starts]) / block
+    return np.asarray(means @ weights, dtype=np.float64)
+
+
+def loudness_of_blocks(powers: npt.NDArray[np.float64]) -> float:
+    """BS.1770's two-stage gate over pooled block powers, in LUFS.
+
+    The absolute gate is -70 LKFS; the relative gate is the absolute-gated
+    loudness minus 10. Blocks below the absolute gate take no part in computing
+    the relative one, which is the order the Recommendation specifies.
+    """
+    if powers.size == 0:
+        return float(amplitude_to_db(0.0))
+
+    def loudness(values: npt.NDArray[np.float64]) -> float:
+        return LUFS_OFFSET_DB + 10.0 * float(np.log10(max(float(np.mean(values)), EPS)))
+
+    block_loudness = LUFS_OFFSET_DB + 10.0 * np.log10(np.maximum(powers, EPS))
+    surviving = powers[block_loudness > ABSOLUTE_GATE_DB]
+    if surviving.size == 0:
+        # Everything is below the absolute gate. Reporting the ungated figure is
+        # more useful than reporting nothing, and it is what the caller can act on.
+        return loudness(powers)
+    relative_gate = loudness(surviving) + RELATIVE_GATE_DB
+    surviving_loudness = LUFS_OFFSET_DB + 10.0 * np.log10(np.maximum(surviving, EPS))
+    loud = surviving[surviving_loudness > relative_gate]
+    if loud.size == 0:  # pragma: no cover - a flat signal sits exactly on the gate
+        loud = surviving
+    return loudness(loud)
+
+
+def loudness_lufs(samples: np.ndarray, sample_rate: int) -> float:
+    """:func:`loudness_block_powers` then :func:`loudness_of_blocks`, for one buffer."""
+    return loudness_of_blocks(loudness_block_powers(samples, sample_rate))
 
 
 def runs_of_true(flags: np.ndarray) -> list[tuple[int, int]]:

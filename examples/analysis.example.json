@@ -1,5 +1,5 @@
 {
-  "schema_version": "3.4",
+  "schema_version": "3.5",
   "document_type": "analysis",
   "generated_by": "vinyl-process 0.1.0",
   "source": {
@@ -462,6 +462,7 @@
     "true_peak_db": -3.96,
     "rms_db": -10.87,
     "gated_rms_db": -9.44,
+    "lufs": -7.22,
     "crest_factor_db": 6.91
   },
   "dynamic_range": {

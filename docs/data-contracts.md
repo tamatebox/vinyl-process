@@ -33,7 +33,7 @@ happened.
 
 ```jsonc
 {
-  "schema_version": "3.4",
+  "schema_version": "3.5",
   "document_type": "analysis",
   "generated_by": "vinyl-process 0.1.0",
   "source": { "path": "side-a.wav", "sha256": "…", "sample_rate": 44100,
@@ -113,6 +113,8 @@ happened.
                                               // samples; never below peak_db
                      "rms_db": -19.2,
                      "gated_rms_db": -9.44,   // programme only, gaps gated out
+                     "lufs": -11.02,          // …and the same blocks K-weighted:
+                                              // loudness in LUFS, not a level in dBFS
                      "crest_factor_db": 15.3 },
   "dynamic_range": { "dr_estimate_db": 12.8, "loud_rms_db": -16.7,
                      "percentiles": { "p05_db": -68.0, "p50_db": -21.0,
@@ -211,6 +213,16 @@ normalizing and because a lossy encoder reconstructs too: material at
 -0.1 dBFS can come back above 0 dBTP. It is the quantity
 `normalize.peak_ceiling_db` is held against.
 
+`peaks.lufs` is the same material through BS.1770's K-weighting, its channel
+weighting and its −0.691 offset: **loudness in LUFS**, where `gated_rms_db` is a
+level in dBFS. Same blocks, same gates, different quantity — the two differ by
+whatever the weighting makes of this material's spectrum, so neither substitutes
+for the other and their difference is not a meaningful number. It is `null` on a
+recording shorter than one 400 ms gating block, because BS.1770 drops incomplete
+blocks. It is the figure `normalize.mode: album_lufs` aims, measured over the whole
+recording — the executor re-measures on the split audio, so expect the applied gain
+to differ.
+
 `peaks.gated_rms_db` measures the programme and not the silence, on BS.1770-4's
 400 ms / 75 %-overlap blocks with its absolute (-70) and relative (-10) gates.
 `rms_db` averages the inter-track gaps, the fades and the lead-in in too, so the
@@ -233,7 +245,7 @@ block: which skill decided, why, how confident it was, and what it consulted.
 
 ```jsonc
 {
-  "schema_version": "3.4",
+  "schema_version": "3.5",
   "document_type": "processing_plan",
   "created_by": "plan-album",
   "source": { …same shape as analysis.source; sha256 is verified before running… },
@@ -303,8 +315,8 @@ block: which skill decided, why, how confident it was, and what it consulted.
   "normalize": {
     "enabled": true, "engine": "native",
     "mode": "album_peak",             // album_peak | album_gated_rms | album_rms |
-                                      // track_peak | none
-    "target_db": -1.0,
+                                      // album_lufs | track_peak | none
+    "target_db": -1.0,                // dBFS — or LUFS, on album_lufs alone
     "peak_ceiling_db": -1.0           // dBTP; null leaves the gain uncapped
     // The gain arithmetic is deterministic and runs post-declick in the executor;
     // the strategy, the target and the ceiling are the decision, recorded here.
@@ -359,7 +371,7 @@ Written next to the exported album. This is the receipt.
 
 ```jsonc
 {
-  "schema_version": "3.4",
+  "schema_version": "3.5",
   "document_type": "manifest",
   "generated_by": "vinyl-process 0.1.0",
   "run_key": "…",                    // digest over (source digest, plan digest)

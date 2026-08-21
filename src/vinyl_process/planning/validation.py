@@ -39,6 +39,12 @@ SUBSONIC_BAND_HZ = (20.0, 30.0)
 workflow, step 8: 20-30 Hz at 24 dB/octave). ``plan-prefilter`` carries the
 citation; these bounds exist only so ``lint`` can say when a plan has left it."""
 
+LUFS_LOUDEST_SENSIBLE_DB = -9.0
+"""Above this a LUFS target stops being reachable on ordinary material without the
+true-peak ceiling capping the gain. EBU R 128 delivers at -23.0 LUFS and streaming
+targets sit in the -14 region; -9 is this project's own line, not a cited one, and
+it is a warning rather than an error because someone may mean it."""
+
 CRACKLE_MAX_WIDTH_SAMPLES = 3
 """Crackle is "very short (1-3 sample), rapidly repeated, small clicks" (ClickRepair
 3.9). Above that the event is a click and ``declick`` owns it; ``plan-decrackle``
@@ -413,7 +419,8 @@ def _check_normalize(plan: ProcessingPlan) -> list[Finding]:
         return []
 
     findings: list[Finding] = []
-    if normalize.mode in ("album_rms", "album_gated_rms") and normalize.peak_ceiling_db is None:
+    level_modes = ("album_rms", "album_gated_rms", "album_lufs")
+    if normalize.mode in level_modes and normalize.peak_ceiling_db is None:
         findings.append(
             Finding(
                 "warning",
@@ -421,6 +428,17 @@ def _check_normalize(plan: ProcessingPlan) -> list[Finding]:
                 f"{normalize.mode} hits a level target and says nothing about where the peaks "
                 "land; without normalize.peak_ceiling_db the export can clip",
                 "normalize.peak_ceiling_db",
+            )
+        )
+    if normalize.mode == "album_lufs" and normalize.target_db > LUFS_LOUDEST_SENSIBLE_DB:
+        findings.append(
+            Finding(
+                "warning",
+                "lufs-target-is-loud",
+                f"target_db is {normalize.target_db:+.1f} LUFS. Delivery targets sit at -23 "
+                f"(EBU R 128) to about {LUFS_LOUDEST_SENSIBLE_DB:+.0f}; louder than that and the "
+                "ceiling will cap the gain on most material, so the target will not be reached",
+                "normalize.target_db",
             )
         )
     if normalize.mode == "album_rms":
@@ -439,7 +457,7 @@ def _check_normalize(plan: ProcessingPlan) -> list[Finding]:
     # the sample peak at. An RMS target is not a ceiling, so it says nothing here.
     if normalize.peak_ceiling_db is not None:
         effective, where = normalize.peak_ceiling_db, "normalize.peak_ceiling_db"
-    elif normalize.mode in ("album_peak", "track_peak"):
+    elif normalize.mode in ("album_peak", "track_peak"):  # a peak target *is* a ceiling
         effective, where = normalize.target_db, "normalize.target_db"
     else:
         return findings

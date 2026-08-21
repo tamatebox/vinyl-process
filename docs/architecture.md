@@ -247,6 +247,11 @@ was not reached. Either way it measures the true peak of what it writes into
 clipping is never silent. See
 [adr/0007-a-level-target-needs-a-true-peak-ceiling.md](adr/0007-a-level-target-needs-a-true-peak-ceiling.md).
 
+`album_lufs` is the fourth album-wide mode and the only one whose target is in
+**LUFS** rather than dBFS. It exists because a user asking for −23 or −14 LUFS was
+previously told no; it is a broadcast and streaming convention rather than an LP
+one, and `plan-normalize` is instructed not to offer it unasked.
+
 Which measurement a mode uses is part of the mode id, not a parameter:
 `album_gated_rms` measures over BS.1770-4's blocks with its two gates and pools
 every track's blocks first, so the inter-track gaps stop counting as programme,
@@ -331,12 +336,19 @@ end to end for determinism.
   oscillation across the fraction of a millisecond a click leaves, and leaves seams
   around −60 dBFS; which interpolator is best is unestablished, and there is no
   benchmark with clean references to settle it ([dsp-engines.md](dsp-engines.md)).
-- **No loudness (LUFS) normalization.** `album_gated_rms` has BS.1770-4's block
-  geometry, its two gates and ReplayGain's album pooling, so it measures the
-  programme rather than the silence — but no K-weighting, which is what separates
-  a level in dBFS from loudness in LUFS. `album_lufs` would be that filter plus
-  conformance tests against the EBU Tech 3341 vectors, and is deliberately absent
-  until both exist.
+- **Loudness normalization exists, and what it does not have is a meter.**
+  `album_lufs` applies BS.1770's K-weighting, its channel weighting and its −0.691
+  offset on top of the gates and album pooling `album_gated_rms` already had, and
+  it ships with conformance tests against EBU Tech 3341's cases 1-6 at two sample
+  rates — the only measurement here with a correctness oracle outside this
+  repository ([adr/0014](adr/0014-album-lufs-ships-with-its-conformance-tests.md)).
+  Two limits remain. Tech 3341's cases **7 and 8 are not covered**: they need
+  "authentic programme" audio, and this repository commits none. Cases **9 to 14
+  are not applicable**: they test momentary and short-term *meters*, and there is
+  no meter here — one integrated figure per album. And the coefficients are
+  published for 48 kHz only, so they are re-derived per rate; the standard's own
+  997 Hz reference reading comes out at −3.0075 at 44.1 kHz and −3.0276 at 96 kHz
+  against its stated −3.01 — inside Tech 3341's ±0.1 LU, and not identical.
 - **A subsonic filter improves the listening copy; it does not settle where it
   belongs.** `prefilter` now removes DC and high-passes the subsonic band, so warp
   rumble and a DC offset no longer have to inflate the peak a peak mode normalizes

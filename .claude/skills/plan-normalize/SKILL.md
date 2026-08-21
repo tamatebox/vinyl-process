@@ -64,6 +64,25 @@ That is the outside warrant for the two things this skill is most insistent abou
 route, since the split has already discarded the drop and the gap middles before
 the executor measures, but the requirement is the same one.
 
+**Loudness, and the one number here with an external oracle.**
+[ITU-R BS.1770](https://www.itu.int/dms_pubrec/itu-r/rec/bs/R-REC-BS.1770-5-202311-I!!PDF-E.pdf)
+defines loudness as `−0.691 + 10·log10(Σ Gᵢ·zᵢ)` over K-weighted, channel-weighted
+mean squares, on 400 ms blocks at 75 % overlap with an absolute gate at −70 LKFS
+and a relative gate 10 LU under the absolute-gated result.
+[EBU R 128](https://tech.ebu.ch/docs/r/r128v4_0.pdf) sets the delivery target at
+**−23.0 LUFS**, and [EBU Tech 3341](https://tech.ebu.ch/docs/tech/tech3341.pdf)
+publishes the readings a compliant implementation must produce, to **±0.1 LUFS**.
+
+`album_lufs` implements that, and it is tested against Tech 3341's cases 1-6 at two
+sample rates — the only measurement in this project with a correctness oracle
+outside it
+([adr/0014](../../../docs/adr/0014-album-lufs-ships-with-its-conformance-tests.md)).
+So when a user asks for −14 LUFS or −23 LUFS, you can now give them the number they
+asked for rather than an approximation of it. Two things still to say out loud:
+−23 is a *broadcast* delivery target and has nothing to do with LP practice, and
+streaming figures circulate widely as platform specs — **do not quote one from
+memory**, take it from the user or from the platform's own document.
+
 **The other school, which this pipeline cannot join.**
 [ReplayGain](https://en.wikipedia.org/wiki/ReplayGain) leaves the samples alone
 and writes the figure as a tag — its utilities "usually add metadata to the audio
@@ -75,7 +94,8 @@ that would write one, so it is not available here. If someone asks for it, say
 that rather than approximating it with a gain.
 
 **Uncalibrated numbers in this skill**, named so nobody mistakes them for
-practice: the **0.5 dB** proximity at which the stage is not worth running, the
+practice: the **−9 LUFS** line above which `lint` calls an `album_lufs` target
+unreachable, the **0.5 dB** proximity at which the stage is not worth running, the
 **0.3 dB** `true_peak_db − peak_db` gap that triggers a ceiling on a peak mode,
 the **−2.0** ceiling suggested for a user who transcodes to lossy, and the "keep
 at least **1 dB**" floor under *Rules*. All in-house. Only the target band is
@@ -85,7 +105,7 @@ cited.
 
 From `analysis.json`:
 
-- `peaks` — `peak_db`, `true_peak_db`, `rms_db`, `gated_rms_db`,
+- `peaks` — `peak_db`, `true_peak_db`, `rms_db`, `gated_rms_db`, `lufs`,
   `crest_factor_db`
 - `dynamic_range` — `dr_estimate_db`, `loud_rms_db`, `percentiles`
 - `clipping` — `clipped_region_count`, `longest_run_samples`
@@ -111,6 +131,15 @@ Three of these can be missing, and each changes what you may claim:
 - **`gated_rms_db` is `null`**: an RMS bound has to come from `rms_db` instead,
   which counts the gaps and therefore reads low. `lint` makes the same substitution;
   say in the rationale that you used it.
+- **`lufs` is `null`** (the recording is shorter than one 400 ms gating block, so
+  BS.1770 has nothing to measure): you cannot predict an `album_lufs` gain. Use a
+  different mode or say the prediction is unavailable.
+
+`lufs` is loudness in LUFS and `gated_rms_db` is a level in dBFS, on the same
+blocks and the same gates. They differ by the K-weighting's verdict on this
+material's spectrum — a bright side reads louder in LUFS than its level suggests, a
+bass-heavy one quieter — so **never substitute one for the other**, and never
+subtract them and call the difference anything.
 
 ## Decision guide
 
@@ -123,17 +152,25 @@ Three of these can be missing, and each changes what you may claim:
    and **always set `peak_ceiling_db`** — a level target says nothing about where
    the peaks land, and without a ceiling the executor drives the export into a
    clip.
-3. `album_rms` only to match a figure someone measured as an ungated full-file
+3. **`album_lufs` when the user names a figure in LUFS**, which is the only time
+   it is the right answer — it is a broadcast and streaming convention, not an LP
+   one. Take `target_db` from what they said (it is **in LUFS** on this mode, not
+   dBFS) and **always set `peak_ceiling_db`**: a loudness target says nothing about
+   peaks, and −14 LUFS on dynamic material will be capped. Predict the gain from
+   `peaks.lufs`, saying that it is a whole-recording figure and the executor
+   re-measures on the cuts. Do not offer this mode to someone who did not ask for
+   LUFS.
+4. `album_rms` only to match a figure someone measured as an ungated full-file
    RMS. It counts the inter-track gaps and the lead-in as programme, so a side
    with long gaps measures quiet and normalizes loud. `album_gated_rms` is the
    mode that does what "match the loudness" means; say in
    `decision.rationale` why you did not use it.
-4. `track_peak` is discouraged: it flattens the level relationships the record
+5. `track_peak` is discouraged: it flattens the level relationships the record
    was mastered with. It is a documented option in the field rather than a mistake
    (VinylStudio offers "normalise each track separately"), so the argument against
    it is the one above and not novelty — use it only for compilations assembled
    from genuinely mismatched sources, and say so in `decision.rationale`.
-5. **Skip** (`"enabled": false`, or `mode: "none"`) when the gain would not be
+6. **Skip** (`"enabled": false`, or `mode: "none"`) when the gain would not be
    worth applying: on a peak mode that is `peak_db` already within 0.5 dB of the
    target, and on an RMS mode `gated_rms_db` (or `rms_db`, if that is `null`) within
    0.5 dB of it. Skip too when `clipping.clipped_region_count > 0` and the gain
@@ -189,7 +226,8 @@ about — it is a turntable or a pressing problem, and it belongs upstream in
   "enabled": true,
   "engine": "native",          // 'ffmpeg' also implements gain, bit-comparably
   "mode": "album_peak",        // album_peak | album_gated_rms | album_rms |
-                               // track_peak | none
+                               // album_lufs | track_peak | none
+                               // target_db is in LUFS on album_lufs, dBFS elsewhere
   "target_db": -1.0,
   "peak_ceiling_db": -1.0,     // dBTP; null leaves the gain uncapped
   "decision": { "skill": "plan-normalize", "rationale": "…", "confidence": 0.95,
@@ -232,8 +270,9 @@ Present:
   drop was. Do not present it as the expected gain.
 - the target and ceiling you propose;
 - for an RMS mode, the same bound from `gated_rms_db` — or from `rms_db`, named as
-  such, when it is `null` — and a warning that the ceiling may cap it, in which
-  case the target level will not be reached;
+  such, when it is `null` — and for `album_lufs` the bound from `peaks.lufs`, named
+  as loudness rather than level. Either way warn that the ceiling may cap it, in
+  which case the target will not be reached;
 - for a two-sided album, both sides' post-split peaks, since each plan is
   normalized on its own and the sides can end up at different gains. Compare those,
   not the two `peak_db` values: those are two stylus drops, and how hard the needle
@@ -297,7 +336,8 @@ Then read the receipt, not just the audio:
 - The ceiling wins over the target when they conflict, and the executor warns.
   That is deliberate ([adr/0007](../../../docs/adr/0007-a-level-target-needs-a-true-peak-ceiling.md)),
   not something to work around by raising the ceiling.
-- No LUFS. `album_gated_rms` is a level in dBFS measured over the programme, not
-  loudness — it has BS.1770's gates and none of its K-weighting
-  ([adr/0008](../../../docs/adr/0008-album-gated-rms-is-a-separate-mode.md)). If
-  the user asks for −14 LUFS, say what they can have instead.
+- **LUFS is `album_lufs` and nothing else.** `album_gated_rms` remains a level in
+  dBFS measured over the programme — BS.1770's gates, none of its K-weighting
+  ([adr/0008](../../../docs/adr/0008-album-gated-rms-is-a-separate-mode.md)) — so
+  quoting it in LUFS is wrong by however much the K-weighting says. If the user
+  asks for a figure in LUFS, use the mode that measures LUFS.

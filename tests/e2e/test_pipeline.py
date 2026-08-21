@@ -18,6 +18,7 @@ from vinyl_process.hashing import digest_file
 from vinyl_process.models.analysis import AnalysisDocument
 from vinyl_process.models.manifest import ExecutionManifest
 from vinyl_process.models.plan import ProcessingPlan
+from vinyl_process.signal_ops import loudness_block_powers, loudness_of_blocks
 
 
 def run(
@@ -559,3 +560,54 @@ def test_a_decrackled_run_reproduces_bit_for_bit(
     first = run(crackly, recording, tmp_path / "one")
     second = run(crackly, recording, tmp_path / "two")
     assert first.output_digests() == second.output_digests()
+
+
+def test_album_lufs_hits_its_target_and_is_capped_by_the_ceiling(
+    plan: ProcessingPlan, recording: SyntheticRecording, tmp_path: Path
+) -> None:
+    """The mode end to end: pooled across tracks, and held under the ceiling."""
+    payload = plan.model_dump(mode="json")
+    payload["normalize"] = {
+        "engine": "native",
+        "mode": "album_lufs",
+        "target_db": -23.0,
+        "peak_ceiling_db": -1.0,
+    }
+    lufs = ProcessingPlan.model_validate(payload)
+
+    manifest = run(lufs, recording, tmp_path / "album")
+    stages = {record.stage: record for record in manifest.stages}
+    assert "mode=album_lufs" in stages["normalize"].detail
+
+    # Re-measure the exported album the way the mode measures it: pool every
+    # track's gating blocks, then gate. It must land on the target, unless the
+    # ceiling capped the gain — in which case the manifest says so.
+    powers = []
+    for output in manifest.outputs:
+        samples, rate = sf.read(output.path, dtype="float64", always_2d=True)
+        powers.append(loudness_block_powers(samples, rate))
+    measured = loudness_of_blocks(np.concatenate(powers))
+
+    capped = any("peak_ceiling_db" in warning for warning in manifest.warnings)
+    if capped:
+        assert measured < -23.0
+        assert manifest.applied_true_peak_db is not None
+        assert manifest.applied_true_peak_db <= -1.0 + 0.01
+    else:
+        assert measured == pytest.approx(-23.0, abs=0.2)
+
+
+def test_album_lufs_pools_the_album_rather_than_measuring_each_track(
+    plan: ProcessingPlan, recording: SyntheticRecording, tmp_path: Path
+) -> None:
+    """One gain for the side, so the relative levels between tracks survive."""
+    payload = plan.model_dump(mode="json")
+    payload["normalize"] = {
+        "engine": "native",
+        "mode": "album_lufs",
+        "target_db": -23.0,
+        "peak_ceiling_db": -1.0,
+    }
+    manifest = run(ProcessingPlan.model_validate(payload), recording, tmp_path / "album")
+    assert manifest.applied_gain_db is not None
+    assert manifest.applied_track_gains_db is None

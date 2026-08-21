@@ -16,9 +16,11 @@ from vinyl_process.models.analysis import (
 from vinyl_process.models.common import SectionMeta
 from vinyl_process.signal_ops import (
     EPS,
+    LOUDNESS_BLOCK_SECONDS,
     TRUE_PEAK_OVERSAMPLE,
     amplitude_to_db,
     gated_rms,
+    loudness_lufs,
     runs_of_true,
     true_peak,
 )
@@ -45,6 +47,10 @@ def analyze_peaks(context: AnalyzerContext) -> PeaksSection:
     # guess at this one.
     reconstructed = float(amplitude_to_db(true_peak(samples, oversample)))
     programme = float(amplitude_to_db(gated_rms(samples, audio.sample_rate)))
+    # None rather than a number when there is not one whole gating block: BS.1770
+    # drops incomplete blocks, so a shorter recording has nothing to measure.
+    blocks_fit = samples.shape[0] >= round(LOUDNESS_BLOCK_SECONDS * audio.sample_rate)
+    loudness = round(loudness_lufs(samples, audio.sample_rate), 2) if blocks_fit else None
     return PeaksSection(
         meta=SectionMeta(confidence=1.0),
         peak_db=round(peak_db, 2),
@@ -52,6 +58,7 @@ def analyze_peaks(context: AnalyzerContext) -> PeaksSection:
         true_peak_db=round(max(reconstructed, peak_db), 2),
         rms_db=round(rms_db, 2),
         gated_rms_db=round(programme, 2),
+        lufs=loudness,
         crest_factor_db=round(peak_db - rms_db, 2),
     )
 

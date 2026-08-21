@@ -22,7 +22,9 @@ from vinyl_process.models.common import (
     VersionedDocument,
 )
 
-NormalizeMode = Literal["album_peak", "album_rms", "album_gated_rms", "track_peak", "none"]
+NormalizeMode = Literal[
+    "album_peak", "album_rms", "album_gated_rms", "album_lufs", "track_peak", "none"
+]
 ExportFormat = Literal["flac", "wav", "aiff"]
 DitherType = Literal["none", "tpdf"]
 
@@ -205,8 +207,10 @@ class NormalizePlan(EngineSection):
     mode: NormalizeMode = "album_peak"
     """``album_peak`` targets the sample peak, ``album_gated_rms`` the level of
     the programme with silence gated out, ``album_rms`` the ungated average of
-    everything. ``track_peak`` exists but is discouraged because it destroys the
-    relative dynamics between tracks of one side."""
+    everything, ``album_lufs`` the **loudness** of the programme — BS.1770's
+    K-weighting and channel weighting on top of the same gates, so its target is
+    in LUFS and not in dBFS. ``track_peak`` exists but is discouraged because it
+    destroys the relative dynamics between tracks of one side."""
 
     target_db: float = Field(default=-1.0, le=0.0)
     peak_ceiling_db: float | None = Field(default=None, le=0.0)
