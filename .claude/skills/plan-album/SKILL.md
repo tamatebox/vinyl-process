@@ -199,65 +199,21 @@ plan or an analysis.
 
 ## Looking at the render
 
-**Plot every render, as you make it.** One command per rendered directory, no
+**Plot every render, as you make it** — one command per rendered directory, no
 dependency to install, a few seconds:
 
 ```sh
 python scripts/plot_review.py review/level
 ```
 
-It writes `<render>/plots/`: one `side-<x>.png` per recording — every track of that
-side stacked — and one image per track named after the track. Each image is a
-linear waveform (full scale, so clipping and squashing show) over a dB panel
-(0 to −80 dBFS, peak and RMS as lines, so the noise floor, the fades and the tails
-show).
+It writes `<render>/plots/`: one `side-<x>.png` per recording with every track of
+that side stacked, and one image per track. Read both — the side figure for the
+side as a whole, the per-track one for a single boundary or tail, which a stacked
+view reduces to a hairline.
 
-**Read both views; they answer different questions.** The side figure is for the
-side as a whole — are the cuts where they should be, does one track stand out, do
-the two sides sit at the same level. The per-track figure has five times the
-vertical resolution and is for one boundary or one tail. This is not a preference:
-a stacked view reduces a two-second tail to a hairline and cannot show whether a
-long fade descends smoothly or steps. Both are obvious per track.
-
-**Plot the render, not the step.** Do not take a figure before and after each of
-the five stages. `metadata` changes no samples, so its pair would be identical;
-`export` changes them only if it resamples or dithers. More to the point the
-review ladder already does this job better: each rung adds exactly one stage, so
-`review/split/plots/` against `review/declick/plots/` isolates the repair and
-nothing else, and `declick` against `level` isolates the gain. That is the
-property to protect, and a before/after pair inside one step only duplicates it.
-So: `review/split/`, `review/declick/` when repair is on, `review/level/`, and
-`album/` after the final run — three or four sets, each attached to a render.
-
-Which to lead with, per checkpoint:
-
-| Checkpoint | Lead with | Compare against |
-|---|---|---|
-| 2 split | `side-*.png` | — |
-| 3 declick | per-track | the same track in `review/split/plots/` |
-| 4 level | per-track | the same track in `review/declick/plots/` (or `split/`) |
-| 7 the album | per-track of `album/` | `review/level/plots/` — they should match unless export resampled or dithered; if they differ, say what did it |
-
-**What a figure settles, and what it does not.** It settles: whether anything
-clipped or got squashed against the rail; whether the level relationships between
-tracks survived (a `track_peak` plan makes every panel the same height, which is
-the mistake made visible); whether every fade is intact and no entrance is
-missing; where a tail sits in dB and how far below the programme; whether the two
-sides landed at the same level. It settles none of: whether surface noise is
-*objectionable*, whether a click is audible, whether a repair dulled an attack,
-whether the record sounds right. Those need ears, and a figure that looks clean is
-not a reason to skip the listening the checkpoint asks for. Say which of the two
-you are reporting — "nothing a figure can detect went wrong" is an honest and
-useful sentence; "it looks fine" pretending to cover both is not.
-
-**No scripts in the job directory.** A Python file there is the planning layer
-written in Python, which is the one thing this project does not do, and it is
-invisible to every check the repository has — see
-[adr/0011](../../../docs/adr/0011-a-job-directory-holds-no-scripts.md), which
-records the side that shipped with 11 s of run-out groove noise appended because
-the only account of how the boundaries got there was a script nobody reviewed. The
-plan is the record of the decisions and `decision.rationale` is where the reasoning
-goes.
+Which to lead with per checkpoint, what a figure settles and what it cannot, and
+why not to plot each stage in isolation:
+[references/looking-at-the-render.md](references/looking-at-the-render.md).
 
 ## Procedure
 
@@ -441,6 +397,23 @@ vinyl-process execute processing_plan.json --audio <recording> -o <album-dir>
 
 Then `vinyl-process verify <album-dir>/<the manifest this run wrote>` to prove the
 run reproduces — once per side on a multi-side album.
+
+### 7b. Add the record's row to the ledger
+
+Once `verify` is green, add rows to
+[docs/processed-records.md](../../../docs/processed-records.md), following the
+*How to add a row* section there. Not optional bookkeeping: the plan copy holds
+every parameter and the manifest every outcome, so the only thing that dies with
+the conversation is **which rung was rejected and what rejected it**, and that is
+the half a later record needs
+([adr/0018](../../../docs/adr/0018-the-receipt-retains-the-plan-that-produced-it.md)).
+
+**Rows, and nothing that needs a paragraph.** The reasoning belongs to the stage
+skill that owns the decision; the ledger keeps the observation and its magnitude so
+a column can be counted. If an entry will not fit a cell, it is a rule or a
+decision, and it goes to the skill or to `docs/adr/` instead — that routing is what
+the length limit is for. Then check whether this record moved a count in *What the
+rows have settled*, and promote any line that has crossed from lead to rule.
 
 ## Running unattended
 

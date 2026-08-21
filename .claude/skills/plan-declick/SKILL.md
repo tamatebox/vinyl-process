@@ -391,7 +391,7 @@ has lost its tallest peak spikes is the interpolation showing up; use it to chec
 that what disappeared is what you meant to remove, on the tracks with the highest
 in-cut density. It will not show you a dulled attack — that is audible long before
 it is visible, which is why this checkpoint is a listening one. See
-[plan-album](../plan-album/SKILL.md#looking-at-the-render).
+[plan-album](../plan-album/references/looking-at-the-render.md).
 
 Repair is easiest to hear where the detector fired hardest, so name the two or
 three tracks with the highest `density_per_minute` and suggest starting there. Ask

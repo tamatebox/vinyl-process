@@ -305,7 +305,7 @@ the second question below outright, and half of
 the first: peaks per track show whether anything squashed, and a `track_peak` plan
 is visible as every panel reaching the same height. Keep the side figure for
 checking that the two sides landed level with each other. See
-[plan-album](../plan-album/SKILL.md#looking-at-the-render).
+[plan-album](../plan-album/references/looking-at-the-render.md).
 
 This is not an A/B: the level *is* the change, and the louder render always sounds
 better, so asking "which do you prefer" is a rigged question. Ask the two things

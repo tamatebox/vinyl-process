@@ -309,7 +309,7 @@ Then plot it — `python scripts/plot_review.py review/split` — and lead the
 checkpoint with `side-a.png` / `side-b.png`, because where the cuts fell is a
 question about the whole side. Reach for the per-track image for the boundaries
 you flagged; the tails in particular are a hairline in the stacked view. See
-[plan-album](../plan-album/SKILL.md#looking-at-the-render) for what the figure
+[plan-album](../plan-album/references/looking-at-the-render.md) for what the figure
 settles and what it cannot — it does not replace the listening this checkpoint is
 for, and a clean-looking figure is not an answer to "does it run on too long".
 

@@ -240,7 +240,7 @@ Plot it against `review/declick/` — `python scripts/plot_review.py
 review/decrackle` — but say what the figure can and cannot show. Thousands of
 1-sample corrections at the noise floor are invisible in a waveform and in a dB
 envelope alike. The figure's job here is negative: it confirms that nothing *large*
-moved. See [plan-album](../plan-album/SKILL.md#looking-at-the-render).
+moved. See [plan-album](../plan-album/references/looking-at-the-render.md).
 
 ## Rules
 
