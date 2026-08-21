@@ -39,6 +39,17 @@
   measurements are not a calibration: compress them to the magnitude of the failure
   mode and leave the pressing, the track and the exact dB in that album's
   `processing_plan.json`.
+- **A synthesised measurement proves the arithmetic, never the benefit.** A test
+  that injects damage and measures the repair was built by the same hand that chose
+  the algorithm — `native.py` records that such comparisons were discarded as
+  unsound, and that judgement applies to new ones too. Use synthetic audio to show
+  that an implementation does the arithmetic it claims (a filter's rolloff, a
+  conformance vector, a locality property that follows from the code's structure).
+  Do **not** use it to argue that a stage helps a record: material, damage shape
+  and density were all chosen to suit. Where a figure comes from synthesis, say so
+  in the same sentence, and say what a real pressing would change. Ranked by
+  weight: a published standard's own test vectors, then a documented practice, then
+  a measurement on a real transfer, then synthesis — which is the bottom.
 - Positions in contracts are integer sample indices, never seconds.
 
 ## Working here

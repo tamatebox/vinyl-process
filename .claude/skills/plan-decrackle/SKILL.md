@@ -109,10 +109,15 @@ From `analysis.json`:
 **Bright material masks quiet crackle, and the stage under-repairs rather than
 over-repairs there.** The statistic divides a sample's curvature by the mean
 curvature of its own neighbourhood, and high-frequency programme content raises
-that denominator: measured here, a 3.1 kHz tone at −22 dBFS carries a curvature of
-its own comparable to a crackle event 40 dB below the programme, and detections
-across the same injected bed fell by more than half against the same bed under a
-bass line.
+that denominator — so the same crackle clears the threshold less easily under a
+cymbal than under a bass line. That much follows from the arithmetic and is
+certain.
+
+**How much less easily depends on the material, so no figure here can tell you.**
+The direction is arithmetic and holds always; the size is a property of the
+pressing and its programme. Quote the repair rate the receipt gives for *this*
+side rather than any number from this file, and where a side is bright in one half
+and dull in the other, say that one setting is repairing it unevenly.
 
 Three things follow, and they are properties of the algorithm rather than of any
 pressing:
@@ -130,17 +135,22 @@ pressing:
   it is the statistic. That is a real stopping point, and it is where the honest
   answer is that the pressing is beyond the tool.
 
+**Decide from the record in hand, not from any figure in this file.** The citation
+behind this stage describes a *different* algorithm in a different program, and
+every number here that is not the repair-rate band comes from arithmetic or from a
+fixture. So the procedure is the evidence: set a rung, render, read the rate off
+the receipt, listen to a voice and a cymbal. **Be willing to conclude that it did
+not help** — that is a result, and `"enabled": false` records it.
+
 ## Choosing the threshold
 
 There is no sweep for this and no analyzer, so the loop is: pick, render, read the
 rate off the manifest, adjust. Two or three iterations, and the rate is the metric
 rather than a count.
 
-1. Start at **5**. On synthesised material with 1-sample events injected at a
-   realistic density, that lands around 1 in 350 — inside the band — while 3 lands
-   near 1 in 120, outside it and on the suspicious side. Those figures are from a
-   test fixture, not from a record, so treat them as *where to start the ladder*
-   and nothing more.
+1. Start at **5**. A starting point and **nothing more** — it carries no claim
+   about any pressing, and it does not belong in a rationale. Only the rate
+   measured in step 2 does.
 2. Render into `review/decrackle/` and read
    `manifest.stages[].detail` for the decrackle stage: `repaired N of M samples
    (1 in K)`. Place K against 1 in 200 – 1 in 2000.

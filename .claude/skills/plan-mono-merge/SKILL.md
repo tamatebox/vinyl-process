@@ -43,6 +43,13 @@ mechanical devices subject to mechanical limitations, and this ensures that **a
 scratch in one wall will have consequences in both channels**." So the improvement
 is bounded, and a scratch is reduced rather than removed.
 
+That sentence is also the reason **not to quote a figure for the improvement**.
+Averaging two observations gains 3 dB only where their noise is independent, and
+the citation says a real pair's is not — a scratch reaches both walls. So the
+arithmetic gives a ceiling, never a prediction, and how far under it a given
+pressing lands depends on that pressing. Present the improvement as something to
+listen for.
+
 **Three strategies, and the reference names all three.** "Audition the left and
 right tracks separately, and choose the one which is better"; splice sections of
 both together; or "merge the two channels to produce a single mono track, which is
@@ -165,7 +172,7 @@ Present:
   tracker moved with the material rather than with the transfer, and is worth
   investigating before shipping;
 - **the choice between merging and taking one wall**, as a listening question, not
-  a measurement. Ask them to play the same passage three ways — left only, right
+  a measurement — and it has to be, because no number here predicts the outcome. Ask them to play the same passage three ways — left only, right
   only, merged — and say which they prefer. The reference offers all three because
   the answer is genuinely per record;
 - for a 78, that the merge also cancels vertical low-frequency noise, so the

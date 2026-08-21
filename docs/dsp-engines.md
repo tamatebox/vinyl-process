@@ -73,10 +73,11 @@ Pure numpy/scipy, no external binaries, every capability.
   `level_matched` tracks each wall's level over `level_window_seconds` (1.0),
   targets their mean and averages the two. The level floor is a fraction of the
   file's own RMS, added to both estimates, so the ratio degrades to unity in
-  silence rather than to noise. Measured on synthesised walls: **+3.02 dB** of SNR
-  against one wall (coherent ideal 3.01), and out-of-phase content cancels
-  outright. Output stays stereo with the same data in both channels. See
-  [adr/0015](adr/0015-a-mono-record-has-two-observations-of-one-signal.md).
+  silence rather than to noise. Output stays stereo with the same data in both
+  channels. The arithmetic ceiling is 3 dB and holds only where the two walls'
+  damage is independent, which the source behind the stage says it is not — so the
+  ceiling is not a prediction
+  ([adr/0015](adr/0015-a-mono-record-has-two-observations-of-one-signal.md)).
 - `speed` — resample by `played_rpm / intended_rpm`, keeping the sample rate, so
   time and pitch scale together the way a speed error made them. The ratio is
   approximated as a rational with denominator up to 20 000; a ratio that would
@@ -93,28 +94,6 @@ What is established, on real audio rather than injected damage:
   and this engine (which sees one track) describe the same events — under the old
   statistic they did not, once measured at 38 693 clicks reported against 58 355
   spans repaired.
-- **One huge transient does not spoil the small clicks.** The question a lead-in
-  raises: does the needle drop — near full scale, tens of milliseconds wide —
-  degrade repair of the quiet clicks elsewhere on the side? It cannot. Measured on
-  synthesised material: with a 0.95-amplitude thump inserted, every detection
-  outside 50 ms of it is **identical, event for event**, because the ratio compares
-  a click-width window against its *own* 40 ms neighbourhood and nothing outside
-  that neighbourhood enters the statistic. A global spread would have been dragged
-  upwards by the one loud event and would then miss everything quiet — which is
-  the failure `adr/0010` records. There *is* a shadow, bounded by the context
-  window and in practice around 10 ms, so a big event costs the clicks within a few
-  tens of milliseconds of itself and nothing beyond.
-
-  Two consequences worth stating, because they answer a real design question.
-  Repairing the **whole side** pre-split is safe, and **trimming the lead-in away
-  first is not a prerequisite**. And the drop itself is not repaired at all: at
-  tens of milliseconds it is wider than `max_click_width_ms` and is rejected as
-  programme material, which is the wide-damage limitation rather than a surprise.
-  Where this stops holding is anything that estimates a statistic over a *region*
-  rather than a neighbourhood — a noise profile above all: "large clicks can
-  corrupt a noise profile and make later processing pump or smear" (Sound Forge
-  Pro's vinyl-restoration guide). That is a de-noise problem, solved by choosing
-  the profile's region, not by trimming.
 - **It finds the surface.** On a near-clean pressing used as a negative control the
   old detector claimed 1082 events a minute while finding *none* in the inter-track
   gaps, where the surface is unmasked; the ratio found few and concentrated them in
@@ -124,20 +103,53 @@ What is established, on real audio rather than injected damage:
   the amplitude of its neighbourhood and three times the peak of the whole track —
   inside the width limit the plan had set.
 
+What follows from the **structure** of the statistic rather than from any
+recording, and is therefore only as strong as the code:
+
+- **One huge transient cannot spoil the small clicks.** The question a lead-in
+  raises: does the needle drop — near full scale, tens of milliseconds wide —
+  degrade repair of the quiet clicks elsewhere on the side? No, and no experiment
+  is needed to say so: the statistic compares a click-width window against its
+  *own* 40 ms neighbourhood, so a sample outside that neighbourhood never enters
+  the arithmetic. A test on **synthesised** audio confirms the implementation
+  matches the claim — with a 0.95-amplitude thump inserted, every detection outside
+  50 ms of it is identical, event for event — but the guarantee is the window, not
+  the test. A global spread would have been dragged upwards by the one loud event
+  and would then miss everything quiet, which is the failure `adr/0010` records.
+
+  So repairing the **whole side** pre-split is safe, and **trimming the lead-in
+  away first is not a prerequisite**. There *is* a shadow — a loud neighbour
+  inflates the context mean — and the structure bounds it by the context window;
+  how long it is on a given pressing is not something this repository has measured,
+  and the fixture's ~10 ms is a property of that fixture. The drop itself is not
+  repaired either: at tens of milliseconds it is wider than `max_click_width_ms`
+  and is rejected as programme material.
+
+  Where this stops holding is anything estimating a statistic over a *region*
+  rather than a neighbourhood — a noise profile above all: "large clicks can
+  corrupt a noise profile and make later processing pump or smear" (Sound Forge
+  Pro's vinyl-restoration guide). That is a de-noise problem, solved by choosing
+  the profile's region, not by trimming.
+
 Samples outside a repaired span are left bit-identical: only the event spans are
 written. What remains at a repaired site is a seam around −60 dBFS, and the
 detector's threshold is relative, so re-analysing a declicked file still reports
 clicks — at a much lower amplitude. Judge repair by the amplitude histogram, not by
 the count, and never iterate towards `count == 0`.
 
-Two things are **not** established. Which interpolator is better: comparisons by
+Three things are **not** established. Which interpolator is better: comparisons by
 SNR against damage injected here were discarded as unsound (the material, the click
 shapes and the amplitudes were all chosen by the same hand that chose the
 algorithm), and there is no public benchmark with clean references to appeal to.
-And whether a given threshold fires on the music: the ratio does fire on some
+Whether a given threshold fires on the music: the ratio does fire on some
 percussive attacks, which is what the analyzer's per-rung `onset_coincidence` is
 for — read it before trusting a rung, because a repair that follows the beat
-interpolates over the attacks.
+interpolates over the attacks. And **how much `decrackle` and `mono_merge` are
+worth on a pressing**: both have tests that they compute what they claim, and both
+were checked against audio synthesised here, which the first item on this list
+already explains is not evidence of benefit. Their skills are arranged around
+measuring on the record in hand for that reason. Adding a real-transfer result to
+this list is how that changes.
 
 ### `ffmpeg` — interchangeability, demonstrated
 

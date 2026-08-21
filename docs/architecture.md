@@ -401,20 +401,24 @@ end to end for determinism.
   ([adr/0013](adr/0013-crackle-is-a-separate-stage-with-its-own-detector.md)).
   What remains a limitation is its **reach**: the statistic divides a sample's
   curvature by the mean curvature of its neighbourhood, and high-frequency
-  programme content raises that denominator. Measured on synthesised material, a
-  3.1 kHz tone at −22 dBFS carries a curvature comparable to a crackle event 40 dB
-  below the programme, and detections across one injected bed fell by more than
-  half against the same bed under a bass line. The failure direction is the safe
-  one — fewer interpolations exactly where they would be most audible — but two
-  things follow: a threshold does not transfer between passages of one side, and a
-  bed below the material's own curvature is not reachable at any threshold. That is
-  a stopping point rather than a setting yet to be found.
+  programme content raises that denominator, so the same crackle clears the
+  threshold less easily under a cymbal than under a bass line. Two things follow,
+  and neither needs a magnitude: a threshold does not transfer between passages of
+  one side, and a bed below the material's own curvature is unreachable at any
+  threshold — a stopping point rather than a setting yet to be found. The failure
+  direction is the safe one, fewer interpolations exactly where they would be most
+  audible.
+
+  **How large the effect is on a record is unknown.** The figures behind it come
+  from synthesised audio with a damage model this repository chose, which can show
+  that the implementation behaves as the statistic implies and can say nothing
+  about a pressing.
 - **No de-noise, and the ffmpeg route was measured rather than assumed.**
   `afftdn` is the obvious delegate and the pre-split phase is now the right place
   for it, but two things blocked shipping it. Its `noise_floor` dominates the
-  result — measured on synthesised noise, `nr=9:nf=-40` reduced the bed by 3.6 dB
-  while `nr=20:nf=-45` managed 1.2 dB — and **no reference says what to set it
-  to**; Audacity's "sensitivity 6.00" is Audacity's own scale, not this one's.
+  result — on synthesised noise, `nr=9:nf=-40` reduced the bed by 3.6 dB while
+  `nr=20:nf=-45` managed 1.2 dB, which establishes which knob matters and not what
+  either does to a record — and **no reference says what to set it to**; Audacity's "sensitivity 6.00" is Audacity's own scale, not this one's.
   Worse for the design this project wanted: `afftdn`'s own `sample_noise`
   start/stop commands, driven through `asendcmd`, produced output **identical to
   no command at all** on ffmpeg 9.0.1 across all three command spellings, so the
@@ -439,9 +443,12 @@ end to end for determinism.
   repair, then fade" as a sequence, because the fades are attributes of
   `split.tracks[]` rather than a stage of their own — it no longer matters, since
   nothing runs between the cut and the fade.
-- **A mono record's redundancy is used at the merge and nowhere else.**
-  `mono_merge` folds the two groove walls, which buys about 3 dB against one wall
-  and cancels vertical noise outright
+- **A mono record's redundancy is used at the merge and nowhere else, and how much
+  it is worth is unmeasured.** `mono_merge` folds the two groove walls. The
+  arithmetic ceiling is 3 dB against one wall, and it holds only where the walls'
+  damage is independent — which the source behind the stage says it is not, since
+  "a scratch in one wall will have consequences in both channels". No real pressing
+  has been measured here
   ([adr/0015](adr/0015-a-mono-record-has-two-observations-of-one-signal.md)). What
   still ignores the redundancy is `declick`: it detects on the channel **mean** and
   repairs every channel over the same span, where the reference makes "decisions on

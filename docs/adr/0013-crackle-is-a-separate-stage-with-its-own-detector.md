@@ -72,15 +72,21 @@ stage. An engine implements only what it has.
 - `SCHEMA_VERSION` 3.3 → **3.4**, minor: the section is optional and disabled by
   default, so a 3.3 plan validates unchanged and executes to the same bytes.
   Archived plans at 3.1 and 3.2 still `lint` clean and still `verify` bit-identical.
-- **Bright material masks quiet crackle**, and the stage under-repairs there. High-
-  frequency programme content raises the denominator of the ratio: measured on
-  synthesised material, a 3.1 kHz tone at −22 dBFS carries a curvature comparable
-  to a crackle event 40 dB below the programme, and detections across the same
-  injected bed fell by more than half against the same bed under a bass line. The
-  failure direction is the safe one — fewer interpolations where they would be most
-  audible — but it means **a threshold does not transfer between passages of one
-  side**, and a bed genuinely below the material's own curvature is not reachable
-  at any threshold. `plan-decrackle` says so, and a test pins it.
+- **Bright material masks quiet crackle**, and the stage under-repairs there. This
+  follows from the statistic: the ratio's denominator is the neighbourhood's mean
+  curvature, and high-frequency programme content raises it, so the same crackle
+  clears the threshold less easily under a cymbal than under a bass line. The
+  direction is therefore certain and the **magnitude is not**: the figures behind
+  it — a 3.1 kHz tone at −22 dBFS carrying curvature comparable to a crackle event
+  40 dB down, detections halving between two beds — come from audio this repository
+  synthesised, with a damage model it chose. On a pressing the numbers will differ
+  and nobody here knows by how much.
+
+  What survives that caveat is the consequence, which needs no magnitude: **a
+  threshold does not transfer between passages of one side**, and a bed below the
+  material's own curvature is unreachable at any threshold. The failure direction
+  is also the safe one — fewer interpolations exactly where they would be most
+  audible. A test pins the direction, not the size.
 - `linear` is the default interpolator, not `ar`. Across one to three samples a
   straight line between the two survivors cannot leave the range they span, so it
   cannot diverge on any material, while an AR fit would be estimating a model from

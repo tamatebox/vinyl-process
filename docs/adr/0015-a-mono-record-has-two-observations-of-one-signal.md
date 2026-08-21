@@ -52,11 +52,20 @@ computed via a moving average", and "the average level of the merged output is
 exactly the same as the average of the levels of the incoming channels. This means
 that the louder channel will be reduced, the softer one amplified."
 
-Measured here on synthesised walls with independent noise and the reference's own
-1.4 dB offset: the merge buys **+3.02 dB** of SNR against one wall (the coherent
-ideal is 3.01), and purely vertical, out-of-phase content cancels outright — which
-is the mechanism behind the manual's note that on shellac the merge "will remove
-quite a lot of vertical low-frequency noise".
+**What is established, and what is not.** Averaging two observations whose noise
+is independent improves SNR by 3 dB; that is arithmetic, and a test on synthesised
+walls with the reference's own 1.4 dB offset confirms the implementation reaches it
+(+3.02 dB). Purely out-of-phase content cancels outright, which is arithmetic too,
+and is the mechanism behind the manual's note that on shellac the merge "will
+remove quite a lot of vertical low-frequency noise".
+
+**Neither figure says what this buys on a record**, and the citation is the reason
+to expect less: the walls' damage is *not* independent, because "a scratch in one
+wall will have consequences in both channels". The synthetic walls were built with
+independent noise — by the same hand that wrote the merge — so 3 dB is the ceiling
+of an assumption the source denies, not a measured benefit. What a pressing
+actually gains is unmeasured here, and `plan-mono-merge`'s checkpoint is therefore
+a listening comparison between the two walls and the merge, not a number.
 
 `strategy` also offers `left` and `right`, which are the reference's own first
 option: "audition the left and right tracks separately, and choose the one which is
