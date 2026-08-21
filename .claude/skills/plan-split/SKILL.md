@@ -251,9 +251,11 @@ short truncates a track.
    The label is a cross-check in one direction only. Report a disagreement over
    ~5 s as a fact about the pressing, not as a reason to move the cut — and do not
    read an *agreement* as confirmation either. A printed duration has been matched
-   **to within 1.5 s** by a boundary **20 s wrong**: the cut started at the needle
-   drop instead of at the music, and the two errors cancelled. Durations are sums;
-   two errors inside one buy a coincidence cheaply.
+   **to within a couple of seconds** by a boundary **tens of seconds wrong**: the
+   cut started at the needle drop instead of at the music, and the two errors
+   cancelled. Durations are sums; two errors inside one buy a coincidence cheaply.
+   The magnitudes are the transferable part — the originating side's own figures
+   are in its `processing_plan.json`, not here.
 6. Emit the section.
 
 ## Output
