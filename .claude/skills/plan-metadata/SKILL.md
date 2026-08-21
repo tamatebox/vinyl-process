@@ -157,7 +157,7 @@ mismatch as a fact to resolve rather than as a rejection.
 
    ```
    Vinyl rip. Discogs release 28396297 (UIJY-75237).
-   Technics SL-1200MK5 / LP Gear Ultimate Headshell / Audio-Technica ATN-3600L
+   Technics SL-1200MK5 / LP Gear Ultimate Headshell / Audio-Technica Audio-Technica AT3600L
    / Linn Akurate DSM/2 / Behringer U-Control UCA222 — 48 kHz 16-bit
    ```
 
