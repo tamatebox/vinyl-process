@@ -1,6 +1,6 @@
 ---
 name: plan-metadata
-description: Resolve a recording to a specific Discogs/MusicBrainz release and produce the metadata section of processing_plan.json (album, artist, year, per-track titles and vinyl positions, release IDs, artwork). Use when planning tags for a vinyl rip.
+description: Resolve a recording to a specific Discogs/MusicBrainz release and produce the metadata section of processing_plan.json (album, artist, year, per-track titles, release IDs, artwork). Use when planning tags for a vinyl rip.
 ---
 
 # Plan Metadata
@@ -31,10 +31,6 @@ questions this skill used to answer from taste:
   is not divided into several mediums, so there is no part to describe and `null`
   is the correct value, not `1/1`. It also confirms the disc/side distinction: the
   medium is the record, and a side is not a medium.
-- `genre` and `styles` — TCON: "since the category list would be impossible to
-  maintain with accurate and up to date categories, **define your own**". So a
-  release's own genre words are legitimate content for the frame; there is no
-  controlled vocabulary to conform to.
 - `comment` — COMM "is intended for any kind of full text information that does not
   fit in any other frame", and "**newline characters are allowed**". The multi-line
   rip chain in step 5 is within spec rather than a liberty.
@@ -64,17 +60,6 @@ that disagrees with itself is normal; this is the tie-break. The same page rejec
 placeholder medium titles — "'CD n' or 'Disc n' should not be entered as a medium
 title, since they are not actual titles" — which is the same instinct as leaving
 `disc_number` `null` on a single.
-
-**The vinyl position form.** `"A1"`, `"B3"` is what Discogs' own API returns in a
-vinyl release's `tracklist[].position`, which is the evidence this skill actually
-uses, via `scripts/discogs_release.py`. The database guideline that mandates the
-form lives on `support.discogs.com`, which answers a plain fetch with **403** and
-is therefore **unread** here — cite the API response, not a guideline nobody in
-this repository has seen. ID3v2.4 has no frame for a vinyl position, so the tagger
-writes it as a user-defined `TXXX` under the description `VINYL_POSITION`
-([tagger.py](../../../src/vinyl_process/metadata/tagger.py)). Nothing standard
-reads that, which is why striking the field costs a person less than striking
-`catalog_number` — check the filename template first either way.
 
 **Uncalibrated numbers in this skill**: the **±5 s** tolerance for matching a
 release by per-track duration. In-house, and generous — a pressing can legitimately
@@ -122,9 +107,9 @@ mismatch as a fact to resolve rather than as a rejection.
      side all look like this. Say which one you believe and why, and get it
      confirmed before writing titles: `index` has to match the `split` indices
      exactly, so a wrong answer here mislabels every track after it.
-2. Extract album-level tags: `album`, `album_artist`, `artist`, `year`, `genre`,
-   `styles`, `label`, `catalog_number`, and the resolved `discogs_release_id`
-   and/or `musicbrainz_release_id`.
+2. Extract album-level tags: `album`, `album_artist`, `artist`, `year`,
+   `catalog_number`, and the resolved `discogs_release_id` and/or
+   `musicbrainz_release_id`.
 
    Apply `preferences.album_suffix` to `album` if it is set — `" [Vinyl Ripping]"`
    and the like, appended verbatim, so a rip stays distinguishable from a digital
@@ -133,27 +118,19 @@ mismatch as a fact to resolve rather than as a rejection.
    rather than the rule, the same way the comment is composed.
 
    **A resolved field is not a wanted field.** A Discogs release will fill more of
-   this section than most people want written into their library, and the tag set
-   is theirs to choose: on one album **four** cleanly resolved fields — genre,
-   styles, label and the vinyl position — were struck at the checkpoint, and one of
-   them had two candidate values that would have cost a round trip to settle for a
-   tag nobody wanted. So resolve everything,
-   then **show the tag set and let them prune it**, rather than presenting a filled
-   section as settled. A field left `null` is simply not written: no `TPUB`, no
-   `TCON`, no `VINYL_POSITION`. Check first whether anything else reads the field —
-   `catalog_number` and `position` are available to the filename template, so
-   clearing them can change a filename as well as a tag. `genre` is a single string and `styles` a list,
-   so where the release names several genres, take the primary one and put the rest
-   in `styles`. Set `total_tracks` to the album's count whenever this plan covers
+   this section than most people want written into their library, and the tag set is
+   theirs to choose, so **show it and let them prune** rather than presenting a
+   filled section as settled. A field left `null` is simply not written. Check first
+   whether anything else reads the one being cleared — `catalog_number` is available
+   to the filename template, so clearing it can change a filename as well as a tag.
+   Set `total_tracks` to the album's count whenever this plan covers
    only one side: without it the executor falls back on the number of tracks *this*
    plan cuts, so side B tags `6/5` rather than `6/10`.
-3. Per track: `index` (matching the `split` indices exactly), `title`, optional
-   `artist` for compilations and split releases, and `position` as printed on the
-   label (`"A1"`, `"B3"`).
-   - **An untitled track**: `title` is a required field, so an entry cannot carry a
-     `position` without one. Leave the whole entry out and the filename falls back
-     to `Track NN`, with `lint` reporting `missing-title` as a warning — the honest
-     outcome, at the cost of that track's vinyl position. Invent a title only if the
+3. Per track: `index` (matching the `split` indices exactly), `title`, and
+   optional `artist` for compilations and split releases.
+   - **An untitled track**: `title` is a required field, so leave the whole entry
+     out and the filename falls back to `Track NN`, with `lint` reporting
+     `missing-title` as a warning — the honest outcome. Invent a title only if the
      label prints one.
    - **A compilation** wants `album_artist: "Various Artists"`, `artist: null`, and a
      per-track `artist` on every entry — the credit is for the release, and "shouldn't
@@ -164,8 +141,8 @@ mismatch as a fact to resolve rather than as a rejection.
      mistake spelled differently.
 4. `disc_number` and `total_discs`: the **disc**, not the side. TPOS describes a
    source "divided into several mediums" (*Outside references*), and the medium is
-   the record — both sides of one are the same disc, and the side is already in
-   `tracks[].position` — so a double album is discs 1 and 2 across four plans.
+   the record — both sides of one are the same disc — so a double album is discs 1
+   and 2 across four plans.
    Leave both `null` on a single record: with nothing divided there is no part to
    number, and `1/1` asserts a set that does not exist.
 5. `comment`: compose it from the `[rip]` configuration section and write the
@@ -209,10 +186,7 @@ mismatch as a fact to resolve rather than as a rejection.
   "album_artist": "Pink Floyd",
   "artist": "Pink Floyd",
   "year": 1973,
-  "genre": "Rock",
-  "styles": ["Prog Rock"],
-  "label": "Harvest",
-  "catalog_number": "SHVL 804",
+  "catalog_number": "SHVL 804",     // identifies the pressing
   "discogs_release_id": "1873013",
   "musicbrainz_release_id": null,
   "artwork_path": null,
@@ -220,7 +194,7 @@ mismatch as a fact to resolve rather than as a rejection.
   "disc_number": null,              // the disc, not the side; null on a single
   "total_discs": null,
   "comment": "Vinyl rip. Discogs release 1873013 (SHVL 804). …",
-  "tracks": [ { "index": 1, "title": "Speak to Me", "artist": null, "position": "A1" } ],
+  "tracks": [ { "index": 1, "title": "Speak to Me", "artist": null } ],
   "decision": { "skill": "plan-metadata", "rationale": "…", "confidence": 0.9,
                 "inputs": ["discogs:release/1873013"] }
 }
@@ -240,7 +214,7 @@ A wrong release makes every tag wrong, and it is cheap to check. Present:
   year, and its Discogs/MusicBrainz id;
 - **how** you matched it — catalogue number from the sleeve, track count, per-side
   durations within N seconds;
-- the tracklist as it will be tagged, with the vinyl positions;
+- the tracklist as it will be tagged;
 - the `comment` in full, and the `[rip]` fields it came from. It is the one tag
   no measurement can check, so the person who owns the equipment has to read it;
 - anything you could not verify, marked as such.
