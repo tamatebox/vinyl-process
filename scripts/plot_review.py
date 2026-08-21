@@ -229,6 +229,11 @@ def groups_in(render: Path) -> list[Group]:
     groups: list[Group] = []
     for manifest_path in sorted(render.glob("manifest*.json")):
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        # A receipt is written beside a copy of the plan that produced it
+        # (adr/0018), and that copy matches the glob too. Identify by
+        # document_type rather than by name, which is what it is for.
+        if manifest.get("document_type") != "manifest":
+            continue
         outputs = sorted(manifest["outputs"], key=lambda entry: int(entry["track_index"]))
         files = [render / Path(str(entry["path"])).name for entry in outputs]
         present = [path for path in files if path.exists()]
