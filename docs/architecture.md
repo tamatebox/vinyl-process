@@ -363,8 +363,9 @@ end to end for determinism.
   lift owns: on three of that record's four sides the answer came back at the end
   of the file, 27 s late on side D.
 
-  **`run_out.start_sample` is the measurement to use instead**, and it is
-  `periodicity` and `band_profile` read together: the platter, not the level,
+  **`run_out.start_sample` is the measurement to use instead**
+  ([adr/0021](adr/0021-the-trailing-edge-is-measured-by-the-platter-not-the-level.md)),
+  and it is `periodicity` and `band_profile` read together: the platter, not the level,
   separates a run-out from a quiet outro. The pair landed within 0.6 s on all four
   sides. What remains a limitation is that it needs both of those analyzers, so a
   partial document has no answer, and that its anchor is a 12 s window — the band
@@ -478,7 +479,11 @@ end to end for determinism.
   that repairs the clean wall along with the damaged one, which is the opposite of
   what two observations are for. Per-channel detection would change output bytes
   for any plan with declick enabled, so it needs its own decision rather than being
-  slipped in.
+  slipped in — that decision is now written up and open in
+  [adr/0022](adr/0022-declick-decides-on-the-mean-and-repairs-a-shared-span.md),
+  where a second record places the fault in the repaired **span** rather than in
+  the detection (the surviving impulse sits *outside* the span, in untouched
+  audio) and six plan-level variants are recorded as unable to reach it.
 - **Speed can be corrected, but not measured here.** `speed` resamples a transfer
   played at the wrong rate, and carries the two rpm figures so the plan documents
   the chosen replay speed as IASA-TC04 requires. What the codebase cannot do is

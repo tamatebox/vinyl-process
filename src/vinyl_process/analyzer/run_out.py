@@ -29,6 +29,8 @@ but reading it as a *boundary detector* is this repository's own construction,
 inherited from ``periodicity``, which was itself built in-house for a dub side
 where level had already failed. Treat it as uncalibrated against the field, and
 as measured only against the four sides in its tests and its originating record.
+The decision, the six formulations that failed before it and the parameter plateau
+are ``docs/adr/0021-the-trailing-edge-is-measured-by-the-platter-not-the-level.md``.
 """
 
 from __future__ import annotations
