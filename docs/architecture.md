@@ -144,11 +144,23 @@ What is guaranteed:
 - The plan pins the engine per stage by name. The manifest records the engine
   version, a digest of each stage's parameters, the library and platform
   versions, and the SHA-256 of the source, the plan and every output file.
+- **The plan itself is kept beside the receipt** (`manifest.plan.json`), because a
+  digest is one-way: without it, an edited or discarded plan takes with it the only
+  record of what ran, and `verify` cannot tell a lost plan from lost determinism.
+  `verify` checks that pairing before it re-executes
+  ([adr/0018](adr/0018-the-receipt-retains-the-plan-that-produced-it.md)).
 
 What is not: two *different* engines are not required to agree bit for bit. The
 native engine is the reproducibility baseline (pure numpy/scipy). The ffmpeg
 engine is deterministic for a fixed build; its `gain` matches native to double
 rounding, its `adeclick` is its own algorithm. See [dsp-engines.md](dsp-engines.md).
+
+Nor across a **stage moving**. Reproducibility is promised against the executor
+that wrote the receipt, not against every later one: `declick` ran after `split`
+until [adr/0012](adr/0012-the-executor-has-a-pre-split-phase.md), so a manifest
+from before that, with declick enabled, differs by design — the fades used to be
+applied before repair. `manifest.stages[]` records the order, which is how a
+receipt's era is read.
 
 ## Flow inside the executor
 
@@ -182,6 +194,14 @@ load source
             ─▶ metadata   (tags written into the exported files)
             ─▶ manifest.json
 ```
+
+**Which skill decided each of those stages** is `vinyl-process skills --map`. The
+correspondence is close to one-to-one and not exactly: `normalize` requires the
+`gain` capability rather than one named after it, `resample` has no plan section
+of its own (`export.sample_rate` drives it, so `plan-export` drives two stages),
+and `export`, `metadata` and `resample` need no engine at all. The map is data in
+`planning/skills.py`, checked against the executor's own dispatch by
+`tests/contracts/test_skills.py`, so it cannot drift from what runs.
 
 The two phases are [adr/0012](adr/0012-the-executor-has-a-pre-split-phase.md), and
 a pre-split stage that rescales time is
@@ -306,7 +326,7 @@ end to end for determinism.
 |---|---|
 | a measurement | `analyzer/<name>.py` with `@analyzer(...)` + a section model named after it. The runner resolves dependencies and stamps provenance |
 | a DSP engine | `dsp/engines/<name>.py` implementing only the capabilities it has, plus a `register_engine` call — or ship it separately and declare a `vinyl_process.dsp_engines` entry point |
-| a decision heuristic | the relevant `.claude/skills/plan-*` skill only |
+| a decision heuristic | the relevant `.claude/skills/plan-*` skill only. What a skill must contain is [.claude/rules/skills.md](../.claude/rules/skills.md), which loads when a skill file is touched. `vinyl-process skills --map` prints which skill drives which stage |
 | a pipeline stage | a plan section model, an executor step, a `Capability`, and a `plan-<stage>` skill that owns it. A stage added after 3.2 is **optional with a disabled default**, so the bump stays minor and archived plans stay re-executable ([adr/0012](adr/0012-the-executor-has-a-pre-split-phase.md)). Decide whether it belongs in the pre-split phase (it needs the whole side, or a reference to the medium's own groove) or after the cuts |
 
 ## Known limitations
@@ -383,36 +403,25 @@ end to end for determinism.
   capability and the calibration. The measurement side is already there:
   `silence.regions` carries `mean_rms_db` per gap, and `surface_noise` and
   `spectral.bands` cover the whole file.
-- **`decrackle` exists, and its reach is bounded by the material.** `block_ratio`
-  makes a *collective* decision — it asks whether a short segment is an outlier
-  against its neighbourhood — and that is the right question for a discrete
-  impulse of a few hundred microseconds. Crackle is a different defect: very
-  short events, one to three samples, repeated densely enough to be heard as a
-  continuous texture rather than as countable ticks. Each one is a weak outlier
-  and there are thousands, so a threshold low enough to catch them starts
-  interpolating the music long before it clears the bed. The tool for it is a
-  per-sample post-process that examines every sample individually, which is why
-  ClickRepair ships DeClick and DeCrackle as separate controls and documents that
-  its click detector "is not particularly attuned" to crackle. Lowering
-  `declick.threshold` is the wrong lever, and reaching for it is how a day gets
-  spent.
+- **`decrackle` exists, and its reach is bounded by the material.** Crackle is a
+  bed of one-to-three sample events, dense enough to be heard as texture rather
+  than as countable ticks — a different defect from a click, needing a per-sample
+  detector rather than `block_ratio`'s collective one. Lowering
+  `declick.threshold` is the wrong lever; why, and why the stage is native-only,
+  is [adr/0013](adr/0013-crackle-is-a-separate-stage-with-its-own-detector.md).
 
-  So `decrackle` is a separate stage with a per-sample detector
-  ([adr/0013](adr/0013-crackle-is-a-separate-stage-with-its-own-detector.md)).
-  What remains a limitation is its **reach**: the statistic divides a sample's
-  curvature by the mean curvature of its neighbourhood, and high-frequency
-  programme content raises that denominator, so the same crackle clears the
-  threshold less easily under a cymbal than under a bass line. Two things follow,
-  and neither needs a magnitude: a threshold does not transfer between passages of
-  one side, and a bed below the material's own curvature is unreachable at any
-  threshold — a stopping point rather than a setting yet to be found. The failure
-  direction is the safe one, fewer interpolations exactly where they would be most
-  audible.
+  The limitation is the **reach**. `curvature_ratio` divides a sample's curvature
+  by the mean curvature of its neighbourhood, and high-frequency programme content
+  raises that denominator, so the same crackle clears the threshold less easily
+  under a cymbal than under a bass line. Two things follow and neither needs a
+  magnitude: a threshold does not transfer between passages of one side, and a bed
+  below the material's own curvature is unreachable at any threshold — a stopping
+  point rather than a setting yet to be found. The failure direction is the safe
+  one, fewer interpolations exactly where they would be most audible.
 
-  **How large the effect is on a record is unknown.** The figures behind it come
-  from synthesised audio with a damage model this repository chose, which can show
-  that the implementation behaves as the statistic implies and can say nothing
-  about a pressing.
+  **How large the effect is on a record is unknown.** Everything quantitative
+  behind it comes from audio synthesised here, which can show the implementation
+  behaves as the statistic implies and can say nothing about a pressing.
 - **No de-noise, and the ffmpeg route was measured rather than assumed.**
   `afftdn` is the obvious delegate and the pre-split phase is now the right place
   for it, but two things blocked shipping it. Its `noise_floor` dominates the

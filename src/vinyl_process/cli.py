@@ -243,24 +243,54 @@ def execute(
 @handle_errors
 def verify(manifest_file: str, plan_file: str | None, audio_file: str | None) -> None:
     """Re-run a plan and prove the output is bit-identical to MANIFEST_FILE."""
-    from vinyl_process.executor import execute_plan
+    from vinyl_process.executor import execute_plan, plan_copy_name
 
     manifest = _load(manifest_file, ExecutionManifest)
-    plan_source = plan_file or manifest.plan.path
-    if not plan_source or not Path(plan_source).is_file():
+    here = Path(manifest_file).parent
+    # The retained copy first: it sits beside this manifest and its digest is the
+    # one the run recorded, so it survives the plan file being edited or moved.
+    candidates = [Path(plan_file)] if plan_file else []
+    candidates += [here / plan_copy_name(Path(manifest_file).name), Path(manifest.plan.path)]
+    # The recorded path is relative to whatever ran `execute`, and a review render
+    # sits below the job directory the plan lives in, so search upwards for the
+    # basename. Guessing by name is safe only because the digest check below
+    # refuses a file that is merely named alike.
+    recorded = Path(manifest.plan.path).name
+    if recorded:
+        candidates += [parent / recorded for parent in [here, *here.resolve().parents]]
+    plan_source = next((c for c in candidates if c.is_file()), None)
+    if plan_source is None:
         raise WorkspaceError(
             "cannot find the plan to re-execute; pass --plan explicitly "
             f"(manifest records {manifest.plan.path!r})"
         )
-    plan = _load(plan_source, ProcessingPlan)
+    plan_digest = digest_file(plan_source)
+    if manifest.plan.sha256 and plan_digest != manifest.plan.sha256:
+        # Without this the run below re-executes a *different* plan and reports an
+        # output mismatch, which reads as lost determinism rather than as a lost
+        # plan. Four review renders in this archive fail exactly that way.
+        raise WorkspaceError(
+            f"{plan_source} is not the plan this manifest was written from "
+            f"({plan_digest[:12]}… != {manifest.plan.sha256[:12]}…) — it was edited "
+            "since the render, or the render's own plan was never kept. Either way "
+            "the parameters that ran are not on disk, so this cannot be reproduced; "
+            "pass --plan if you have the original elsewhere"
+        )
+    plan = _load(str(plan_source), ProcessingPlan)
+
+    source = Path(audio_file or manifest.source.path)
+    if not source.is_file() and not audio_file:
+        # Recorded paths are relative to whatever directory ran `execute`.
+        beside = here / source.name
+        source = beside if beside.is_file() else here.parent / source.name
 
     with tempfile.TemporaryDirectory(prefix="vinyl-verify-") as tmp:
         replay = execute_plan(
             plan,
             tmp,
-            source_path=audio_file or manifest.source.path,
+            source_path=source,
             plan_path=plan_source,
-            plan_digest=digest_file(plan_source),
+            plan_digest=plan_digest,
             overwrite=True,
         )
 
@@ -376,8 +406,9 @@ def analyzers(as_json: bool) -> None:
 
 @main.command()
 @click.option("--json", "as_json", is_flag=True)
-def skills(as_json: bool) -> None:
-    """List the planning skills and the plan sections they own."""
+@click.option("--map", "as_map", is_flag=True, help="show the skill-to-component map instead")
+def skills(as_json: bool, as_map: bool) -> None:
+    """List the planning skills, the plan sections they own and the stages they drive."""
     from vinyl_process.planning.skills import SKILLS, skills_root
 
     root = skills_root()
@@ -387,6 +418,10 @@ def skills(as_json: bool) -> None:
             "owns": skill.owns,
             "reads": list(skill.reads),
             "summary": skill.summary,
+            "drives": [
+                {"stage": b.stage, "phase": b.phase, "capability": b.capability}
+                for b in skill.drives
+            ],
             "installed": bool(root and (root / skill.name / "SKILL.md").is_file()),
         }
         for skill in SKILLS
@@ -394,10 +429,43 @@ def skills(as_json: bool) -> None:
     if as_json:
         click.echo(json.dumps(items, indent=2))
         return
-    for item in items:
-        mark = "ok " if item["installed"] else "!! "
-        owns = item["owns"] or "-"
-        click.echo(f"{mark}{item['name']:16s} owns {owns:10s} {item['summary']}")
+    if as_map:
+        import typing
+
+        from vinyl_process.models.manifest import StageName
+
+        order = list(typing.get_args(StageName))
+        ranked = sorted(
+            SKILLS,
+            key=lambda s: order.index(s.drives[0].stage) if s.drives else len(order),
+        )
+        click.echo(
+            f"{'skill':16s} {'plan section':13s} {'stage':11s} {'phase':11s} engine capability"
+        )
+        for skill in ranked:
+            section = skill.owns or "—"
+            if not skill.drives:
+                click.echo(f"{skill.name:16s} {section:13s} {'—':11s} {'—':11s} —")
+                continue
+            for index, binding in enumerate(skill.drives):
+                name = skill.name if index == 0 else ""
+                owns = section if index == 0 else ""
+                click.echo(
+                    f"{name:16s} {owns:13s} {binding.stage:11s} {binding.phase:11s} "
+                    f"{binding.capability or '—'}"
+                )
+        click.echo(
+            "\nStages in pipeline order. resample has no plan section of its own —\n"
+            "export.sample_rate drives it. normalize is the one stage whose capability\n"
+            "differs from its name. A stage with no capability runs outside the DSP\n"
+            "registry (audio.py, metadata/). plan-album owns neither: it orchestrates."
+        )
+        return
+    for skill in SKILLS:
+        installed = bool(root and (root / skill.name / "SKILL.md").is_file())
+        mark = "ok " if installed else "!! "
+        owns = skill.owns or "-"
+        click.echo(f"{mark}{skill.name:16s} owns {owns:10s} {skill.summary}")
     if not root:
         click.secho("no .claude/skills directory found from here", err=True, fg="yellow")
 

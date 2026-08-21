@@ -35,6 +35,10 @@ Planning is not a CLI command — it is performed by the Coding Agent skills in
 ```
 
 `vinyl-process skills` lists the skills and which plan section each one owns.
+`vinyl-process skills --map` adds the executor stage each one drives, the phase it
+runs in and the engine capability it needs — the three places where that
+correspondence is not one-to-one are printed under the table. `--json` carries the
+same fields.
 
 ### lint
 
@@ -64,6 +68,14 @@ validation passes. Existing files are protected — pass `--overwrite` to replac
 them. `--no-verify-source` skips the digest check (the length check still applies,
 so truncated audio cannot silently produce short tracks).
 
+It also writes **a copy of the plan beside the receipt** — `manifest.json` gets
+`manifest.plan.json`, `manifest-side-a.json` gets `manifest-side-a.plan.json`. The
+copy is byte-identical to the plan file, so its SHA-256 is the one the manifest
+records. The manifest carries the plan's path and digest, and a digest is one-way:
+without the copy, a plan that is later edited or discarded takes the parameters
+that ran with it. See
+[adr/0018](adr/0018-the-receipt-retains-the-plan-that-produced-it.md).
+
 `--manifest NAME` names the receipt. A two-sided record is two plans exported into
 one album directory, and each needs its own:
 
@@ -85,7 +97,22 @@ vinyl-process verify album/manifest.json --plan processing_plan.json --audio rec
 
 Re-executes the plan into a temporary directory and compares every output digest
 with the manifest. Exits 70 and lists the differing files if the album is not
-reproducible. Without `--plan` the path recorded in the manifest is used.
+reproducible.
+
+It looks for the plan in this order: `--plan`, then the retained copy beside the
+manifest, then the path the manifest records, then that filename beside the
+manifest. Whatever it finds, **the plan's digest is checked against
+`manifest.plan.sha256` first**, and a mismatch exits 66 saying the plan changed —
+because re-running a *different* plan and reporting an output mismatch says the
+pipeline stopped reproducing when what really happened is that the plan was not
+kept. The recorded audio path is resolved the same way, since both paths are
+relative to whatever directory ran `execute`.
+
+A render made before a stage moved will not reproduce, and that is a contract
+change rather than a fault: `declick` ran after `split` until
+[adr/0012](adr/0012-the-executor-has-a-pre-split-phase.md), so a pre-0012 manifest
+with declick enabled differs by design. The stage order in `manifest.stages[]`
+tells you which era a receipt is from.
 
 ## Contracts and introspection
 

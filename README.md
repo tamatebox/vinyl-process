@@ -68,8 +68,10 @@ src/vinyl_process/
   signal_ops.py  arithmetic shared by analyzer and DSP (detection, RMS, fades)
   executor.py    runs a plan end to end, writes manifest.json
   cli.py         analyze / lint / execute / verify / validate / introspection
-.claude/skills/  the planning layer: plan-album, plan-split, plan-declick,
-                 plan-normalize, plan-metadata, plan-export
+.claude/skills/  the planning layer: plan-album plus one plan-<stage> skill per
+                 plan section (prefilter, split, declick, decrackle, mono-merge,
+                 speed, normalize, metadata, export)
+.claude/rules/   authoring rules, loaded when the files they scope are touched
 schemas/         generated JSON Schemas for the contracts (committed)
 examples/        real documents produced by the pipeline
 docs/            architecture, contracts, CLI, engines, analyzers, testing, ADRs
@@ -101,6 +103,7 @@ tests/           unit + contract + end-to-end, on synthesised audio
 | [docs/analyzers.md](docs/analyzers.md) | What is measured and how to add a measurement |
 | [docs/testing.md](docs/testing.md) | What each test suite guarantees |
 | [docs/adr/](docs/adr/) | Why the awkward parts are the way they are |
+| [.claude/rules/skills.md](.claude/rules/skills.md) | What a `plan-*` skill must contain, and what has gone wrong in one |
 
 ## Development
 
