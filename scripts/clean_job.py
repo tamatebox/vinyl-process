@@ -58,11 +58,29 @@ def human(size: int) -> str:
     return f"{value:,.1f} GB"
 
 
+def _document_type(path: Path) -> str | None:
+    """The document's own `document_type`, or None if it cannot be read.
+
+    A receipt is written beside a byte-identical copy of the plan that produced
+    it (adr/0018), and that copy matches a `manifest*.json` glob too. The
+    contract gives every document a `document_type` so one can be identified
+    without guessing from its name, which is what this uses.
+    """
+    try:
+        document = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    value = document.get("document_type")
+    return value if isinstance(value, str) else None
+
+
 def album_problems(album: Path) -> list[str]:
     """Why the album cannot yet stand in for the renders. Empty means it can."""
     if not album.is_dir():
         return [f"{album} does not exist"]
-    manifests = sorted(album.glob("manifest*.json"))
+    manifests = [
+        path for path in sorted(album.glob("manifest*.json")) if _document_type(path) == "manifest"
+    ]
     if not manifests:
         return [f"{album} holds no manifest, so nothing says what it should contain"]
 
