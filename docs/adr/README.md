@@ -25,3 +25,4 @@ edited after acceptance — a reversal is a new record that supersedes the old o
 | [0017](0017-a-skill-is-authored-against-a-rule-file.md) | A skill is authored against a rule file, not by imitation |
 | [0018](0018-the-receipt-retains-the-plan-that-produced-it.md) | The receipt retains the plan that produced it |
 | [0019](0019-a-stage-is-parameterised-on-its-own-input.md) | A stage is parameterised on its own input, not on the capture |
+| [0020](0020-four-metadata-fields-left-the-skill-not-the-contract.md) | Four metadata fields left the skill, not the contract |
