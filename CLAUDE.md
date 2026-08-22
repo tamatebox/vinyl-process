@@ -2,6 +2,12 @@
 
 ## Operating principles
 
+- **What this produces is a listening master.** `album/` is mastered to be played.
+  The archival object is the **raw capture**, which this pipeline reads and never
+  writes, so it is already preserved flat by construction. Never apply a
+  preservation-master rule to `album/` — an archive's "no subjective signal
+  alterations" is satisfied upstream and says nothing about the deliverable. It has
+  cost 3 dB of level on a record already ([adr/0023](docs/adr/0023-what-this-produces-is-a-listening-master.md)).
 - Three layers, never mixed: the **Analyzer** measures, **planning skills**
   (`.claude/skills/plan-*`) decide, the **DSP executor** executes.
 - Never add decision logic to Python. If a value is a choice — a threshold, a

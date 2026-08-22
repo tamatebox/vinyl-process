@@ -4,8 +4,12 @@
 
 `vinyl-process` starts from a raw vinyl recording — one continuous audio file per
 side or per album, produced by the separate `vinyl-archive` project — and produces
-a processed, split, tagged album fit for listening and long-term archival.
-Recording is out of scope.
+a processed, split, tagged album: a **listening master**. Recording is out of scope,
+and so is preservation: the archival object is the raw capture, which this pipeline
+reads and never writes. This sentence used to say the album was "fit for listening
+and long-term archival", and one object serving both is what let an archival
+flat-master rule be applied to the deliverable, costing 3 dB of level on a record
+([adr/0023](adr/0023-what-this-produces-is-a-listening-master.md)).
 
 ## The three layers
 

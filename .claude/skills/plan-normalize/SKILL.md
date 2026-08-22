@@ -32,6 +32,15 @@ has been **removed** rather than softened: a remembered platform spec is the exa
 thing this project has already been wrong about. Where the user names a delivery
 target, take theirs and cite them.
 
+**What you are levelling is a listening master.** The deliverable is mastered to be
+played; the archival object is the raw capture, which nothing here writes
+([adr/0023](../../../docs/adr/0023-what-this-produces-is-a-listening-master.md)). So
+an archive's "no subjective signal alterations" is already satisfied and is not an
+argument for `enabled: false` — reaching for one applied a preservation-master rule
+to the copy and shipped a record 3 dB under its own headroom. Leaving the level
+alone is a decision to argue from the headroom and from the practice below, like any
+other.
+
 **Normalize last.** Sound Forge Pro's
 [vinyl-restoration guide](https://soundforgepro.com/sound-forge-pro-for-vinyl-restoration/)
 puts it at the end of the chain — "Normalize last, if a derivative needs a defined

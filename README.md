@@ -2,7 +2,8 @@
 
 Turns a raw vinyl recording — produced by the separate `vinyl-archive` project —
 into a finished digital album: split into tracks, declicked, normalized, tagged and
-exported for listening and long-term archival.
+exported. What comes out is a **listening master**; the archival object is the raw
+capture, which this pipeline reads and never writes.
 
 ## Architecture in one paragraph
 

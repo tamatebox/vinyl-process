@@ -28,18 +28,21 @@ Read the counts, not the figures. Behind one or two records a line is a lead.
 | Question | n | Verdict |
 |---|---|---|
 | Which metadata fields are wanted | 2/2 struck genre, styles, label, position | Acted on — removed from `plan-metadata` ([adr/0020](adr/0020-four-metadata-fields-left-the-skill-not-the-contract.md)) |
-| Does a click rung transfer between two sides | 3 records: 2 disagreeing within an album, 1 agreeing across **4** sides | It does not in general ([adr/0010](adr/0010-the-click-statistic-is-local.md)); it can within one pressing |
+| Does a click rung transfer between two sides | **4 records**: 2 disagreeing within an album, 2 agreeing (across **4** sides, and across 2) | It does not in general ([adr/0010](adr/0010-the-click-statistic-is-local.md)); it can within one pressing |
 | Is `onset_coincidence` "following the music" | 1 | No where detections are mostly in gaps — confounded by construction, now stated in `plan-declick` from the code rather than the count |
 | Does `prefilter` buy headroom | **2/2 say no**; the second **lost** 0.31–0.43 dB with peaks rising on 8–9 of 10 tracks | It costs headroom rather than buying it, because the filter is forward-only. Close to a rule |
-| Is the album's loudest sample the needle drop | **2/2**, costing 7 dB and 2.0 dB of gain | Never take the reference from `peaks.peak_db` — read the split render. Rule |
-| Repair rate against the cited 1-in-200..2000 band | **2 records, 6 sides**, all 13–25× below the floor | Every transfer measured here lands far under the band. Lead, but no longer about reissues alone |
+| Is the album's loudest sample the needle drop | **3/3**, costing 7 dB, 2.0 dB and 3.7 dB of gain | Never take the reference from `peaks.peak_db` — read the split render. Rule |
+| Repair rate against the cited 1-in-200..2000 band | **3 records, 8 sides**, all **13–200×** below the floor | Every transfer measured here lands far under the band, and a well-preserved 1971 pressing landed 40× and 200× under it. Lead, but no longer about reissues alone |
 | Can a residual click be reached by any plan value | 1, six variants rendered | No — the span comes from the channel **mean**, so the per-channel leading edge lies outside it and no threshold, `detect_ms`, `confirm_k` or interpolator relocates it. Wants per-channel detection |
-| Where does a side's last track end | 1 record, 4 sides | Neither level marker: `lead_out_start_sample` 5.0-9.3 s early, `silence`'s trailing `music_end_sample` up to 27 s late. `run_out` (new analyzer) within 0.6 s. **Lead only** — one record, and no outside citation for the technique |
+| Where does a side's last track end | **2 records, 6 sides** | Neither level marker: `lead_out_start_sample` 5.0-9.3 s early, `silence`'s trailing `music_end_sample` up to 27 s late. `run_out` within 0.6 s, and it placed both ends on the second record too. **Lead** — two records, and still no outside citation for the technique |
+| Can a discography site's tracklist be trusted for a pressing | 1 record, **two irreconcilable Discogs partitions** of one album, both LP entries "Needs Vote" | No — and the ear settled it: the owner's four cuts matched one list's printed durations to within **1.5 s**, which is also the only evidence that list came from the object |
+| Is the level touched at all | **3/3 normalized**, once only after a flat run was withdrawn | Always, unless the headroom is nil: `album/` is a listening master and the archival citations bear on the raw capture instead ([adr/0023](adr/0023-what-this-produces-is-a-listening-master.md)). Acted on — now stated in `CLAUDE.md` and `plan-normalize` |
 
 ## Rows
 
 | Record | Capture | declick | normalize | export | Boundaries |
 |---|---|---|---|---|---|
+| **Brian Jones Presents The Pipes Of Pan At Joujouka** — Master Musicians Of Joujouka · 2026-08-22 · [16832352](https://www.discogs.com/release/16832352) · Rolling Stones Records P-8176S, Japan 1971 | 48 kHz/16-bit, 2 sides, 6 tr | rung **100** both sides; 1 in **407,094** / **79,523** | `album_peak`, **one album-wide gain +2.9900 dB** back-solved into two per-side targets (−1.0206 / −4.1747), ceiling −1.0 dBTP, nothing capped | FLAC **16**/**tpdf** | 1971 LP is two untitled unbroken sides; all 6 tracks **contiguous, 0 ms fades**, so concatenation reproduces the source; side A's 3 interior cuts placed by the owner **by ear**; both side ends by `run_out` |
 | **Emergency On Planet Earth** — Jamiroquai · 2026-08-21 · [25379](https://www.discogs.com/release/25379) · Sony Soho Square 474069 1, Europe 1993, 2×LP | 48 kHz/16-bit, **4 sides**, 10 tr | rung **75** all four sides; 1 in 34,929 / 25,575 / 49,421 / 25,372 | `album_peak` −1.0 dBFS/−1.0 dBTP; **+4.2176 / +4.6197 / +5.2570 / +5.1681**, ceiling capped all four | FLAC **16**/tpdf | every side opens band-limited; 1 start moved 1.2 s by `band_profile`; 3 side ends past `lead_out_start_sample` by 5.0–9.3 s; tr 9/10 contiguous (0.2 s apart) |
 | **夜のためいき** — 渥美マリ · 2026-08-21 · [26795813](https://www.discogs.com/release/26795813) · Daiei TJJA-10057, 2023 RSD reissue of 1970 | 48 kHz/16-bit, 2 sides, 12 tr | rung **20** both sides; 1 in 15,265 / 13,172 | `album_peak` −1.0 dBFS/−1.0 dBTP; **+9.1711 / +9.5198**, ceiling capped both | FLAC **16**/tpdf | 4 of 12 starts moved by `band_profile`, 1.1–5.0 s; both side ends by `periodicity` |
 
@@ -61,6 +64,14 @@ Stages off unless a row says otherwise. `prefilter`, `decrackle`, `mono_merge`,
 | 夜のためいき | `prefilter` 20 Hz, 30 Hz @24 dB/oct | **6 of 12** track peaks *rose* (forward-only IIR); `rumble_db` fell only 3.1 / 3.4 dB, so the 0-40 Hz band is mostly 30-40 Hz musical bass |
 | 夜のためいき | `decrackle` | On its own input (`review/declick/`): ladder top empty, and the 0-0.1 ms width bin empty **before and after**. "A bit remains" was the AR fill's seam |
 | 夜のためいき | `export` 24-bit | Capture is 16-bit; raising a depth cannot retrofit one, and the added quantisation noise lands *below* what the capture already carries |
+| Joujouka P-8176S | `declick` rung 75 (side B) | `onset_coincidence` **2.68** with `revolution_lock` 0.57 to explain it; rung 100 had **1.9** with **3.39** |
+| Joujouka P-8176S | `declick` rungs 10–35 (side B) | programme rate at or above the gap rate — **375 vs 308**/min at rung 10, still 1.33:1 at rung 35 |
+| Joujouka P-8176S | `normalize` per-side `album_peak` −1.0 | +6.16 dB side A against +3.01 dB side B: a **3.15 dB step** on a continuous work, and the needledrop position is that per-file normalising is wrong |
+| Joujouka P-8176S | `normalize` equalising the two sides (`album_gated_rms`, one shared target) | **No source found supports it** — both the archival and needledrop camps preserve the relationship. Peak says B is +3.15 dB, loudness says B is −1.95 LU: the sign flips with the quantity |
+| Joujouka P-8176S | 1995 Point CD tracklist | Its partition agrees with this pressing only on tracks **4, 5, 6**; 3 of 6 would have carried another piece's name |
+| Joujouka P-8176S | `export` 24-bit | Capture is 16-bit — 2nd record to reject this for the same reason |
+| Joujouka P-8176S | `normalize` **off** (shipped, then withdrawn) | An archival flat-master rule (IASA, Grammy Museum) applied to the **listening** deliverable — the preservation master is the raw capture, which nothing here writes. Cost **2.99 dB**, and the owner heard it ([adr/0023](adr/0023-what-this-produces-is-a-listening-master.md)) |
+| Joujouka P-8176S | `album_peak` targets set from **+3.0106 dB** (−1.0 dBFS on side B) | `peak_ceiling_db` −1.0 dBTP **does** bind at a 0.0116 dB true-peak margin: side B capped to +2.9990 dB with a warning, leaving the sides 0.0116 dB apart and defeating the shared gain. Retargeted from +2.99 dB |
 
 ### Near misses — what a default or an obvious reading would have got wrong
 
@@ -82,6 +93,15 @@ Stages off unless a row says otherwise. `prefilter`, `decrackle`, `mono_merge`,
 | 夜のためいき | track start from `music_start_sample` | **1.1–5.0 s** late on 4 of 12; worst was 時計 / *El Reloj*, whose 1-8 kHz ticking intro repeats at 1.4-1.6 s, not the 1.8 s revolution |
 | 夜のためいき | `disc_number` 1 / `total_discs` 1 on a single record | Asserts a set that does not exist |
 | 夜のためいき | `preferences.export_bit_depth = 24` taken as an instruction | It is the default for a capture already at 24 |
+| Joujouka P-8176S | normalize reference from `peaks.peak_db` | **3.70 dB** on side A — that sample is the stylus drop at 0:10.404, outside the cuts |
+| Joujouka P-8176S | either Discogs partition measured from `lead_in_end_sample` | **14 s** out, and it matched neither list. The agreement appears only from the true music start at 0:15.8, found by a **35 dB** step in 1–3 kHz and 3–8 kHz |
+| Joujouka P-8176S | `silence`'s 18.5 s "gap" at the B1/B2 division | Only **2.2 s** of it is quiet: 400–1000 Hz then sits **50 dB** above its own floor for 6 min 20 s of unaccompanied solo pipe. A cut placed later would have cut into it |
+| Joujouka P-8176S | `silence_rate_per_minute` read as an unmasked-groove diagnostic | **83 % (A) and 95 % (B)** of pooled silence time falls *inside* the cuts — the material is sparse, so most "silence" is quiet music |
+| Joujouka P-8176S | the side difference read from peaks | Matching peaks would have widened the audible gap from **1.95 LU to 5.10 LU** |
+| Joujouka P-8176S | `channel_correlation` 0.47 / 0.57 and side B's **+4.10 dB** balance read as a transfer fault | Both are the production: Brian Jones's own stereo phasing and speaker-to-speaker panning, added in London. Side A of the same session reads −0.24 dB |
+| Joujouka P-8176S | a Discogs LP tracklist marked "Needs Vote" | **Two irreconcilable partitions** of one album, and the US 1971 LP entry carries the 1995 CD's list verbatim |
+| Joujouka P-8176S | "no subjective signal alterations" read as applying to `album/` | **2.99 dB**. The citation is about the preservation master, and that is the raw capture — satisfied before any plan exists |
+| Joujouka P-8176S | `peak_ceiling_db` −1.0 dBTP predicted not to bind because true peak − peak is only 0.012 dB | It bound by **exactly** that 0.0116 dB. A ceiling equal to the target always binds on a peak mode; the margin is the gap, however small |
 
 ## How to add a row
 
