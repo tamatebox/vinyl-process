@@ -109,6 +109,11 @@ listening copy and name what to listen to: which file, which copy, roughly where
 and the doubt it settles. Accept "it did not help" as an answer; `"enabled":
 false` is how that gets recorded.
 
+Where the question is whether your stage *helped*, or which of two candidates is
+right, two renders and a timestamp is not a comparison anyone can make. What to
+hand over and how to verify it differs by your stage alone is
+`presenting-comparisons.md`, beside this file.
+
 ## What the tests already carry
 
 `tests/contracts/test_skills.py` checks frontmatter, one owner per section, the

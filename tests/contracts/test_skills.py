@@ -12,6 +12,7 @@ from vinyl_process.planning.skills import SKILLS, skill_for_section, skills_root
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SKILLS_DIR = REPO_ROOT / ".claude" / "skills"
+RULES_DIR = REPO_ROOT / ".claude" / "rules"
 PLAN_SECTIONS = (
     "prefilter",
     "split",
@@ -184,6 +185,30 @@ def test_every_relative_link_out_of_a_skill_resolves(path: Path) -> None:
     found by grepping rather than by a test. This will not catch a link whose
     *target moved on* — only one whose target is gone — which is worth knowing
     before trusting it too far.
+    """
+    broken = [
+        target
+        for target in (
+            match.group(1).split("#")[0]
+            for match in RELATIVE_LINK.finditer(path.read_text("utf-8"))
+        )
+        if target and not (path.parent / target).resolve().exists()
+    ]
+    assert not broken, f"{path.relative_to(REPO_ROOT)} links to missing {broken}"
+
+
+def rule_files() -> list[Path]:
+    return sorted(RULES_DIR.glob("*.md"))
+
+
+@pytest.mark.parametrize("path", rule_files(), ids=lambda path: str(path.relative_to(RULES_DIR)))
+def test_every_relative_link_out_of_a_rule_resolves(path: Path) -> None:
+    """A rule cites the skills and ADRs it declines to restate, so its links carry the same weight.
+
+    The skills' own link test covered ``.claude/skills/**`` only, which left every
+    cross-reference out of ``.claude/rules/`` unchecked — found when a rule was
+    added that links to a stage skill and to an ADR. Same caveat as the skill
+    version: this catches a target that is gone, not one that moved on.
     """
     broken = [
         target
